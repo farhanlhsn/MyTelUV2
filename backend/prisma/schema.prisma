@@ -1,0 +1,213 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")                 
+}
+
+// =================== Enums ====================
+enum Role { 
+  MAHASISWA 
+  DOSEN 
+  ADMIN 
+}
+enum TypeAbsensi { 
+  REMOTE_ABSENSI 
+  LOKAL_ABSENSI 
+}
+enum TypeAnomali { 
+  KEHADIRAN_GANDA 
+  TIDAK_HADIR_BERULANG 
+}
+
+// =================== Models ===================
+model User {
+  id_user        Int              @id @default(autoincrement())
+  nama           String
+  username       String           @unique
+  password       String
+  role           Role
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  dataBiometrik  DataBiometrik?
+  kendaraan      Kendaraan[]
+  absensi        Absensi[]
+  laporanAnomali LaporanAnomali[]
+  logParkir      LogParkir[]
+  kelasDiampu    Kelas[]          @relation("DosenKelas")
+  pesertaKelas   PesertaKelas[]
+
+  @@index([role], map: "idx_user_role")
+  @@index([createdAt], map: "idx_user_created")
+  @@index([deletedAt], map: "idx_user_deleted")
+  @@map("users")
+}
+
+model DataBiometrik {
+  id_biometrik   Int       @id @default(autoincrement())
+  id_user        Int       @unique
+  face_data_hash String    @db.VarChar(255)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  user User @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([createdAt], map: "idx_bio_created")
+  @@index([deletedAt], map: "idx_bio_deleted")
+  @@map("data_biometrik")
+}
+
+model Kendaraan {
+  id_kendaraan Int       @id @default(autoincrement())
+  plat_nomor   String    @unique @db.VarChar(20)
+  id_user      Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  user      User       @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  logParkir LogParkir[]
+
+  @@index([id_user], map: "idx_kendaraan_user")
+  @@index([createdAt], map: "idx_kendaraan_created")
+  @@index([deletedAt], map: "idx_kendaraan_deleted")
+  @@map("kendaraan")
+}
+
+model Parkiran {
+  id_parkiran    Int       @id @default(autoincrement())
+  nama_parkiran  String    @db.VarChar(100)
+  kapasitas      Int
+  live_kapasitas Int       @default(0)
+  koordinat     Unsupported("point")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  logParkir LogParkir[]
+
+  @@unique([nama_parkiran], map: "uq_parkiran_nama")
+  @@index([kapasitas], map: "idx_parkiran_kapasitas")
+  @@index([deletedAt], map: "idx_parkiran_deleted")
+  @@index([koordinat], type: Gist, map: "idx_parkiran_loc")
+  @@map("parkiran")
+}
+
+model LogParkir {
+  id_log_parkir Int       @id @default(autoincrement())
+  id_kendaraan  Int
+  id_parkiran   Int
+  id_user       Int?
+  timestamp     DateTime  @default(now())
+
+  kendaraan Kendaraan @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)
+  parkiran  Parkiran  @relation(fields: [id_parkiran], references: [id_parkiran], onDelete: Restrict)
+  user      User?     @relation(fields: [id_user], references: [id_user])
+
+  @@index([id_kendaraan, timestamp], map: "idx_log_kendaraan_ts")
+  @@index([id_parkiran, timestamp], map: "idx_log_parkiran_ts")
+  @@index([id_user, timestamp], map: "idx_log_user_ts")
+  @@index([timestamp], map: "idx_log_ts")
+  @@map("log_parkir")
+}
+
+model Matakuliah {
+  id_matakuliah   Int       @id @default(autoincrement())
+  nama_matakuliah String
+  kode_matakuliah String    @unique @db.VarChar(20)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  kelas Kelas[]
+
+  @@index([nama_matakuliah], map: "idx_mk_nama")
+  @@index([deletedAt], map: "idx_mk_deleted")
+  @@map("matakuliah")
+}
+
+model Kelas {
+  id_kelas       Int       @id @default(autoincrement())
+  id_matakuliah  Int
+  id_dosen       Int
+  jam_mulai      Unsupported("time")
+  jam_berakhir   Unsupported("time")
+  nama_kelas     String
+  ruangan        String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  matakuliah Matakuliah @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
+  dosen      User       @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
+  peserta    PesertaKelas[]
+  absensi    Absensi[]
+  laporan    LaporanAnomali[]
+
+  @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
+  @@index([ruangan], map: "idx_kelas_ruangan")
+  @@index([jam_mulai, jam_berakhir], map: "idx_kelas_waktu")
+  @@index([deletedAt], map: "idx_kelas_deleted")
+  @@map("kelas")
+}
+
+model PesertaKelas {
+  id_mahasiswa Int
+  id_kelas     Int
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+
+  mahasiswa User  @relation(fields: [id_mahasiswa], references: [id_user], onDelete: Cascade)
+  kelas     Kelas @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+
+  @@id([id_mahasiswa, id_kelas], map: "pk_pesertakelas")
+  @@index([id_kelas, deletedAt], map: "idx_peserta_kelas")
+  @@index([id_mahasiswa, deletedAt], map: "idx_peserta_mahasiswa")
+  @@map("peserta_kelas")
+}
+
+model Absensi {
+  id_absensi   Int       @id @default(autoincrement())
+  id_user      Int
+  id_kelas     Int
+  type_absensi TypeAbsensi
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  koordinat    Unsupported("point")
+
+  user  User  @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  kelas Kelas @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+
+  @@index([id_user, createdAt], map: "idx_absensi_user_ts")
+  @@index([id_kelas, createdAt], map: "idx_absensi_kelas_ts")
+  @@index([type_absensi], map: "idx_absensi_type")
+  @@index([deletedAt], map: "idx_absensi_deleted")
+  @@index([createdAt], map: "idx_absensi_created")
+  @@index([koordinat], type: Gist, map: "idx_absensi_loc")
+  @@map("absensi")
+}
+
+model LaporanAnomali {
+  id_anomali   Int         @id @default(autoincrement())
+  id_user      Int
+  id_kelas     Int?
+  type_anomali TypeAnomali
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  user  User   @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  kelas Kelas? @relation(fields: [id_kelas], references: [id_kelas]) // ← optional match Int?
+
+  @@index([id_user, type_anomali, createdAt], map: "idx_anomali_user_type_ts")
+  @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
+  @@index([deletedAt], map: "idx_anomali_deleted")
+  @@map("laporan_anomali")
+}

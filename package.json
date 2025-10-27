@@ -1,0 +1,19 @@
+{
+  "name": "myteluv2",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently -n BE,FE -c blue,green \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && nodemon server.js",
+    "frontend": "cd frontend && npm run dev",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
