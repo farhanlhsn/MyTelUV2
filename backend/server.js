@@ -2,12 +2,41 @@ const express = require("express");
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const helmet = require('helmet');
+const cors = require('cors');
 
 //import security middleware
 const { generalLimiter, authLimiter } = require('./middlewares/rateLimiterMiddleware');
 const {sanitizeInput} = require('./middlewares/validationMiddleware');
 
 const app = express();
+
+// CORS configuration
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://localhost:8080',
+            // Add your production domain here
+            // 'https://yourdomain.com'
+        ];
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
+
+app.use(cors(corsOptions));
 
 // Security middleware
 app.use(helmet({

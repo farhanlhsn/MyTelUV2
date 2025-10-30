@@ -67,3 +67,18 @@ exports.login = asyncHandler(async (req, res) => {
         } 
     });
 });
+
+exports.getMe = asyncHandler(async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    res.status(200).json({ 
+        status: "success", 
+        message: 'User data retrieved successfully', 
+        data: {
+            id: user.id_user,
+            username: user.username,
+            nama: user.nama,
+            role: user.role
+        } 
+    });
+});
