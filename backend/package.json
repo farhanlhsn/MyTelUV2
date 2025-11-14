@@ -13,7 +13,9 @@
     "prisma:generate": "npx dotenv -e ../.env -- prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.926.0",
     "@prisma/client": "^6.18.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -22,7 +24,9 @@
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
     "node": "^22.21.0",
+    "uuid": "^13.0.0",
     "validator": "^13.15.20"
   },
   "devDependencies": {

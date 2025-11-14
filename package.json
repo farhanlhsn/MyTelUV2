@@ -26,5 +26,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0"
   }
 }

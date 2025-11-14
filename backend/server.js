@@ -57,6 +57,8 @@ app.use(sanitizeInput); // Sanitize all input
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
+const kendaraanRoutes = require('./routes/kendaraanRoutes');
+const akademikRoutes = require('./routes/akademikRoutes');
 
 const port = process.env.PORT || 5050;
 app.get('/', (req, res) => {
@@ -64,6 +66,8 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/kendaraan', kendaraanRoutes);
+app.use('/api/akademik', akademikRoutes);
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

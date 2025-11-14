@@ -1,6 +1,7 @@
 const express = require('express');
 const {login, register, getMe} = require('../controllers/authController');
 const { validateRequired, validatePassword } = require('../middlewares/validationMiddleware');
+const { protect } = require('../middlewares/authMiddleware');
 const router = express.Router();
 
 router.post('/register', 
@@ -15,6 +16,7 @@ router.post('/login',
 );
 
 router.get('/me', 
+    protect,
     getMe
 );
 

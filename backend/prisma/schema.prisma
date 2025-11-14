@@ -64,12 +64,15 @@ model DataBiometrik {
 }
 
 model Kendaraan {
-  id_kendaraan Int       @id @default(autoincrement())
-  plat_nomor   String    @unique @db.VarChar(20)
-  id_user      Int
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id_kendaraan  Int       @id @default(autoincrement())
+  plat_nomor    String    @unique @db.VarChar(20)
+  id_user       Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  fotoKendaraan String[]
+  fotoSTNK      String
+  statusVerif   Boolean   @default(false)
 
   user      User       @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   logParkir LogParkir[]
@@ -95,7 +98,6 @@ model Parkiran {
   @@unique([nama_parkiran], map: "uq_parkiran_nama")
   @@index([kapasitas], map: "idx_parkiran_kapasitas")
   @@index([deletedAt], map: "idx_parkiran_deleted")
-  @@index([koordinat], type: Gist, map: "idx_parkiran_loc")
   @@map("parkiran")
 }
 
@@ -149,6 +151,7 @@ model Kelas {
   peserta    PesertaKelas[]
   absensi    Absensi[]
   laporan    LaporanAnomali[]
+  sesiAbsensi  SesiAbsensi[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
   @@index([ruangan], map: "idx_kelas_ruangan")
@@ -172,10 +175,31 @@ model PesertaKelas {
   @@map("peserta_kelas")
 }
 
+model SesiAbsensi {        // Dosen/Admin buat SesiAbsensi, MAHASISWA Absensi
+  id_sesi_absensi Int              @id @default(autoincrement())
+  id_kelas        Int
+  type_absensi    TypeAbsensi
+  latitude        Float?           // kalau REMOTE & pakai koordinat
+  longitude       Float?
+  radius_meter    Int?             // radius validasi lokasi (meter), null = bebas (misal PJJ)
+  mulai           DateTime
+  selesai         DateTime
+  status          Boolean          @default(true) //True = masih terbuka
+  createdBy       Int              // id_user dosen/admin yang buka
+
+  kelas           Kelas            @relation(fields: [id_kelas], references: [id_kelas])
+  absensi         Absensi[]
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+}
+
 model Absensi {
   id_absensi   Int       @id @default(autoincrement())
   id_user      Int
   id_kelas     Int
+  id_sesi_absensi Int
   type_absensi TypeAbsensi
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -184,13 +208,13 @@ model Absensi {
 
   user  User  @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   kelas Kelas @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  sesiAbsensi     SesiAbsensi @relation(fields: [id_sesi_absensi], references: [id_sesi_absensi])
 
   @@index([id_user, createdAt], map: "idx_absensi_user_ts")
   @@index([id_kelas, createdAt], map: "idx_absensi_kelas_ts")
   @@index([type_absensi], map: "idx_absensi_type")
   @@index([deletedAt], map: "idx_absensi_deleted")
   @@index([createdAt], map: "idx_absensi_created")
-  @@index([koordinat], type: Gist, map: "idx_absensi_loc")
   @@map("absensi")
 }
 
