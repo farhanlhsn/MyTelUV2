@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-// Hapus import 'helloworld/registerplat/registerplatberhasil.dart'; 
-// karena kita akan letakkan kelasnya di file ini.
 
 void main() {
   runApp(const MyApp());
