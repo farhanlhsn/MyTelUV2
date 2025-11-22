@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-
+import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:mobile/pages/PUNYA%20DANI/PAKETTT/home/maps/maps.dart';
-import 'package:mobile/pages/PUNYA%20DANI/PAKETTT/home/post/post.dart';
-import 'package:mobile/pages/PUNYA%20DANI/PAKETTT/home/setting/settings.dart';
+import 'package:mobile/pages/home/maps_page.dart';
+import 'package:mobile/pages/home/post_page.dart';
+import 'package:mobile/pages/home/settings_page.dart';
+
+import '../../controllers/home_controller.dart';
+import '../../app/routes.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,9 +17,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  final HomeController _homeController = Get.put(HomeController());
 
   late PageController _pageController;
-  double _currentPageValue = 0.0;
   late final MapController _mapController;
 
   // --- Daftar halaman untuk navigasi ---
@@ -25,12 +28,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.9)
-      ..addListener(() {
-        setState(() {
-          _currentPageValue = _pageController.page!;
-        });
-      });
+    _pageController = PageController(viewportFraction: 0.9);
 
     _mapController = MapController();
 
@@ -45,7 +43,7 @@ class _HomePageState extends State<HomePage> {
       const Center(child: PostPage()),
 
       // Halaman 3 - Settings (Widget Pengganti)
-      const Center(child: SettingsPage()),
+      Center(child: SettingsPage()),
     ];
     // --- AKHIR PERBAIKAN ---
   }
@@ -83,15 +81,36 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Stack(
-        children: [
-          // Konten Halaman Utama
-          IndexedStack(index: _selectedIndex, children: _pages),
+      body: Obx(() {
+        // Show error message if any
+        if (_homeController.errorMessage.value.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_homeController.errorMessage.value),
+                backgroundColor: Colors.red,
+              ),
+            );
+            _homeController.errorMessage.value = '';
+          });
+        }
 
-          // Navigasi di bagian bawah
-          Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
-        ],
-      ),
+        return RefreshIndicator(
+          onRefresh: _homeController.refreshData,
+          child: Stack(
+            children: [
+              // Konten Halaman Utama
+              IndexedStack(index: _selectedIndex, children: _pages),
+
+              // Navigasi di bagian bawah
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _buildBottomNav(),
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 
@@ -116,104 +135,187 @@ class _HomePageState extends State<HomePage> {
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Row(
-          children: [
-            const CircleAvatar(
-              radius: 20,
-              backgroundColor: Colors.white,
-              child: Icon(Icons.person, color: Color(0xFFE63946)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+        child: Obx(() {
+          final userName = _homeController.currentUser.value?.nama ?? 'User';
+          final totalKehadiran = _homeController.totalKehadiranPercentage;
+
+          return Row(
+            children: [
+              Tooltip(
+                message: 'Lihat Profile',
+                child: InkWell(
+                  onTap: () {
+                    Get.toNamed(AppRoutes.me);
+                  },
                   borderRadius: BorderRadius.circular(20),
+                  splashColor: Colors.white.withOpacity(0.3),
+                  highlightColor: Colors.white.withOpacity(0.1),
+                  child: const CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.person, color: Color(0xFFE63946)),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.directions_car,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Plat Status 🚀",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.school, color: Colors.white, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Halo, $userName! 👋",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            "Cek Kembali Status Plat Anda..",
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 10,
+                            Text(
+                              "Kehadiran: ${totalKehadiran.toStringAsFixed(1)}%",
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 10,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.notifications, color: Colors.white, size: 30),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.notifications, color: Colors.white, size: 30),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        }),
       ),
     );
   }
 
   Widget _buildCardCarousel() {
-    return SizedBox(
-      height: 220,
-      child: PageView.builder(
-        controller: _pageController,
-        itemCount: 3,
-        itemBuilder: (context, index) {
-          double scale = 1.0;
-          if (_pageController.position.haveDimensions) {
-            double pageOffset = _pageController.page! - index;
-            scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
-          }
+    return Obx(() {
+      if (_homeController.isLoadingKelas.value) {
+        return const SizedBox(
+          height: 220,
+          child: Center(child: CircularProgressIndicator(color: Colors.white)),
+        );
+      }
 
-          return Transform.scale(scale: scale, child: _buildInfoCard(index));
-        },
-      ),
-    );
+      final kelasList = _homeController.kelasList;
+
+      if (kelasList.isEmpty) {
+        return SizedBox(
+          height: 220,
+          child: Center(
+            child: Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.class_outlined, size: 48, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Belum ada kelas',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Daftar kelas untuk melihat jadwal',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      return SizedBox(
+        height: 220,
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: kelasList.length,
+          itemBuilder: (context, index) {
+            double scale = 1.0;
+            if (_pageController.position.haveDimensions) {
+              double pageOffset = _pageController.page! - index;
+              scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
+            }
+
+            return Transform.scale(
+              scale: scale,
+              child: _buildInfoCard(kelasList[index]),
+            );
+          },
+        ),
+      );
+    });
   }
 
-  Widget _buildInfoCard(int index) {
-    const cardData = {
-      'title': 'Teori Peluang (TAI)',
-      'time': '8.00 - 11.00',
-      'location': 'KU 03.04.10',
-      'warning': 'Kehadiran : 20%',
-    };
+  Widget _buildInfoCard(dynamic pesertaKelas) {
+    final kelas = pesertaKelas.kelas;
+    final matakuliah = kelas?.matakuliah;
+    final dosen = kelas?.dosen;
+
+    // Get absensi stats for this class
+    final absensiStats = kelas != null
+        ? _homeController.getAbsensiStatsForKelas(kelas.idKelas)
+        : null;
+
+    final String title = matakuliah != null
+        ? '${matakuliah.namaMatakuliah} (${matakuliah.kodeMatakuliah})'
+        : 'Kelas';
+    final String jadwal = kelas?.jadwal ?? 'Jadwal belum tersedia';
+    final String location = kelas?.ruangan ?? 'Ruangan belum ditentukan';
+    final String kehadiran = absensiStats != null
+        ? 'Kehadiran: ${absensiStats.persentaseKehadiran.toStringAsFixed(1)}%'
+        : 'Kehadiran: 0%';
+
+    // Determine warning color based on attendance
+    final double percentage = absensiStats?.persentaseKehadiran ?? 0.0;
+    final Color warningColor = percentage < 75 ? Colors.red : Colors.green;
+    final IconData warningIcon = percentage < 75
+        ? Icons.warning_amber_rounded
+        : Icons.check_circle_outline;
 
     return Card(
       elevation: 8,
@@ -245,7 +347,7 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
-                Icons.house_outlined,
+                Icons.class_outlined,
                 color: Color(0xFFE63946),
                 size: 32,
               ),
@@ -257,29 +359,46 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  cardData['title']!,
+                  title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 20,
+                    fontSize: 18,
                     color: Colors.black87,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
+                if (dosen != null)
+                  Text(
+                    'Dosen: ${dosen.nama}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 Text(
-                  cardData['time']!,
+                  jadwal,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: Colors.black54,
                     fontWeight: FontWeight.w500,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  cardData['location']!,
+                  location,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: Colors.black54,
                     fontWeight: FontWeight.w500,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const Spacer(),
                 Container(
@@ -288,24 +407,20 @@ class _HomePageState extends State<HomePage> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade100.withOpacity(0.7),
+                    color: warningColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.red.shade800,
-                        size: 16,
-                      ),
+                      Icon(warningIcon, color: warningColor, size: 16),
                       const SizedBox(width: 8),
                       Text(
-                        cardData['warning']!,
+                        kehadiran,
                         style: TextStyle(
-                          color: Colors.red.shade900,
+                          color: warningColor,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -366,7 +481,7 @@ class _HomePageState extends State<HomePage> {
             color: Colors.grey.withOpacity(0.1),
             spreadRadius: 2,
             blurRadius: 5,
-          ), 
+          ),
         ],
       ),
       child: Column(

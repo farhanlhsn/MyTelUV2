@@ -772,11 +772,13 @@ exports.getKelasKu = asyncHandler(async (req, res) => {
     const pesertaKelas = await prisma.pesertaKelas.findMany({
         where: { 
             id_mahasiswa,
-            deletedAt: null
+            deletedAt: null,
+            kelas: {
+                deletedAt: null
+            }
         },
         include: {
             kelas: {
-                where: { deletedAt: null },
                 include: {
                     matakuliah: true,
                     dosen: {

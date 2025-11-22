@@ -9,15 +9,14 @@ class MapPage extends StatelessWidget {
   // BARU: Tambahkan controller sebagai parameter
   final MapController mapController;
 
-  const MapPage({
-    super.key,
-    required this.mapController,
-  });
+  const MapPage({super.key, required this.mapController});
 
   // Pindahkan konstanta peta ke sini
-  static final latlng.LatLng _kJakartaCenter =
-      latlng.LatLng(-6.2088, 106.8456);
-  static const double _kJakartaZoom = 11.5;
+  static final latlng.LatLng _kTelyuCenter = latlng.LatLng(
+    -6.973975679076366,
+    107.63041937130109,
+  );
+  static const double _kTelyuZoom = 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -35,10 +34,11 @@ class MapPage extends StatelessWidget {
             // BARU: Gunakan controller yang diterima dari parameter
             mapController: mapController,
             options: MapOptions(
-              initialCenter: _kJakartaCenter,
-              initialZoom: _kJakartaZoom,
+              initialCenter: _kTelyuCenter,
+              initialZoom: _kTelyuZoom,
               interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.drag |
+                flags:
+                    InteractiveFlag.drag |
                     InteractiveFlag.pinchZoom |
                     InteractiveFlag.doubleTapZoom,
               ),

@@ -1,9 +1,10 @@
 import 'package:get/get.dart';
 
-import '../pages/home_page.dart';
-import '../pages/login_page.dart';
+import '../pages/home/home_page.dart';
+import '../pages/auth/login_page.dart';
 import '../pages/me_page.dart';
-import '../pages/register_page.dart';
+import '../pages/auth/register_page.dart';
+import '../pages/auth/register_success_page.dart';
 import '../bindings/auth_binding.dart';
 import '../pages/Punya_Raja/registerplat/registerplat.dart';
 import '../pages/Punya_Raja/registerplat/pengajuan_list_page.dart';
@@ -40,6 +41,10 @@ class AppRoutes {
       name: register,
       page: () => const RegisterPage(),
       binding: AuthBinding(),
+    ),
+    GetPage<dynamic>(
+      name: registerSuccess,
+      page: () => const RegisterSuccessPage(),
     ),
     GetPage<dynamic>(
       name: registerPlat,

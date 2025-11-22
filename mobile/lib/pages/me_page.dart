@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../app/routes.dart';
-
 class MePage extends StatelessWidget {
   const MePage({super.key});
 
@@ -21,13 +19,13 @@ class MePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        actions: <Widget>[
-          IconButton(
-            onPressed: () => Get.back(),
-            icon: const Icon(Icons.arrow_back),
-            tooltip: 'Kembali ke Home',
-          ),
-        ],
+        backgroundColor: const Color(0xFFE63946),
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          onPressed: () => Get.back(),
+          icon: const Icon(Icons.arrow_back_ios),
+          tooltip: 'Kembali ke Home',
+        ),
       ),
       body: FutureBuilder<Map<String, String?>>(
         future: _loadUserData(),

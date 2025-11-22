@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:mobile/pages/PUNYA%20DANI/PAKETTT/Registrasi/berhasil.dart';
+// import 'package:mobile/pages/PUNYA%20DANI/PAKETTT/Registrasi/berhasil.dart';
 
 class TestPage extends StatefulWidget {
   const TestPage({super.key});
@@ -294,36 +294,36 @@ class _TestPageState extends State<TestPage> {
                             ),
                           ],
                         ),
-                        SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: ElevatedButton(
-                            onPressed: _isFormValid
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            RegisterBerhasil(),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Color(0xFFFC5F57),
+                        // SizedBox(height: 10),
+                        // SizedBox(
+                        //   width: double.infinity,
+                        //   height: 44,
+                        //   child: ElevatedButton(
+                        //     onPressed: _isFormValid
+                        //         ? () {
+                        //             Navigator.push(
+                        //               context,
+                        //               MaterialPageRoute(
+                        //                 builder: (context) =>
+                        //                     RegisterBerhasil(),
+                        //               ),
+                        //             );
+                        //           }
+                        //         : null,
+                        //     style: ElevatedButton.styleFrom(
+                        //       backgroundColor: Color(0xFFFC5F57),
 
-                              disabledBackgroundColor: Color(0xFFFAA0A0),
-                            ),
-                            child: const Text(
-                              'Sign Up',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
+                        //       disabledBackgroundColor: Color(0xFFFAA0A0),
+                        //     ),
+                        //     child: const Text(
+                        //       'Sign Up',
+                        //       style: TextStyle(
+                        //         color: Colors.white,
+                        //         fontWeight: FontWeight.bold,
+                        //       ),
+                        //     ),
+                        //   ),
+                        // ),
                         SizedBox(height: 30),
 
                         Center(

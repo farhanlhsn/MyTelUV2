@@ -84,6 +84,28 @@ router.get('/kelas/dosen',
     getKelasByDosen
 );
 
+// ==================== PESERTA KELAS ROUTES ====================
+// PENTING: Routes dengan path spesifik harus di atas routes dengan params (:id)
+router.get('/kelas/ku',
+    protect,
+    authorize('MAHASISWA'),
+    getKelasKu
+);
+
+router.post('/kelas/daftar',
+    protect,
+    authorize('MAHASISWA'),
+    validateRequired(['id_kelas']),
+    daftarKelas
+);
+
+router.delete('/kelas/:id/drop',
+    protect,
+    authorize('MAHASISWA'),
+    dropKelas
+);
+
+// Routes dengan :id harus di bawah routes dengan path spesifik
 router.get('/kelas/:id',
     protect,
     getKelasById
@@ -101,31 +123,13 @@ router.delete('/kelas/:id',
     deleteKelas
 );
 
-// ==================== PESERTA KELAS ROUTES ====================
-router.post('/kelas/daftar',
-    protect,
-    authorize('MAHASISWA'),
-    validateRequired(['id_kelas']),
-    daftarKelas
-);
-
-router.delete('/kelas/:id/drop',
-    protect,
-    authorize('MAHASISWA'),
-    dropKelas
-);
-
-router.get('/kelas/ku',
-    protect,
-    authorize('MAHASISWA'),
-    getKelasKu
-);
-
 router.get('/kelas/:id/peserta',
     protect,
     authorize('DOSEN', 'ADMIN'),
     getPesertaKelas
 );
+
+//TODO: Route untuk GET kelas hari ini
 
 // ==================== ABSENSI ROUTES ====================
 router.post('/open-absensi',
