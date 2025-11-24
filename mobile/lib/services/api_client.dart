@@ -23,37 +23,63 @@ class ApiClient {
 
   static Dio get dio {
     if (_dioInstance == null) {
+      print('🔧 Initializing Dio with baseUrl: $baseUrl');
+
       _dioInstance = Dio(
         BaseOptions(
           baseUrl: baseUrl,
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 15),
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 30),
           headers: <String, dynamic>{'Content-Type': 'application/json'},
+          validateStatus: (status) {
+            // Accept all status codes to handle them manually
+            return status != null && status < 500;
+          },
         ),
       );
 
-      // Add interceptor for authentication
+      // Add logging interceptor
       _dioInstance!.interceptors.add(
         InterceptorsWrapper(
-          onRequest:
-              (
-                RequestOptions options,
-                RequestInterceptorHandler handler,
-              ) async {
-                // Get token from secure storage
-                final String? token = await _secureStorage.read(key: 'token');
+          onRequest: (options, handler) async {
+            print(
+              '🌐 Request: ${options.method} ${options.baseUrl}${options.path}',
+            );
+            print('📤 Headers: ${options.headers}');
 
-                // Add token to header if exists
-                if (token != null && token.isNotEmpty) {
-                  options.headers['Authorization'] = 'Bearer $token';
-                }
+            // Get token from secure storage
+            try {
+              final String? token = await _secureStorage.read(key: 'token');
+              print(
+                '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
+              );
 
-                return handler.next(options);
-              },
+              // Add token to header if exists
+              if (token != null && token.isNotEmpty) {
+                options.headers['Authorization'] = 'Bearer $token';
+              }
+            } catch (e) {
+              print('❌ Error reading token: $e');
+            }
+
+            return handler.next(options);
+          },
+          onResponse: (response, handler) {
+            print(
+              '✅ Response: ${response.statusCode} ${response.statusMessage}',
+            );
+            print('📥 Data: ${response.data}');
+            return handler.next(response);
+          },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
+            print('❌ DioError Type: ${error.type}');
+            print('❌ DioError Message: ${error.message}');
+            print('❌ DioError Response: ${error.response?.data}');
+
             // Handle 401 Unauthorized
             if (error.response?.statusCode == 401) {
-              // Token expired or invalid, clear storage
+              print('🚪 Token expired, clearing storage');
               await _secureStorage.deleteAll();
             }
 

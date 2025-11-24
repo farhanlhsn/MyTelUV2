@@ -1,0 +1,184 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mobile/models/pengajuan_plat_model.dart';
+import 'package:mobile/services/api_client.dart';
+
+class KendaraanService {
+  static final Dio _dio = ApiClient.dio;
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+
+  // Get histori pengajuan kendaraan user
+  static Future<List<PengajuanPlatModel>> getHistoriPengajuan() async {
+    try {
+      print('🔄 Fetching histori pengajuan...');
+
+      // Debug: Print current user info from storage
+      final idUser = await _secureStorage.read(key: 'id_user');
+      final username = await _secureStorage.read(key: 'username');
+      final token = await _secureStorage.read(key: 'token');
+      print('👤 Current user from storage: ID=$idUser, username=$username');
+      print('🔑 Token preview: ${token?.substring(0, 20)}...');
+
+      final response = await _dio.get('/api/kendaraan/histori-pengajuan');
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response data: ${response.data}');
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final dynamic rawData = response.data['data'];
+        print('📦 Raw data type: ${rawData.runtimeType}');
+        print('📦 Raw data: $rawData');
+
+        if (rawData == null || rawData is! List) {
+          print('⚠️ Data is not a list, returning empty');
+          return [];
+        }
+
+        final List<dynamic> data = rawData;
+        print('📊 Number of items: ${data.length}');
+
+        // Parse each item with error handling
+        List<PengajuanPlatModel> result = [];
+        for (int i = 0; i < data.length; i++) {
+          try {
+            print('🔍 Parsing item $i: ${data[i]}');
+            final item = PengajuanPlatModel.fromJson(
+              data[i] as Map<String, dynamic>,
+            );
+            result.add(item);
+            print('✅ Successfully parsed item $i');
+          } catch (e, stackTrace) {
+            print('❌ Error parsing item $i: $e');
+            print('📋 Stack trace: $stackTrace');
+            print('📄 JSON data: ${data[i]}');
+            // Skip invalid items
+            continue;
+          }
+        }
+
+        print('✅ Total parsed: ${result.length} items');
+        return result;
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to fetch histori pengajuan',
+        );
+      }
+    } on DioException catch (e) {
+      print('❌ DioException: ${e.message}');
+      if (e.response != null) {
+        print('❌ Response: ${e.response?.data}');
+        throw Exception(
+          e.response?.data['message'] ?? 'Error fetching histori pengajuan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Unexpected error: $e');
+      print('📋 Stack trace: $stackTrace');
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  // Register kendaraan baru
+  static Future<PengajuanPlatModel> registerKendaraan({
+    required String platNomor,
+    required String namaKendaraan,
+    required List<String> fotoKendaraanPaths,
+    required String fotoSTNKPath,
+  }) async {
+    try {
+      // Debug: Print current user info from storage
+      final idUserStorage = await _secureStorage.read(key: 'id_user');
+      final username = await _secureStorage.read(key: 'username');
+      final token = await _secureStorage.read(key: 'token');
+      print('🚗 Registering kendaraan...');
+      print(
+        '👤 Current user from storage: ID=$idUserStorage, username=$username',
+      );
+      print('🔑 Token preview: ${token?.substring(0, 20)}...');
+
+      // Prepare multipart form data
+      // TIDAK mengirim id_user karena backend akan menggunakan id dari token
+      FormData formData = FormData.fromMap({
+        'plat_nomor': platNomor,
+        'nama_kendaraan': namaKendaraan,
+      });
+
+      // Add foto kendaraan (3 photos)
+      for (int i = 0; i < fotoKendaraanPaths.length; i++) {
+        formData.files.add(
+          MapEntry(
+            'fotoKendaraan',
+            await MultipartFile.fromFile(
+              fotoKendaraanPaths[i],
+              filename: 'foto_kendaraan_$i.jpg',
+            ),
+          ),
+        );
+      }
+
+      // Add foto STNK
+      formData.files.add(
+        MapEntry(
+          'fotoSTNK',
+          await MultipartFile.fromFile(fotoSTNKPath, filename: 'foto_stnk.jpg'),
+        ),
+      );
+
+      final response = await _dio.post(
+        '/api/kendaraan/register',
+        data: formData,
+        options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+      );
+
+      if (response.statusCode == 201 && response.data['status'] == 'success') {
+        return PengajuanPlatModel.fromJson(response.data['data']);
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to register kendaraan',
+        );
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error registering kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  // Get detail kendaraan by ID
+  static Future<PengajuanPlatModel> getKendaraanById(int idKendaraan) async {
+    try {
+      final response = await _dio.get('/api/kendaraan/');
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final List<dynamic> data = response.data['data'];
+        final kendaraan = data.firstWhere(
+          (item) => item['id_kendaraan'] == idKendaraan,
+          orElse: () => throw Exception('Kendaraan not found'),
+        );
+        return PengajuanPlatModel.fromJson(kendaraan);
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to fetch kendaraan',
+        );
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error fetching kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
+}

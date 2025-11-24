@@ -69,8 +69,10 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/kendaraan', kendaraanRoutes);
 app.use('/api/akademik', akademikRoutes);
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${port}`);
+    console.log(`Local: http://localhost:${port}`);
+    console.log(`Network: http://10.0.2.2:${port} (Android Emulator)`);
 });
 
 module.exports = app;

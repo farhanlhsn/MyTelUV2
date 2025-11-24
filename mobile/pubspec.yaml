@@ -42,6 +42,8 @@ dependencies:
   json_annotation: ^4.9.0
   latlong2: ^0.9.1
   flutter_map: ^8.2.2
+  image_picker: ^1.1.2
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:
@@ -66,7 +68,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - /assets/images/
+    - assets/images/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -43,6 +43,7 @@ exports.register = asyncHandler(async (req, res) => {
 
 exports.login = asyncHandler(async (req, res) => {
     const { username, password } = req.body;
+    
     const user = await prisma.user.findUnique({
         where: {
             username: username
@@ -51,15 +52,19 @@ exports.login = asyncHandler(async (req, res) => {
     if (!user) {
         return res.status(401).json({ status: "error", message: 'Invalid username or password' });
     }
+    
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
         return res.status(401).json({ status: "error", message: 'Invalid username or password' });
     }
+    
     const token = jwt.sign({ id: user.id_user }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1d' });
+    
     res.status(200).json({ 
         status: "success", 
         message: 'Login successful', 
         data: {
+            id_user: user.id_user,
             token: token,
             username: user.username,
             nama: user.nama,

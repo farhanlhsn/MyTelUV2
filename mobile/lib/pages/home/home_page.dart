@@ -59,21 +59,25 @@ class _HomePageState extends State<HomePage> {
       'icon': Icons.badge_outlined,
       'label': 'Lisence Plate',
       'color': const Color(0xFFE63946),
+      'route': AppRoutes.userHistoriPengajuan,
     },
     {
       'icon': Icons.assignment_ind_outlined,
       'label': 'Absence',
       'color': const Color(0xFFE63946),
+      'route': null,
     },
     {
       'icon': Icons.qr_code_scanner,
       'label': 'Biometric',
       'color': const Color(0xFFE63946),
+      'route': null,
     },
     {
       'icon': Icons.local_parking,
       'label': 'Parking',
       'color': const Color(0xFFE63946),
+      'route': null,
     },
   ];
 
@@ -463,7 +467,12 @@ class _HomePageState extends State<HomePage> {
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (context, index) {
               final item = gridMenuItems[index];
-              return _buildGridItem(item['icon'], item['label'], item['color']);
+              return _buildGridItem(
+                item['icon'],
+                item['label'],
+                item['color'],
+                item['route'],
+              );
             },
           ),
         ),
@@ -471,34 +480,60 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildGridItem(IconData icon, String label, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 60, color: color),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
+  Widget _buildGridItem(
+    IconData icon,
+    String label,
+    Color color,
+    String? route,
+  ) {
+    return InkWell(
+      onTap: () {
+        if (route != null) {
+          // Special handling for License Plate - show options dialog
+          if (route == AppRoutes.userHistoriPengajuan) {
+            _showLicensePlateOptions();
+          } else {
+            Get.toNamed(route);
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$label - Coming Soon!'),
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
             ),
-          ),
-        ],
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 5,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 60, color: color),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -533,61 +568,108 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildNavItem(IconData icon, String label, int index) {
-    bool isSelected = _selectedIndex == index;
+  final bool isSelected = _selectedIndex == index;
 
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        borderRadius: BorderRadius.circular(20),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeInOutBack,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey[600],
-                size: 28,
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                height: isSelected ? 16 : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: isSelected ? 1.0 : 0.0,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      softWrap: false,
+  return Expanded(
+    child: InkWell(
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOutBack,
+        // 👉 merahnya selalu setinggi navbar
+        height: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey[600],
+              size: 28,
+            ),
+            const SizedBox(height: 4),
+            // 👉 tingginya yg dianimasikan, bukan background-nya
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              height: isSelected ? 16 : 0, // cukup buat fontSize 12
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: isSelected ? 1.0 : 0.0,
+                child: Center(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    softWrap: false,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    ),
+  );
+}
+
+  // Show options for License Plate menu
+  void _showLicensePlateOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Manajemen Kendaraan',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.add_circle, color: Color(0xFFE63946)),
+                title: const Text('Daftar Kendaraan Baru'),
+                subtitle: const Text('Tambahkan kendaraan ke sistem'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Get.toNamed(AppRoutes.registerPlat);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                title: const Text('Histori Pengajuan'),
+                subtitle: const Text('Lihat status pengajuan kendaraan'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Get.toNamed(AppRoutes.userHistoriPengajuan);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

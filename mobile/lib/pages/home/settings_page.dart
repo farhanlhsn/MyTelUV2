@@ -123,6 +123,15 @@ class SettingsPage extends StatelessWidget {
               onTap: () {},
             ),
             ListTile(
+              leading: const Icon(Icons.badge_outlined),
+              title: const Text("Histori Pengajuan Plat"),
+              subtitle: const Text("Lihat status pengajuan kendaraan"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed(AppRoutes.userHistoriPengajuan);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.notifications_outlined),
               title: const Text("Notifikasi"),
               subtitle: const Text("Atur preferensi notifikasi"),

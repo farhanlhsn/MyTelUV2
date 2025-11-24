@@ -3,7 +3,9 @@ const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
-    const { plat_nomor, id_user } = req.body;
+    const { plat_nomor, nama_kendaraan } = req.body;
+
+    const id_user = req.user.id_user;
     
     // Ambil files dari req.files object
     const fotoKendaraanFiles = req.files.fotoKendaraan || [];
@@ -79,10 +81,12 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         const kendaraan = await prisma.kendaraan.create({
             data: {
                 plat_nomor,
-                id_user: parseInt(id_user),
+                nama_kendaraan,
+                id_user: id_user, // Menggunakan id_user dari token (req.user)
                 fotoKendaraan: uploadedFotoKendaraan,
                 fotoSTNK: uploadedFotoSTNK,
-                statusVerif: false
+                statusVerif: false,
+                status_pengajuan: 'MENUNGGU'
             },
         });
         
@@ -107,9 +111,17 @@ exports.getKendaraan = asyncHandler(async (req, res) => {
         select: {
             id_kendaraan: true,
             plat_nomor: true,
+            nama_kendaraan: true,
             fotoKendaraan: true,
             fotoSTNK: true,
-            statusVerif: true
+            statusVerif: true,
+            status_pengajuan: true,
+            feedback: true,
+            createdAt: true,
+            updatedAt: true
+        },
+        orderBy: {
+            createdAt: 'desc'
         }
     });
     res.status(200).json({ status: "success", message: "Kendaraan retrieved successfully", data: kendaraan });
@@ -154,7 +166,10 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
     const updatedKendaraan = await prisma.kendaraan.update({
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },
-        data: { statusVerif: true }
+        data: { 
+            statusVerif: true,
+            status_pengajuan: 'DISETUJUI'
+        }
     });
     res.status(200).json({ status: "success", message: "Kendaraan verified successfully", data: updatedKendaraan });
 });
@@ -182,4 +197,88 @@ exports.getAllKendaraan = asyncHandler(async (req, res) => {
         take: parseInt(limit)
     });
     res.status(200).json({ status: "success", message: "All unverified kendaraan retrieved successfully", data: kendaraan, totalPages: totalPages, total: total });
+});
+
+// Get histori pengajuan kendaraan untuk user
+exports.getHistoriPengajuan = asyncHandler(async (req, res) => {    
+    const kendaraan = await prisma.kendaraan.findMany({
+        where: {
+            id_user: req.user.id_user
+        },
+        select: {
+            id_kendaraan: true,
+            plat_nomor: true,
+            nama_kendaraan: true,
+            status_pengajuan: true,
+            feedback: true,
+            fotoKendaraan: true,
+            fotoSTNK: true,
+            createdAt: true,
+            updatedAt: true
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+    
+    res.status(200).json({ 
+        status: "success", 
+        message: "Histori pengajuan retrieved successfully", 
+        data: kendaraan 
+    });
+});
+
+// Reject pengajuan kendaraan dengan feedback
+exports.rejectKendaraan = asyncHandler(async (req, res) => {
+    const { id_kendaraan, id_user, feedback } = req.body;
+    
+    if (!feedback || feedback.trim() === '') {
+        return res.status(400).json({ 
+            status: "error", 
+            message: "Feedback is required when rejecting" 
+        });
+    }
+    
+    const kendaraan = await prisma.kendaraan.findUnique({
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) }
+    });
+    
+    if (!kendaraan) {
+        return res.status(404).json({ 
+            status: "error", 
+            message: "Kendaraan not found" 
+        });
+    }
+    
+    if (kendaraan.status_pengajuan === 'DISETUJUI') {
+        return res.status(400).json({ 
+            status: "error", 
+            message: "Cannot reject already approved kendaraan" 
+        });
+    }
+    
+    const updatedKendaraan = await prisma.kendaraan.update({
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },
+        data: { 
+            statusVerif: false,
+            status_pengajuan: 'DITOLAK',
+            feedback: feedback
+        }
+    });
+    
+    res.status(200).json({ 
+        status: "success", 
+        message: "Kendaraan rejected successfully", 
+        data: updatedKendaraan 
+    });
+});
+
+//kayaknya ga butuh
+exports.getAllMyKendaraan = asyncHandler(async (req, res) => {
+    const kendaraan = await prisma.kendaraan.findMany({
+        where: {
+            id_user: req.user.id_user
+        }
+    });
+    res.status(200).json({ status: "success", message: "All my kendaraan retrieved successfully", data: kendaraan });
 });

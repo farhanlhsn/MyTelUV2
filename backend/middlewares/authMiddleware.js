@@ -38,9 +38,11 @@ exports.protect = asyncHandler(async (req, res, next) => {
         role: true
       }
     });
+    
     if (!req.user) {
         return res.status(401).json({ status: "error", message: 'User not found' });
     }
+    
     next();
   } catch (err) {
     return res.status(401).json({

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'models/pengajuan_plat_model.dart';
+import '../../../models/pengajuan_plat_model.dart';
 
 class PengajuanListPage extends StatefulWidget {
   const PengajuanListPage({super.key});
@@ -9,41 +9,59 @@ class PengajuanListPage extends StatefulWidget {
 }
 
 class _PengajuanListPageState extends State<PengajuanListPage> {
-  // Dummy data untuk demo
+  // Dummy data untuk demo - using updated model
   List<PengajuanPlatModel> pengajuanList = [
     PengajuanPlatModel(
-      id: '1',
-      namaPengaju: 'Fikri',
-      nomorPlat: 'DD 0000 KE',
-      status: 'pending',
-      tanggalPengajuan: DateTime.now().subtract(const Duration(days: 1)),
+      idKendaraan: 1,
+      platNomor: 'DD 0000 KE',
+      namaKendaraan: 'HONDA VARIO',
+      statusPengajuan: 'MENUNGGU',
+      feedback: null,
+      fotoKendaraan: [],
+      fotoSTNK: '',
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
     PengajuanPlatModel(
-      id: '2',
-      namaPengaju: 'Farhan',
-      nomorPlat: 'DD 2222 KE',
-      status: 'approved',
-      tanggalPengajuan: DateTime.now().subtract(const Duration(days: 3)),
+      idKendaraan: 2,
+      platNomor: 'DD 2222 KE',
+      namaKendaraan: 'HONDA BEAT',
+      statusPengajuan: 'DISETUJUI',
+      feedback: null,
+      fotoKendaraan: [],
+      fotoSTNK: '',
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      updatedAt: DateTime.now().subtract(const Duration(days: 3)),
     ),
     PengajuanPlatModel(
-      id: '3',
-      namaPengaju: 'Mas amba',
-      nomorPlat: 'DD 1111 AB',
-      status: 'rejected',
-      tanggalPengajuan: DateTime.now().subtract(const Duration(days: 5)),
+      idKendaraan: 3,
+      platNomor: 'DD 1111 AB',
+      namaKendaraan: 'YAMAHA NMAX',
+      statusPengajuan: 'DITOLAK',
+      feedback: 'Foto STNK tidak jelas',
+      fotoKendaraan: [],
+      fotoSTNK: '',
+      createdAt: DateTime.now().subtract(const Duration(days: 5)),
+      updatedAt: DateTime.now().subtract(const Duration(days: 5)),
     ),
   ];
 
-  void _updateStatus(String id, String newStatus) {
+  void _updateStatus(int idKendaraan, String newStatus) {
     setState(() {
-      final index = pengajuanList.indexWhere((item) => item.id == id);
+      final index = pengajuanList.indexWhere(
+        (item) => item.idKendaraan == idKendaraan,
+      );
       if (index != -1) {
         pengajuanList[index] = PengajuanPlatModel(
-          id: pengajuanList[index].id,
-          namaPengaju: pengajuanList[index].namaPengaju,
-          nomorPlat: pengajuanList[index].nomorPlat,
-          status: newStatus,
-          tanggalPengajuan: pengajuanList[index].tanggalPengajuan,
+          idKendaraan: pengajuanList[index].idKendaraan,
+          namaKendaraan: pengajuanList[index].namaKendaraan,
+          platNomor: pengajuanList[index].platNomor,
+          statusPengajuan: newStatus,
+          feedback: pengajuanList[index].feedback,
+          fotoKendaraan: pengajuanList[index].fotoKendaraan,
+          fotoSTNK: pengajuanList[index].fotoSTNK,
+          createdAt: pengajuanList[index].createdAt,
+          updatedAt: DateTime.now(),
         );
       }
     });
@@ -51,18 +69,18 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          newStatus == 'approved'
+          newStatus == 'DISETUJUI'
               ? 'Pengajuan berhasil disetujui'
               : 'Pengajuan berhasil ditolak',
         ),
-        backgroundColor: newStatus == 'approved' ? Colors.green : Colors.red,
+        backgroundColor: newStatus == 'DISETUJUI' ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  void _showConfirmDialog(String id, String action) {
+  void _showConfirmDialog(int idKendaraan, String action) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -71,11 +89,11 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            action == 'approved' ? 'Setujui Pengajuan?' : 'Tolak Pengajuan?',
+            action == 'DISETUJUI' ? 'Setujui Pengajuan?' : 'Tolak Pengajuan?',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           content: Text(
-            action == 'approved'
+            action == 'DISETUJUI'
                 ? 'Apakah Anda yakin ingin menyetujui pengajuan ini?'
                 : 'Apakah Anda yakin ingin menolak pengajuan ini?',
           ),
@@ -87,13 +105,14 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _updateStatus(id, action);
+                _updateStatus(idKendaraan, action);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    action == 'approved' ? Colors.green : Colors.red,
+                backgroundColor: action == 'DISETUJUI'
+                    ? Colors.green
+                    : Colors.red,
               ),
-              child: Text(action == 'approved' ? 'Setujui' : 'Tolak'),
+              child: Text(action == 'DISETUJUI' ? 'Setujui' : 'Tolak'),
             ),
           ],
         );
@@ -112,9 +131,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
           // Header
           Container(
             height: 150,
-            decoration: const BoxDecoration(
-              color: primaryColor,
-            ),
+            decoration: const BoxDecoration(color: primaryColor),
             alignment: Alignment.topLeft,
             padding: const EdgeInsets.only(top: 40, left: 10),
             child: Row(
@@ -123,7 +140,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                   icon: const Icon(
                     Icons.arrow_back_ios_new,
                     color: Colors.white,
-                    size: 20.0, 
+                    size: 20.0,
                   ),
                   onPressed: () {
                     if (Navigator.of(context).canPop()) {
@@ -179,154 +196,150 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
           const SizedBox(height: 16),
           Text(
             'Belum ada pengajuan',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
         ],
       ),
     );
   }
 
-Widget _buildPengajuanCard(PengajuanPlatModel pengajuan) {
-  const Color primaryColor = Color(0xFFFC5F57);
+  Widget _buildPengajuanCard(PengajuanPlatModel pengajuan) {
+    const Color primaryColor = Color(0xFFFC5F57);
+    final bool isPending = pengajuan.statusPengajuan == 'MENUNGGU';
 
-  return Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: primaryColor,
-        width: 2,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryColor, width: 2),
       ),
-    ),
-    child: Row(
-      children: [
-        // Kolom Kiri: Nama, Plat, dan Status
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Nama
-              Text(
-                pengajuan.namaPengaju,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(height: 6),
-
-              // Nomor Plat
-              Text(
-                pengajuan.nomorPlat,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Status Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: pengajuan.getStatusColor(),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  pengajuan.getStatusText(),
+      child: Row(
+        children: [
+          // Kolom Kiri: Nama, Plat, dan Status
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Nama Kendaraan
+                Text(
+                  pengajuan.namaKendaraan,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
+                    color: Colors.black,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 6),
 
-        const SizedBox(width: 16),
-
-        // Kolom Kanan: Tombol TOLAK dan TERIMA (Vertikal)
-        Column(
-          children: [
-            // Tombol TOLAK
-            Container(
-              width: 90,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: pengajuan.status == 'pending'
-                      ? primaryColor
-                      : Colors.grey.shade300,
-                  width: 2,
-                ),
-              ),
-              child: TextButton(
-                onPressed: pengajuan.status == 'pending'
-                    ? () => _showConfirmDialog(pengajuan.id, 'rejected')
-                    : null,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'TOLAK',
+                // Nomor Plat
+                Text(
+                  pengajuan.platNomor,
                   style: TextStyle(
-                    color: pengajuan.status == 'pending'
-                        ? primaryColor
-                        : Colors.grey.shade400,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 8),
+                const SizedBox(height: 12),
 
-            // Tombol TERIMA
-            Container(
-              width: 90,
-              height: 36,
-              decoration: BoxDecoration(
-                color: pengajuan.status == 'pending'
-                    ? primaryColor
-                    : Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: TextButton(
-                onPressed: pengajuan.status == 'pending'
-                    ? () => _showConfirmDialog(pengajuan.id, 'approved')
-                    : null,
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text(
-                  'TERIMA',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                // Status Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: pengajuan.getStatusColor(),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    pengajuan.getStatusText(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // Kolom Kanan: Tombol TOLAK dan TERIMA (Vertikal)
+          Column(
+            children: [
+              // Tombol TOLAK
+              Container(
+                width: 90,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isPending ? primaryColor : Colors.grey.shade300,
+                    width: 2,
+                  ),
+                ),
+                child: TextButton(
+                  onPressed: isPending
+                      ? () =>
+                            _showConfirmDialog(pengajuan.idKendaraan, 'DITOLAK')
+                      : null,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'TOLAK',
+                    style: TextStyle(
+                      color: isPending ? primaryColor : Colors.grey.shade400,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Tombol TERIMA
+              Container(
+                width: 90,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isPending ? primaryColor : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: TextButton(
+                  onPressed: isPending
+                      ? () => _showConfirmDialog(
+                          pengajuan.idKendaraan,
+                          'DISETUJUI',
+                        )
+                      : null,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'TERIMA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-      );
+        ],
+      ),
+    );
   }
 }

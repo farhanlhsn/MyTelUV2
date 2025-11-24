@@ -22,6 +22,11 @@ enum TypeAnomali {
   KEHADIRAN_GANDA 
   TIDAK_HADIR_BERULANG 
 }
+enum StatusPengajuan {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
+}
 
 // =================== Models ===================
 model User {
@@ -64,15 +69,18 @@ model DataBiometrik {
 }
 
 model Kendaraan {
-  id_kendaraan  Int       @id @default(autoincrement())
-  plat_nomor    String    @unique @db.VarChar(20)
-  id_user       Int
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  fotoKendaraan String[]
-  fotoSTNK      String
-  statusVerif   Boolean   @default(false)
+  id_kendaraan     Int              @id @default(autoincrement())
+  plat_nomor       String           @unique @db.VarChar(20)
+  nama_kendaraan   String           @db.VarChar(100) @default("Motor")
+  id_user          Int
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+  fotoKendaraan    String[]
+  fotoSTNK         String
+  statusVerif      Boolean          @default(false)
+  status_pengajuan StatusPengajuan  @default(MENUNGGU)
+  feedback         String?
 
   user      User       @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   logParkir LogParkir[]
@@ -80,6 +88,7 @@ model Kendaraan {
   @@index([id_user], map: "idx_kendaraan_user")
   @@index([createdAt], map: "idx_kendaraan_created")
   @@index([deletedAt], map: "idx_kendaraan_deleted")
+  @@index([status_pengajuan], map: "idx_kendaraan_status")
   @@map("kendaraan")
 }
 

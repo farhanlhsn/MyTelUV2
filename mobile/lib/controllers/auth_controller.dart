@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 
 import '../services/auth_service.dart';
+import '../services/api_client.dart';
 import '../models/user.dart';
 
 class AuthController extends GetxController {
@@ -16,6 +17,10 @@ class AuthController extends GetxController {
     }
     isLoading.value = true;
     try {
+      // Hapus token lama terlebih dahulu untuk memastikan clean state
+      await _secureStorage.deleteAll();
+      print('🗑️ Cleared all old tokens and user data');
+
       final Map<String, dynamic> result = await _authService.login(
         username: username,
         password: password,
@@ -32,13 +37,25 @@ class AuthController extends GetxController {
 
       final UserModel user = UserModel.fromMap(data);
 
+      // Simpan token dan data user baru
       await _secureStorage.write(key: 'token', value: token);
+      await _secureStorage.write(key: 'id_user', value: user.idUser.toString());
       await _secureStorage.write(key: 'username', value: user.username);
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
+      print(
+        '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
+      );
+      print('🔑 Token preview: ${token.substring(0, 20)}...');
+
+      // Reset Dio instance to ensure new token is used
+      ApiClient.reset();
+      print('🔄 Reset Dio instance');
+
       return true;
     } on DioException catch (e) {
+      print('❌ Login failed: ${e.message}');
       return false;
     } catch (e) {
       return false;
@@ -47,7 +64,12 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<bool> register(String username, String password, String nama, String role) async {
+  Future<bool> register(
+    String username,
+    String password,
+    String nama,
+    String role,
+  ) async {
     if (username.isEmpty || password.isEmpty || nama.isEmpty || role.isEmpty) {
       return false;
     }
@@ -73,11 +95,18 @@ class AuthController extends GetxController {
   Future<bool> logout() async {
     try {
       await _secureStorage.delete(key: 'token');
+      await _secureStorage.delete(key: 'id_user');
       await _secureStorage.delete(key: 'username');
       await _secureStorage.delete(key: 'nama');
       await _secureStorage.delete(key: 'role');
+
+      // Reset Dio instance to clear any cached requests
+      ApiClient.reset();
+      print('🚪 Logged out and reset Dio instance');
+
       return true;
     } catch (e) {
+      print('❌ Logout failed: $e');
       return false;
     }
   }

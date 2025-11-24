@@ -32,12 +32,14 @@ class HomeController extends GetxController {
   // Load user data from secure storage
   Future<void> loadUserData() async {
     try {
+      final String? idUser = await _secureStorage.read(key: 'id_user');
       final String? username = await _secureStorage.read(key: 'username');
       final String? nama = await _secureStorage.read(key: 'nama');
       final String? role = await _secureStorage.read(key: 'role');
 
-      if (username != null && nama != null && role != null) {
+      if (idUser != null && username != null && nama != null && role != null) {
         currentUser.value = UserModel(
+          idUser: int.parse(idUser),
           username: username,
           nama: nama,
           role: role,

@@ -33,7 +33,14 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder) => {
         await r2Client.send(command);
 
         // Construct the public URL
-        const fileUrl = `${process.env.R2_PUBLIC_URL}/${fileKey}`;
+        let publicUrl = process.env.R2_PUBLIC_URL;
+        
+        // Ensure URL has protocol
+        if (publicUrl && !publicUrl.startsWith('http://') && !publicUrl.startsWith('https://')) {
+            publicUrl = `https://${publicUrl}`;
+        }
+        
+        const fileUrl = `${publicUrl}/${fileKey}`;
 
         return {
             success: true,
