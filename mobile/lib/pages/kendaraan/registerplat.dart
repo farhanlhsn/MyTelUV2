@@ -180,7 +180,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFFC5F57);
+    const Color primaryColor = Color(0xFFE63946);
     const Color focusedBorderColor = Color(0xFFFF6B6B);
 
     return Scaffold(
