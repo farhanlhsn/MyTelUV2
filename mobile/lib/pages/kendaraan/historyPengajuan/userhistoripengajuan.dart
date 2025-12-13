@@ -45,7 +45,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFC5F57), // Warna header
+      backgroundColor: const Color(0xFFE63946), // Warna header
       body: SafeArea(
         child: Column(
           children: [
