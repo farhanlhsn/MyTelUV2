@@ -120,7 +120,9 @@ class SettingsPage extends StatelessWidget {
               title: const Text("Akun"),
               subtitle: const Text("Edit profil, ganti password"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {},
+              onTap: () {
+                Get.toNamed(AppRoutes.account);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.badge_outlined),
@@ -136,7 +138,9 @@ class SettingsPage extends StatelessWidget {
               title: const Text("Notifikasi"),
               subtitle: const Text("Atur preferensi notifikasi"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {},
+              onTap: () {
+                Get.toNamed(AppRoutes.notification);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.palette_outlined),

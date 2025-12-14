@@ -6,84 +6,87 @@ class AnalitikParkirPage extends StatelessWidget {
 
   // Warna utama (Coral Red)
   static const Color primaryColor = Color(0xFFE63946);
-  // Warna gelap untuk bayangan/aksen (sesuai kodingan lama Anda)
+  // Warna gelap untuk bayangan/aksen
   static const Color darkRedColor = Color(0xFFC14A44);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          // --- HEADER MERAH ---
-          Container(
-            height: 150,
-            decoration: const BoxDecoration(
-              color: primaryColor,
+      backgroundColor: primaryColor, // 1. Background Merah di Scaffold
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // --- HEADER (Tanpa tinggi fix, mengikuti padding) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Get.back(),
+                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Analitik Ketersediaan Parkir',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20, // Ukuran font disamakan
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            alignment: Alignment.topLeft,
-            padding: const EdgeInsets.only(top: 50, left: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-                  onPressed: () => Get.back(),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Analitik Ketersediaan Parkir',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+
+            // --- KONTEN UTAMA (Putih Melengkung) ---
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
                   ),
                 ),
-              ],
-            ),
-          ),
+                // Clip agar konten tidak bocor keluar rounded corner
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 10),
 
-          // --- KONTEN UTAMA (PUTIH MELENGKUNG) ---
-          Padding(
-            padding: const EdgeInsets.only(top: 110),
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-              ),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
+                        // 1. HORIZONTAL TIME SELECTOR
+                        _buildTimeSelector(),
 
-                    // 1. HORIZONTAL TIME SELECTOR (Gaya Sebelumnya)
-                    _buildTimeSelector(),
+                        const SizedBox(height: 40),
 
-                    const SizedBox(height: 40),
-
-                    // 2. KARTU LOKASI PARKIRAN
-                    // (Grafik sudah dihapus, langsung menampilkan data slot)
-                    _buildLocationCard(name: "Lokasi Parkiran : GKU", slot: 19),
-                    const SizedBox(height: 16),
-                    _buildLocationCard(name: "Lokasi Parkiran : TULT", slot: 19),
-                    
-                    const SizedBox(height: 50), 
-                  ],
+                        // 2. KARTU LOKASI PARKIRAN
+                        _buildLocationCard(name: "Lokasi Parkiran : GKU", slot: 19),
+                        const SizedBox(height: 16),
+                        _buildLocationCard(name: "Lokasi Parkiran : TULT", slot: 19),
+                        
+                        const SizedBox(height: 50), 
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // --- WIDGET 1: TIME SELECTOR (KEMBALI KE KODINGAN AWAL ANDA) ---
+  // --- WIDGET 1: TIME SELECTOR (TIDAK BERUBAH) ---
   Widget _buildTimeSelector() {
     final List<Map<String, String>> times = [
       {"day": "Fri", "date": "22", "time": "17:00"},
@@ -111,7 +114,6 @@ class AnalitikParkirPage extends StatelessWidget {
   }
 
   Widget _buildTimeChip(String day, String date, String time) {
-    // Gradasi sesuai kodingan lama Anda
     final Gradient cardGradient = LinearGradient(
       colors: [
         primaryColor.withOpacity(1.0),
@@ -121,7 +123,6 @@ class AnalitikParkirPage extends StatelessWidget {
       end: Alignment.centerRight,
     );
     
-    // Bayangan kartu
     final List<BoxShadow> cardShadow = [
       BoxShadow(
         color: darkRedColor.withOpacity(0.3),
@@ -134,7 +135,6 @@ class AnalitikParkirPage extends StatelessWidget {
       padding: const EdgeInsets.only(right: 12.0),
       child: Column(
         children: [
-          // --- KARTU TANGGAL (BESAR) ---
           Container(
             width: 60,
             height: 95,
@@ -164,7 +164,6 @@ class AnalitikParkirPage extends StatelessWidget {
           
           const SizedBox(height: 10),
 
-          // --- KARTU WAKTU (KECIL) ---
           Container(
             width: 55,
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -188,7 +187,7 @@ class AnalitikParkirPage extends StatelessWidget {
     );
   }
 
-  // --- WIDGET 2: LOCATION CARD (TETAP DIPERTAHANKAN) ---
+  // --- WIDGET 2: LOCATION CARD (TIDAK BERUBAH) ---
   Widget _buildLocationCard({required String name, required int slot}) {
     return Container(
       width: double.infinity,

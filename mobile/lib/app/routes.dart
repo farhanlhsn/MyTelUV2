@@ -14,7 +14,8 @@ import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
 import '../pages/absensi/absensi_page.dart';
 import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
-
+import '../pages/settings/account_page.dart';
+import '../pages/settings/notification_page.dart';
 class AppRoutes {
   static const String login = '/login';
   static const String home = '/home';
@@ -29,6 +30,8 @@ class AppRoutes {
   static const String absensi = '/absensi';
   static const String analitikParkir = '/analitik-parkir';
   static const String historiParkir = '/histori-parkir';
+  static const String account = '/account';
+  static const String notification = '/notification';
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
       name: login,
@@ -82,6 +85,14 @@ class AppRoutes {
     GetPage<dynamic>(
       name: historiParkir,
       page: () => const HistoriParkirPage(),
+    ),
+    GetPage<dynamic>(
+      name: account,
+      page: () => const AccountPage(),
+    ),
+    GetPage<dynamic>(
+      name: notification,
+      page: () => const NotificationPage(),
     )
   ];
 }
