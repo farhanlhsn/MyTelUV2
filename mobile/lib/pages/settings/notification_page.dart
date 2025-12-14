@@ -79,14 +79,6 @@ class NotificationPage extends StatelessWidget {
                     margin: const EdgeInsets.all(16),
                   );
                 },
-                activeTrackColor: const Color.fromARGB(255, 207, 158, 162), // Warna Jalur (Track) dalam saat ON
-                    
-                trackOutlineColor: MaterialStateProperty.resolveWith<Color?>((states) {
-                  if (states.contains(MaterialState.selected)) {
-                    return primaryColor;
-                  }
-                  return Colors.grey.shade400; // Warna border saat OFF
-                }),
               )),
             ),
           ],

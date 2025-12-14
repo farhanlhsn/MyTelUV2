@@ -142,13 +142,6 @@ class SettingsPage extends StatelessWidget {
                 Get.toNamed(AppRoutes.notification);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text("Tampilan"),
-              subtitle: const Text("Mode gelap, ukuran font"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {},
-            ),
             const Divider(height: 32),
             ListTile(
               leading: Icon(Icons.logout, color: Colors.red[700]),
