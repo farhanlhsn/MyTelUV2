@@ -149,12 +149,6 @@ class SettingsPage extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () {},
             ),
-            ListTile(
-              leading: const Icon(Icons.security_outlined),
-              title: const Text("Privasi & Keamanan"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {},
-            ),
             const Divider(height: 32),
             ListTile(
               leading: Icon(Icons.logout, color: Colors.red[700]),

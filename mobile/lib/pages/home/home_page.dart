@@ -85,7 +85,6 @@ class _HomePageState extends State<HomePage> {
             decoration: BoxDecoration(
               color: const Color(0xFFE63946), // Merah gelap sesuai gambar background
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.blueAccent, width: 2), // Efek border biru tipis di gambar (opsional)
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min, // Agar tinggi menyesuaikan konten
