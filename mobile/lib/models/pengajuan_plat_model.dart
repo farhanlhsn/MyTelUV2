@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class PengajuanPlatModel {
   final int idKendaraan;
+  final int? idUser;
   final String platNomor;
   final String namaKendaraan;
   final String statusPengajuan; // 'MENUNGGU', 'DISETUJUI', 'DITOLAK'
@@ -13,6 +14,7 @@ class PengajuanPlatModel {
 
   PengajuanPlatModel({
     required this.idKendaraan,
+    this.idUser,
     required this.platNomor,
     required this.namaKendaraan,
     required this.statusPengajuan,
@@ -68,6 +70,7 @@ class PengajuanPlatModel {
       }
 
       final idKendaraan = parseId(json['id_kendaraan']);
+      final idUser = json['id_user'] != null ? parseId(json['id_user']) : null;
       final platNomor = json['plat_nomor']?.toString() ?? '';
       final namaKendaraan = json['nama_kendaraan']?.toString() ?? '';
       final statusPengajuan =
@@ -91,6 +94,7 @@ class PengajuanPlatModel {
 
       return PengajuanPlatModel(
         idKendaraan: idKendaraan,
+        idUser: idUser,
         platNomor: platNomor,
         namaKendaraan: namaKendaraan,
         statusPengajuan: statusPengajuan,

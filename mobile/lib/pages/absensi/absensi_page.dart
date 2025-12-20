@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../controllers/home_controller.dart';
+import '../../models/kelas.dart';
+import '../../models/absensi.dart';
 
-// ==========================================
-// 1. HALAMAN UTAMA (LIST MATA KULIAH)
-// ==========================================
 class AbsensiPage extends StatelessWidget {
   const AbsensiPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Warna utama (Merah Coral)
+    final HomeController controller = Get.find<HomeController>();
     final Color primaryRed = const Color(0xFFE63946);
 
     return Scaffold(
@@ -52,47 +52,66 @@ class AbsensiPage extends StatelessWidget {
                   ),
                 ),
                 padding: const EdgeInsets.all(20),
-                child: ListView(
-                  children: [
-                    // Item 1: Teori Peluang (Bisa Di-klik)
-                    _buildMatkulCard(
-                      context: context,
-                      title: "Teori Peluang (TAI)",
-                      date: "20 Desember 2024 | 15.30 WIB",
-                      primaryRed: primaryRed,
-                      onTap: () {
-                        // Navigasi ke Halaman Detail (Kode yang Anda berikan)
-                        Get.to(() => const AbsensiDetailPage());
-                      },
-                    ),
-                    const SizedBox(height: 16),
+                child: Obx(() {
+                  if (controller.isLoadingKelas.value) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                    // Item 2: Kalkulus (Hanya Tampilan)
-                    _buildMatkulCard(
-                      context: context,
-                      title: "Kalkulus (SUM)",
-                      date: "20 Desember 2024 | 15.30 WIB",
-                      primaryRed: primaryRed,
-                      onTap: () {
-                        Get.snackbar("Info", "Detail Kalkulus belum tersedia",
-                            snackPosition: SnackPosition.BOTTOM);
-                      },
-                    ),
-                    const SizedBox(height: 16),
+                  if (controller.kelasList.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.class_outlined, size: 80, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Belum ada kelas terdaftar',
+                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Daftar kelas terlebih dahulu',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
 
-                    // Item 3: Struktur Data (Hanya Tampilan)
-                    _buildMatkulCard(
-                      context: context,
-                      title: "Struktur Data (SRE)",
-                      date: "20 Desember 2024 | 15.30 WIB",
-                      primaryRed: primaryRed,
-                      onTap: () {
-                         Get.snackbar("Info", "Detail Struktur Data belum tersedia",
-                            snackPosition: SnackPosition.BOTTOM);
-                      },
-                    ),
-                  ],
-                ),
+                  return ListView.separated(
+                    itemCount: controller.kelasList.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final PesertaKelasModel pesertaKelas = controller.kelasList[index];
+                      final kelas = pesertaKelas.kelas;
+                      final matakuliah = kelas?.matakuliah;
+                      final absensiStats = kelas != null 
+                          ? controller.getAbsensiStatsForKelas(kelas.idKelas)
+                          : null;
+
+                      final String title = matakuliah != null
+                          ? '${matakuliah.namaMatakuliah} (${matakuliah.kodeMatakuliah})'
+                          : 'Kelas';
+                      final String jadwal = kelas?.jadwal ?? 'Jadwal belum tersedia';
+
+                      return _buildMatkulCard(
+                        context: context,
+                        title: title,
+                        subtitle: jadwal,
+                        absensiStats: absensiStats,
+                        primaryRed: primaryRed,
+                        onTap: () {
+                          if (kelas != null) {
+                            Get.to(() => AbsensiDetailPage(
+                              kelasName: title,
+                              idKelas: kelas.idKelas,
+                            ));
+                          }
+                        },
+                      );
+                    },
+                  );
+                }),
               ),
             ),
           ],
@@ -104,10 +123,14 @@ class AbsensiPage extends StatelessWidget {
   Widget _buildMatkulCard({
     required BuildContext context,
     required String title,
-    required String date,
+    required String subtitle,
+    AbsensiStatsModel? absensiStats,
     required Color primaryRed,
     required VoidCallback onTap,
   }) {
+    final double kehadiran = absensiStats?.persentaseKehadiran ?? 0;
+    final Color statusColor = kehadiran >= 75 ? Colors.green : Colors.orange;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -125,23 +148,44 @@ class AbsensiPage extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              date,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${kehadiran.toStringAsFixed(0)}%',
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
@@ -152,15 +196,19 @@ class AbsensiPage extends StatelessWidget {
 }
 
 
-// ==========================================
-// 2. HALAMAN DETAIL (YANG ANDA BERIKAN)
-// ==========================================
 class AbsensiDetailPage extends StatelessWidget {
-  const AbsensiDetailPage({super.key});
+  final String kelasName;
+  final int idKelas;
+
+  const AbsensiDetailPage({
+    super.key,
+    required this.kelasName,
+    required this.idKelas,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Warna utama (Merah Coral seperti di gambar)
+    final HomeController controller = Get.find<HomeController>();
     final Color primaryRed = const Color(0xFFE63946);
 
     return Scaffold(
@@ -175,9 +223,7 @@ class AbsensiDetailPage extends StatelessWidget {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: () => Navigator.pop(context),
                     child: const Icon(
                       Icons.arrow_back_ios,
                       color: Colors.white,
@@ -212,39 +258,12 @@ class AbsensiDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Tombol CETAK
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryRed,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 10,
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "CETAK",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 10),
 
                     // Judul Mata Kuliah
-                    const Text(
-                      "Teori Peluang",
-                      style: TextStyle(
+                    Text(
+                      kelasName,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.black87,
@@ -255,53 +274,53 @@ class AbsensiDetailPage extends StatelessWidget {
 
                     // List Container dengan Border Merah Tipis
                     Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: primaryRed.withOpacity(0.5)),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ListView(
-                          padding: EdgeInsets.zero,
-                          children: [
-                            _buildAttendanceItem(
-                              date: "Fri, 14 April 2023",
-                              time: "08:00 AM - 05:00 PM",
-                              isLate: false,
+                      child: Obx(() {
+                        // Filter absensi untuk kelas ini
+                        final absensiForKelas = controller.absensiList
+                            .where((a) => a.idKelas == idKelas)
+                            .toList();
+
+                        if (absensiForKelas.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.event_busy, size: 60, color: Colors.grey.shade400),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Belum ada data absensi',
+                                  style: TextStyle(color: Colors.grey.shade600),
+                                ),
+                              ],
                             ),
-                            _buildDivider(),
-                            _buildAttendanceItem(
-                              date: "Thu, 13 April 2023",
-                              time: "08:45 AM - 05:00 PM",
-                              isLate: true, // Merah sesuai gambar
+                          );
+                        }
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: primaryRed.withOpacity(0.5)),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListView.separated(
+                            padding: EdgeInsets.zero,
+                            itemCount: absensiForKelas.length,
+                            separatorBuilder: (context, index) => Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: Colors.grey.shade300,
+                              indent: 16,
+                              endIndent: 16,
                             ),
-                            _buildDivider(),
-                            _buildAttendanceItem(
-                              date: "Wed, 12 April 2023",
-                              time: "07:55 AM - 05:00 PM",
-                              isLate: false,
-                            ),
-                            _buildDivider(),
-                            _buildAttendanceItem(
-                              date: "Tue, 11 April 2023",
-                              time: "07:58 AM - 05:00 PM",
-                              isLate: false,
-                            ),
-                            _buildDivider(),
-                            _buildAttendanceItem(
-                              date: "Mon, 10 April 2023",
-                              time: "08:15 AM - 05:00 PM",
-                              isLate: true, // Merah sesuai gambar
-                            ),
-                            _buildDivider(),
-                            _buildAttendanceItem(
-                              date: "Sun, 9 April 2023",
-                              time: "08:00 AM - 05:00 PM",
-                              isLate: false,
-                              isLastItem: true,
-                            ),
-                          ],
-                        ),
-                      ),
+                            itemBuilder: (context, index) {
+                              final absensi = absensiForKelas[index];
+                              return _buildAttendanceItem(
+                                date: _formatDate(absensi.tanggalAbsensi),
+                                type: absensi.typeAbsensi,
+                              );
+                            },
+                          ),
+                        );
+                      }),
                     ),
                   ],
                 ),
@@ -313,33 +332,25 @@ class AbsensiDetailPage extends StatelessWidget {
     );
   }
 
-  // Widget untuk Divider tipis
-  Widget _buildDivider() {
-    return Divider(
-      height: 1,
-      thickness: 0.5,
-      color: Colors.grey.shade300,
-      indent: 16,
-      endIndent: 16,
-    );
+  String _formatDate(DateTime date) {
+    final days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${days[date.weekday % 7]}, ${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
-  // Widget untuk Item List Absensi
   Widget _buildAttendanceItem({
     required String date,
-    required String time,
-    required bool isLate,
-    bool isLastItem = false,
+    required String type,
   }) {
-    // Warna teks waktu (Merah jika terlambat/sesuai gambar, Abu jika normal)
-    final Color timeColor = isLate ? const Color(0xFFFF5A5F) : Colors.grey.shade700;
+    final bool isPresent = type == 'LOKAL_ABSENSI' || type == 'REMOTE_ABSENSI';
+    final Color typeColor = isPresent ? Colors.green : Colors.red;
+    final String typeText = type == 'LOKAL_ABSENSI' ? 'Lokal' : 'Remote';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Tanggal
           Text(
             date,
             style: TextStyle(
@@ -348,24 +359,20 @@ class AbsensiDetailPage extends StatelessWidget {
               fontSize: 13,
             ),
           ),
-          // Waktu dengan Icon Jam
-          Row(
-            children: [
-              Icon(
-                Icons.access_time,
-                size: 16,
-                color: timeColor,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: typeColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              typeText,
+              style: TextStyle(
+                color: typeColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
               ),
-              const SizedBox(width: 4),
-              Text(
-                time,
-                style: TextStyle(
-                  color: timeColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
