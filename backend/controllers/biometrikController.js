@@ -292,11 +292,21 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
             });
         }
 
-        // Get all active biometric data
+        // Role-based verification:
+        // - ADMIN: can verify against ALL users (search entire database)
+        // - DOSEN/MAHASISWA: can only verify their OWN biometric data (prevent abuse)
+        const whereClause = {
+            deletedAt: null
+        };
+
+        // If not ADMIN, restrict to only user's own biometric data
+        if (req.user.role !== 'ADMIN') {
+            whereClause.id_user = req.user.id_user;
+        }
+
+        // Get biometric data based on role
         const allBiometrics = await prisma.dataBiometrik.findMany({
-            where: {
-                deletedAt: null
-            },
+            where: whereClause,
             include: {
                 user: {
                     select: {
@@ -310,10 +320,14 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
         });
 
         if (allBiometrics.length === 0) {
+            const message = req.user.role === 'ADMIN'
+                ? 'No registered faces in database'
+                : 'You have not registered your biometric data yet';
+
             return res.status(200).json({
                 status: 'success',
                 matched: false,
-                message: 'No registered faces in database'
+                message: message
             });
         }
 

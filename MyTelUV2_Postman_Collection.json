@@ -1158,7 +1158,7 @@
                                 "verify"
                             ]
                         },
-                        "description": "Verify a face against all registered biometric data. Used for single person verification (e.g., mobile app). Available to all authenticated users."
+                        "description": "Verify a face against registered biometric data. **Role-based behavior**: ADMIN can verify against ALL users (searches entire database), while DOSEN/MAHASISWA can only verify their OWN biometric data (self-verification only to prevent abuse). Returns matched user info if similarity exceeds threshold."
                     },
                     "response": []
                 },
