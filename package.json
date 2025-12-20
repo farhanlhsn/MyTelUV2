@@ -7,13 +7,15 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:chrome\"",
-    "start:macos": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:macos\"",
-    "start:windows": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:windows\"",
-    "start:ios": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:ios\"",
-    "start:android": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:android\"",
-    "start:all": "concurrently -n BE,MO -c blue,green \"npm run backend\" \"npm run mobile:all\"",
+    "start": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:chrome\"",
+    "start:macos": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:macos\"",
+    "start:windows": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:windows\"",
+    "start:ios": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:ios\"",
+    "start:android": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:android\"",
+    "start:all": "concurrently -n BE,PY,MO -c blue,magenta,green \"npm run backend\" \"npm run python\" \"npm run mobile:all\"",
     "backend": "cd backend && nodemon server.js",
+    "python": "cd backend/python-service && source venv/bin/activate && python app.py",
+    "python:setup": "cd backend/python-service && ./setup.sh",
     "mobile": "cd mobile && flutter run",
     "mobile:chrome": "cd mobile && flutter run -d chrome",
     "mobile:macos": "cd mobile && flutter run -d macos",
@@ -28,6 +30,7 @@
     "concurrently": "^9.2.1"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0"
+    "bcrypt": "^6.0.0",
+    "nodemon": "^3.1.11"
   }
 }

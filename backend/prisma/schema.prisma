@@ -56,7 +56,8 @@ model User {
 model DataBiometrik {
   id_biometrik   Int       @id @default(autoincrement())
   id_user        Int       @unique
-  face_data_hash String    @db.VarChar(255)
+  face_embedding Float[]   // 512D embedding vector from InsightFace
+  photo_url      String?   // Face image URL from Cloudflare R2 (optional backup)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
