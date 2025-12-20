@@ -25,6 +25,229 @@ class _HomePageState extends State<HomePage> {
   // --- Daftar halaman untuk navigasi ---
   late final List<Widget> _pages;
 
+  // --- FUNGSI BARU UNTUK MENU PARKIR ---
+  void _showParkingOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Manajemen Parkir', // Judul disesuaikan
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              
+              // Opsi 1: Analitik Ketersediaan Parkir
+              ListTile(
+                leading: const Icon(Icons.pie_chart, color: Color(0xFFE63946)), // Icon Chart untuk Analitik
+                title: const Text('Analitik Ketersediaan Parkir'),
+                subtitle: const Text('Cek slot parkir yang tersedia'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Get.toNamed(AppRoutes.analitikParkir);
+                },
+              ),
+              const Divider(),
+              
+              // Opsi 2: Histori Parkir
+              ListTile(
+                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                title: const Text('Histori Parkir'),
+                subtitle: const Text('Lihat riwayat parkir kendaraan'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Get.toNamed(AppRoutes.historiParkir);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  void _showBiometricDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User tidak bisa tap di luar untuk menutup (opsional)
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent, // Transparan agar rounded corner terlihat rapi
+          insetPadding: const EdgeInsets.all(20), // Jarak dari tepi layar
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE63946), // Merah gelap sesuai gambar background
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min, // Agar tinggi menyesuaikan konten
+              children: [
+                const Text(
+                  "Apa Benar Anda sudah berada pada Lokasi?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // Tombol TIDAK
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context); // Tutup dialog
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFE63946), // Warna Teks Merah
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          "TIDAK",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 16
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16), // Jarak antar tombol
+                    // Tombol BETUL
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showSelfieDialog();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF5252), // Merah muda
+                          foregroundColor: Colors.white, // Warna Teks Putih
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          "BETUL",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 16
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+  void _showSelfieDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(20),
+          child: Container(
+            // Background Merah Besar
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE63946), // Warna merah background utama
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // --- KOTAK KAMERA (Placeholder Gambar) ---
+                Container(
+                  height: 250, 
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.black12,
+                    borderRadius: BorderRadius.circular(20),
+                    image: const DecorationImage(
+                      // Menggunakan gambar placeholder orang selfie
+                      image: NetworkImage('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80'),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  // Jika internet mati, tampilkan icon kamera
+                  child: const Align(
+                    alignment: Alignment.topRight,
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.camera_alt, color: Colors.white54),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+
+                // --- TOMBOL AMBIL ---
+                SizedBox(
+                  width: 200, // Lebar tombol agak panjang
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Tutup dialog
+                      
+                      // LOGIKA ABSENSI FINISH DI SINI
+                      Get.snackbar(
+                        "Berhasil", 
+                        "Data Biometrik & Lokasi tercatat!",
+                        backgroundColor: Colors.green,
+                        colorText: Colors.white,
+                        snackPosition: SnackPosition.BOTTOM,
+                        margin: const EdgeInsets.all(10),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF5252), // Warna Salmon/Merah Muda
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      "Ambil",
+                      style: TextStyle(
+                        fontSize: 18, 
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   @override
   void initState() {
     super.initState();
@@ -65,7 +288,7 @@ class _HomePageState extends State<HomePage> {
       'icon': Icons.assignment_ind_outlined,
       'label': 'Absence',
       'color': const Color(0xFFE63946),
-      'route': null,
+      'route': AppRoutes.absensi,
     },
     {
       'icon': Icons.qr_code_scanner,
@@ -488,7 +711,13 @@ class _HomePageState extends State<HomePage> {
   ) {
     return InkWell(
       onTap: () {
-        if (route != null) {
+        if (label == 'Biometric'){
+          _showBiometricDialog();
+        }
+        else if (label == 'Parking'){
+          _showParkingOptions();
+        }
+        else if (route != null) {
           // Special handling for License Plate - show options dialog
           if (route == AppRoutes.userHistoriPengajuan) {
             _showLicensePlateOptions();
@@ -672,4 +901,5 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+
 }

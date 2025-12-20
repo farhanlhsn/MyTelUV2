@@ -122,7 +122,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFFC5F57);
+    const Color primaryColor = Color(0xFFE63946);
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -204,7 +204,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
   }
 
   Widget _buildPengajuanCard(PengajuanPlatModel pengajuan) {
-    const Color primaryColor = Color(0xFFFC5F57);
+    const Color primaryColor = Color(0xFFE63946);
     final bool isPending = pengajuan.statusPengajuan == 'MENUNGGU';
 
     return Container(

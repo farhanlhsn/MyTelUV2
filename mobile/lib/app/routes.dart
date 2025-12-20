@@ -9,9 +9,13 @@ import '../bindings/auth_binding.dart';
 import '../pages/kendaraan/registerplat.dart';
 import '../pages/Punya_Raja/registerplat/pengajuan_list_page.dart';
 import '../pages/Punya_Raja/auth/otp_verification_page.dart';
-import '../pages/Punya_Raja/analitik/analitikkehadiran.dart';
+import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
-
+import '../pages/absensi/absensi_page.dart';
+import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
+import '../pages/kendaraan/parkir/histori_parkir_page.dart';
+import '../pages/settings/account_page.dart';
+import '../pages/settings/notification_page.dart';
 class AppRoutes {
   static const String login = '/login';
   static const String home = '/home';
@@ -23,6 +27,11 @@ class AppRoutes {
   static const String otpVerification = '/otp-verification';
   static const String analitikKehadiran = '/analitik-kehadiran';
   static const String userHistoriPengajuan = '/user-histori-pengajuan';
+  static const String absensi = '/absensi';
+  static const String analitikParkir = '/analitik-parkir';
+  static const String historiParkir = '/histori-parkir';
+  static const String account = '/account';
+  static const String notification = '/notification';
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
       name: login,
@@ -59,11 +68,31 @@ class AppRoutes {
     ),
     GetPage<dynamic>(
       name: analitikKehadiran,
-      page: () => const AnalitikKehadiranPage(),
+      page: () => const AnalitikParkirPage(),
     ),
     GetPage<dynamic>(
       name: userHistoriPengajuan,
       page: () => const UserHistoriPengajuan(),
     ),
+    GetPage<dynamic>(
+      name: absensi,
+      page: () => const AbsensiPage(),
+    ),
+    GetPage<dynamic>(
+      name: analitikParkir,
+      page: () => const AnalitikParkirPage(),
+    ),
+    GetPage<dynamic>(
+      name: historiParkir,
+      page: () => const HistoriParkirPage(),
+    ),
+    GetPage<dynamic>(
+      name: account,
+      page: () => const AccountPage(),
+    ),
+    GetPage<dynamic>(
+      name: notification,
+      page: () => const NotificationPage(),
+    )
   ];
 }

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 class PostPage extends StatefulWidget {
-  // --- BARU: Callback untuk memberi tahu Induk agar menutup ---
-  // Halaman induk yang menampilkan PostPage ini harus menyediakan fungsi ini,
-  // misalnya: () => _tabController.animateTo(0);
+  // Callback untuk memberi tahu Induk agar menutup
   final VoidCallback? onCloseTapped;
 
   const PostPage({super.key, this.onCloseTapped});
@@ -16,7 +14,7 @@ class _PostPageState extends State<PostPage> {
   final _contentController = TextEditingController();
   bool _isPostButtonEnabled = false;
 
-  // Data dummy tetap sama
+  // Data dummy
   final String _dummyUserName = "John Doe";
   final String _dummyUserHandle = "@johndoe";
   final Widget _dummyProfileAvatar = const CircleAvatar(
@@ -43,84 +41,143 @@ class _PostPageState extends State<PostPage> {
 
   void _submitPost() {
     if (!_isPostButtonEnabled) return;
-
     final String content = _contentController.text;
     print('Postingan Baru: $content');
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Postingan berhasil dibuat!'),
         backgroundColor: Colors.green,
       ),
     );
-
     _contentController.clear();
-
-    // Panggil callback 'close' jika ada
     widget.onCloseTapped?.call();
   }
 
-  // --- WIDGET BUILDER BARU ---
+  // --- LOGIKA BARU UNTUK LAMPIRAN ---
 
-  /// Membangun AppBar bagian atas
+  /// Fungsi untuk memunculkan opsi Foto/Video/dll dalam Bottom Sheet
+  void _showAttachmentOptions() {
+    // Menutup keyboard dulu agar tampilan lebih rapi
+    FocusScope.of(context).unfocus();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent, // Transparan agar bisa kita styling sendiri
+      builder: (BuildContext ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Ukuran menyesuaikan isi
+            children: [
+              // Garis kecil di atas (handle bar)
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                "Tambahkan ke postingan",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              // Grid menu opsi
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                   _buildOptionItem(Icons.photo_library, "Foto", Colors.green),
+                   _buildOptionItem(Icons.videocam, "Video", Colors.red),
+                   _buildOptionItem(Icons.location_on, "Lokasi", Colors.blue),
+                   _buildOptionItem(Icons.gif_box, "GIF", Colors.purple),
+                ],
+              ),
+              const SizedBox(height: 20), // Jarak aman bawah
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Widget helper untuk item di dalam Modal
+  Widget _buildOptionItem(IconData icon, String label, Color color) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context); // Tutup modal
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fitur "$label" dipilih.')),
+        );
+      },
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1), // Warna background tipis
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  // --- WIDGET BUILDER ---
+
   AppBar _buildAppBar(BuildContext context) {
     return AppBar(
-      // Kita gunakan warna putih dan buang bayangan
       backgroundColor: Colors.white,
       elevation: 0,
-      // Tambahkan garis bawah tipis seperti desain Anda
       shape: Border(
         bottom: BorderSide(color: Colors.grey[300]!, width: 0.5),
       ),
-      // Tombol 'Close' di kiri
       leading: IconButton(
         icon: const Icon(Icons.close, color: Colors.black87),
-        onPressed: widget.onCloseTapped ?? () {
-          // Fallback jika tidak ada callback (opsional)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Callback "Close" tidak diatur.')),
-          );
-        },
+        onPressed: widget.onCloseTapped,
       ),
-      // Tombol 'Posting' di kanan
       actions: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: FilledButton(
             onPressed: _isPostButtonEnabled ? _submitPost : null,
             style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
-            child: const Text(
-              'Posting',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            child: const Text('Posting', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ),
       ],
     );
   }
 
-  /// Membangun bagian body utama (Info User dan Input Teks)
   Widget _buildBody(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
-      // Memberi sedikit padding bawah agar tidak terlalu mepet action bar
-      // saat di-scroll ke paling bawah
-      physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
           _buildUserInfo(),
           const SizedBox(height: 16),
           _buildContentInput(),
+          // Tambahan ruang kosong di bawah agar teks tidak tertutup FAB
+          const SizedBox(height: 80), 
         ],
       ),
     );
   }
 
-  /// Membangun info profil pengguna
   Widget _buildUserInfo() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,17 +189,11 @@ class _PostPageState extends State<PostPage> {
           children: [
             Text(
               _dummyUserName,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
               _dummyUserHandle,
-              style: const TextStyle(
-                fontSize: 15,
-                color: Colors.black54,
-              ),
+              style: const TextStyle(fontSize: 15, color: Colors.black54),
             ),
           ],
         ),
@@ -150,88 +201,41 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  /// Membangun field input teks
   Widget _buildContentInput() {
     return TextFormField(
       controller: _contentController,
-      maxLines: null, // Memungkinkan input multi-baris tak terbatas
+      maxLines: null,
       keyboardType: TextInputType.multiline,
-      autofocus: true, // Langsung fokus saat halaman dibuka
+      autofocus: true,
       style: const TextStyle(fontSize: 18, height: 1.5),
       decoration: InputDecoration(
-        border: InputBorder.none, // Tidak ada garis bawah
+        border: InputBorder.none,
         hintText: "Apa yang sedang Anda pikirkan?",
-        hintStyle: TextStyle(
-          fontSize: 18,
-          color: Colors.grey[600],
-        ),
+        hintStyle: TextStyle(fontSize: 18, color: Colors.grey[600]),
       ),
     );
   }
 
-  /// Membangun Action Bar bagian bawah (Foto, Video, dll.)
-  Widget _buildBottomActions(BuildContext context) {
-    // Kita bungkus dengan SafeArea agar tidak tembus 'home bar' (navigasi gestur)
-    return SafeArea(
-      // Hanya terapkan SafeArea untuk bagian bawah
-      bottom: true,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey[300]!, width: 0.5)),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildActionButton(Icons.photo_library, "Foto", Colors.green),
-            _buildActionButton(Icons.videocam, "Video", Colors.red),
-            _buildActionButton(Icons.location_on, "Lokasi", Colors.blue),
-            _buildActionButton(Icons.gif_box, "GIF", Colors.purple),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Widget helper untuk tombol-tombol di Action Bar (sama seperti kode Anda)
-  Widget _buildActionButton(IconData icon, String label, Color color) {
-    return TextButton.icon(
-      onPressed: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fitur "$label" belum diimplementasi.')),
-        );
-      },
-      icon: Icon(icon, color: color, size: 24),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-      style: TextButton.styleFrom(
-        foregroundColor: Colors.black54,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      ),
-    );
-  }
-
-  // --- BUILD UTAMA YANG SUDAH DI-RENOVASI ---
-  @override
+@override
   Widget build(BuildContext context) {
-    // KITA MENGGUNAKAN SCAFFOLD!
-    // Ini adalah kunci untuk membuat semuanya "gacor".
     return Scaffold(
       backgroundColor: Colors.white,
-      
-      // Menggunakan AppBar standar
       appBar: _buildAppBar(context),
-      
-      // Body yang bisa di-scroll
       body: _buildBody(context),
       
-      // Menempatkan action bar Anda di slot bottomNavigationBar.
-      // Flutter akan OTOMATIS mengangkatnya ke atas keyboard
-      // dengan animasi yang sempurna.
-      bottomNavigationBar: _buildBottomActions(context),
+      // Bungkus FloatingActionButton dengan Padding
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 100.0, right: 10.0), 
+        child: FloatingActionButton(
+          onPressed: _showAttachmentOptions,
+          backgroundColor: Color(0xFFE63946),
+          elevation: 2,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      ),
       
-      // (PENTING) Properti ini (default-nya true) adalah yang
-      // "mengerutkan" body saat keyboard muncul.
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      
       resizeToAvoidBottomInset: true,
     );
   }
