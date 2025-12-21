@@ -50,4 +50,36 @@ class AuthService {
     }
     return <String, dynamic>{};
   }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String nama,
+  }) async {
+    final Response<dynamic> response = await _dio.put<dynamic>(
+      '/api/auth/profile',
+      data: <String, dynamic>{'nama': nama},
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    final Response<dynamic> response = await _dio.put<dynamic>(
+      '/api/auth/password',
+      data: <String, dynamic>{
+        'oldPassword': oldPassword,
+        'newPassword': newPassword,
+      },
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    return <String, dynamic>{};
+  }
 }
