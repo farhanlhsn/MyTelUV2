@@ -1,7 +1,7 @@
 const express = require('express');
-const { login, register, getMe, updateProfile, changePassword } = require('../controllers/authController');
+const { login, register, getMe, updateProfile, changePassword, getAllUsers } = require('../controllers/authController');
 const { validateRequired, validatePassword } = require('../middlewares/validationMiddleware');
-const { protect } = require('../middlewares/authMiddleware');
+const { protect, authorize } = require('../middlewares/authMiddleware');
 const router = express.Router();
 
 router.post('/register',
@@ -20,6 +20,10 @@ router.get('/me',
     getMe
 );
 
+router.get('/users',
+    protect,
+    authorize('ADMIN'),
+    getAllUsers
 router.put('/profile',
     protect,
     validateRequired(['nama']),

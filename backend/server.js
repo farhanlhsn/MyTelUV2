@@ -59,6 +59,7 @@ app.use(sanitizeInput); // Sanitize all input
 const authRoutes = require('./routes/authRoutes');
 const kendaraanRoutes = require('./routes/kendaraanRoutes');
 const akademikRoutes = require('./routes/akademikRoutes');
+const biometrikRoutes = require('./routes/biometrikRoutes');
 const parkirRoutes = require('./routes/parkirRoutes');
 const postRoutes = require('./routes/postRoutes');
 
@@ -70,6 +71,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/kendaraan', kendaraanRoutes);
 app.use('/api/akademik', akademikRoutes);
+app.use('/api/biometrik', biometrikRoutes);
 app.use('/api/parkir', parkirRoutes);
 app.use('/api/posts', postRoutes);
 

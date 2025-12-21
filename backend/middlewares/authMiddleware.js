@@ -9,7 +9,7 @@ exports.protect = asyncHandler(async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     // Extract token from Bearer token
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.body.token) {
+  } else if (req.body && req.body.token) {
     // Get token from body
     token = req.body.token;
   }
@@ -38,11 +38,11 @@ exports.protect = asyncHandler(async (req, res, next) => {
         role: true
       }
     });
-    
+
     if (!req.user) {
-        return res.status(401).json({ status: "error", message: 'User not found' });
+      return res.status(401).json({ status: "error", message: 'User not found' });
     }
-    
+
     next();
   } catch (err) {
     return res.status(401).json({
