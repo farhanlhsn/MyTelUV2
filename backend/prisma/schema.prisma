@@ -46,6 +46,9 @@ model User {
   logParkir      LogParkir[]
   kelasDiampu    Kelas[]          @relation("DosenKelas")
   pesertaKelas   PesertaKelas[]
+  posts          Post[]
+  postLikes      PostLike[]
+  postComments   PostComment[]
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
@@ -243,4 +246,60 @@ model LaporanAnomali {
   @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
   @@index([deletedAt], map: "idx_anomali_deleted")
   @@map("laporan_anomali")
+}
+
+// =================== POST MODELS ===================
+model Post {
+  id_post     Int           @id @default(autoincrement())
+  id_user     Int
+  content     String        @db.Text
+  media       String[]      // Array of media URLs (images, videos, gifs)
+  latitude    Float?
+  longitude   Float?
+  location_name String?     @db.VarChar(255)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  user        User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  likes       PostLike[]
+  comments    PostComment[]
+
+  @@index([id_user, createdAt], map: "idx_post_user_created")
+  @@index([createdAt], map: "idx_post_created")
+  @@index([deletedAt], map: "idx_post_deleted")
+  @@map("posts")
+}
+
+model PostLike {
+  id_like     Int      @id @default(autoincrement())
+  id_post     Int
+  id_user     Int
+  createdAt   DateTime @default(now())
+
+  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@unique([id_post, id_user], map: "uq_post_user_like")
+  @@index([id_post], map: "idx_like_post")
+  @@index([id_user], map: "idx_like_user")
+  @@map("post_likes")
+}
+
+model PostComment {
+  id_comment  Int      @id @default(autoincrement())
+  id_post     Int
+  id_user     Int
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([id_post, createdAt], map: "idx_comment_post_created")
+  @@index([id_user], map: "idx_comment_user")
+  @@index([deletedAt], map: "idx_comment_deleted")
+  @@map("post_comments")
 }

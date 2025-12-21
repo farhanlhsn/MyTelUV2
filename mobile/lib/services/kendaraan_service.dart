@@ -181,4 +181,86 @@ class KendaraanService {
       throw Exception('Unexpected error: $e');
     }
   }
+
+  // ========== ADMIN METHODS ==========
+
+  // Get all unverified kendaraan (for Admin)
+  static Future<List<PengajuanPlatModel>> getAllUnverifiedKendaraan() async {
+    try {
+      final response = await _dio.get('/api/kendaraan/all-unverified');
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final List<dynamic> data = response.data['data'] ?? [];
+        return data
+            .map((item) => PengajuanPlatModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to fetch unverified kendaraan',
+        );
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error fetching unverified kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
+
+  // Verify kendaraan (for Admin)
+  static Future<bool> verifyKendaraan({
+    required int idKendaraan,
+    required int idUser,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/api/kendaraan/verify',
+        data: {
+          'id_kendaraan': idKendaraan,
+          'id_user': idUser,
+        },
+      );
+
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error verifying kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
+
+  // Reject kendaraan (for Admin)
+  static Future<bool> rejectKendaraan({
+    required int idKendaraan,
+    required int idUser,
+    required String feedback,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/api/kendaraan/reject',
+        data: {
+          'id_kendaraan': idKendaraan,
+          'id_user': idUser,
+          'feedback': feedback,
+        },
+      );
+
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error rejecting kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
 }
