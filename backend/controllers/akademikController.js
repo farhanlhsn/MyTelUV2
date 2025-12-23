@@ -4,31 +4,31 @@ const prisma = require('../utils/prisma');
 // ==================== MATAKULIAH CONTROLLERS ====================
 exports.createMatakuliah = asyncHandler(async (req, res) => {
     const { nama_matakuliah, kode_matakuliah } = req.body;
-    
+
     // Check if kode already exists
     const existingMatakuliah = await prisma.matakuliah.findFirst({
-        where: { 
+        where: {
             kode_matakuliah,
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (existingMatakuliah) {
-        return res.status(409).json({ 
-            status: "error", 
-            message: "Kode matakuliah already exists" 
+        return res.status(409).json({
+            status: "error",
+            message: "Kode matakuliah already exists"
         });
     }
-    
+
     const matakuliah = await prisma.matakuliah.create({
-        data: { 
-            nama_matakuliah: nama_matakuliah.trim(), 
-            kode_matakuliah: kode_matakuliah.trim().toUpperCase() 
+        data: {
+            nama_matakuliah: nama_matakuliah.trim(),
+            kode_matakuliah: kode_matakuliah.trim().toUpperCase()
         }
     });
-    
-    res.status(201).json({ 
-        status: "success", 
+
+    res.status(201).json({
+        status: "success",
         message: "Matakuliah created successfully",
         data: matakuliah
     });
@@ -37,9 +37,9 @@ exports.createMatakuliah = asyncHandler(async (req, res) => {
 exports.getAllMatakuliah = asyncHandler(async (req, res) => {
     const { search, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const where = { deletedAt: null };
-    
+
     // Search by nama or kode
     if (search) {
         where.OR = [
@@ -47,7 +47,7 @@ exports.getAllMatakuliah = asyncHandler(async (req, res) => {
             { kode_matakuliah: { contains: search, mode: 'insensitive' } }
         ];
     }
-    
+
     const [matakuliah, total] = await prisma.$transaction([
         prisma.matakuliah.findMany({
             where,
@@ -67,9 +67,9 @@ exports.getAllMatakuliah = asyncHandler(async (req, res) => {
         }),
         prisma.matakuliah.count({ where })
     ]);
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         data: matakuliah,
         pagination: {
             total,
@@ -82,11 +82,11 @@ exports.getAllMatakuliah = asyncHandler(async (req, res) => {
 
 exports.getMatakuliahById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     const matakuliah = await prisma.matakuliah.findFirst({
-        where: { 
+        where: {
             id_matakuliah: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         },
         include: {
             kelas: {
@@ -103,56 +103,56 @@ exports.getMatakuliahById = asyncHandler(async (req, res) => {
             }
         }
     });
-    
+
     if (!matakuliah) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Matakuliah not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Matakuliah not found"
         });
     }
-    
-    res.status(200).json({ 
-        status: "success", 
-        data: matakuliah 
+
+    res.status(200).json({
+        status: "success",
+        data: matakuliah
     });
 });
 
 exports.updateMatakuliah = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { nama_matakuliah, kode_matakuliah } = req.body;
-    
+
     const matakuliah = await prisma.matakuliah.findFirst({
-        where: { 
+        where: {
             id_matakuliah: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!matakuliah) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Matakuliah not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Matakuliah not found"
         });
     }
-    
+
     // Check if new kode already exists (excluding current)
     if (kode_matakuliah && kode_matakuliah !== matakuliah.kode_matakuliah) {
         const existingKode = await prisma.matakuliah.findFirst({
-            where: { 
+            where: {
                 kode_matakuliah: kode_matakuliah.trim().toUpperCase(),
                 deletedAt: null,
                 NOT: { id_matakuliah: parseInt(id) }
             }
         });
-        
+
         if (existingKode) {
-            return res.status(409).json({ 
-                status: "error", 
-                message: "Kode matakuliah already exists" 
+            return res.status(409).json({
+                status: "error",
+                message: "Kode matakuliah already exists"
             });
         }
     }
-    
+
     const updatedMatakuliah = await prisma.matakuliah.update({
         where: { id_matakuliah: parseInt(id) },
         data: {
@@ -160,21 +160,21 @@ exports.updateMatakuliah = asyncHandler(async (req, res) => {
             ...(kode_matakuliah && { kode_matakuliah: kode_matakuliah.trim().toUpperCase() })
         }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         message: "Matakuliah updated successfully",
-        data: updatedMatakuliah 
+        data: updatedMatakuliah
     });
 });
 
 exports.deleteMatakuliah = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     const matakuliah = await prisma.matakuliah.findFirst({
-        where: { 
+        where: {
             id_matakuliah: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         },
         include: {
             kelas: {
@@ -182,30 +182,30 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
             }
         }
     });
-    
+
     if (!matakuliah) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Matakuliah not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Matakuliah not found"
         });
     }
-    
+
     // Check if has active kelas
     if (matakuliah.kelas.length > 0) {
-        return res.status(400).json({ 
-            status: "error", 
-            message: "Cannot delete matakuliah with active kelas. Delete or archive the kelas first." 
+        return res.status(400).json({
+            status: "error",
+            message: "Cannot delete matakuliah with active kelas. Delete or archive the kelas first."
         });
     }
-    
+
     await prisma.matakuliah.update({
         where: { id_matakuliah: parseInt(id) },
         data: { deletedAt: new Date() }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
-        message: "Matakuliah deleted successfully" 
+
+    res.status(200).json({
+        status: "success",
+        message: "Matakuliah deleted successfully"
     });
 });
 
@@ -213,74 +213,74 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
 
 exports.createKelas = asyncHandler(async (req, res) => {
     const { id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan } = req.body;
-    
+
     // Validate matakuliah exists
     const matakuliah = await prisma.matakuliah.findFirst({
-        where: { 
+        where: {
             id_matakuliah: parseInt(id_matakuliah),
             deletedAt: null
         }
     });
-    
+
     if (!matakuliah) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Matakuliah not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Matakuliah not found"
         });
     }
-    
+
     // Validate dosen exists and has DOSEN role
     const dosen = await prisma.user.findFirst({
-        where: { 
+        where: {
             id_user: parseInt(id_dosen),
             role: 'DOSEN',
             deletedAt: null
         }
     });
-    
+
     if (!dosen) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Dosen not found or invalid role" 
+        return res.status(404).json({
+            status: "error",
+            message: "Dosen not found or invalid role"
         });
     }
-    
+
     // If user is DOSEN (not ADMIN), they can only create class for themselves
     if (req.user.role === 'DOSEN' && req.user.id_user !== parseInt(id_dosen)) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "Dosen can only create classes for themselves" 
+        return res.status(403).json({
+            status: "error",
+            message: "Dosen can only create classes for themselves"
         });
     }
-    
+
     // Validate time format (HH:MM:SS)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
     if (!timeRegex.test(jam_mulai) || !timeRegex.test(jam_berakhir)) {
-        return res.status(400).json({ 
-            status: "error", 
-            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)" 
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
         });
     }
-    
+
     // Check for schedule conflicts (same dosen, same time, same day)
     const conflictingKelas = await prisma.$queryRaw`
         SELECT * FROM kelas 
         WHERE id_dosen = ${parseInt(id_dosen)}
-        AND deleted_at IS NULL
+        AND "deletedAt" IS NULL
         AND (
             (jam_mulai <= ${jam_mulai}::time AND jam_berakhir > ${jam_mulai}::time)
             OR (jam_mulai < ${jam_berakhir}::time AND jam_berakhir >= ${jam_berakhir}::time)
             OR (jam_mulai >= ${jam_mulai}::time AND jam_berakhir <= ${jam_berakhir}::time)
         )
     `;
-    
+
     if (conflictingKelas.length > 0) {
-        return res.status(409).json({ 
-            status: "error", 
-            message: "Schedule conflict detected. Dosen already has a class at this time." 
+        return res.status(409).json({
+            status: "error",
+            message: "Schedule conflict detected. Dosen already has a class at this time."
         });
     }
-    
+
     const kelas = await prisma.$executeRaw`
         INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, "createdAt", "updatedAt")
         VALUES (
@@ -295,7 +295,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
         )
         RETURNING *
     `;
-    
+
     // Fetch the created kelas with relations
     const createdKelas = await prisma.kelas.findFirst({
         orderBy: { createdAt: 'desc' },
@@ -310,9 +310,9 @@ exports.createKelas = asyncHandler(async (req, res) => {
             }
         }
     });
-    
-    res.status(201).json({ 
-        status: "success", 
+
+    res.status(201).json({
+        status: "success",
         message: "Kelas created successfully",
         data: createdKelas
     });
@@ -321,13 +321,13 @@ exports.createKelas = asyncHandler(async (req, res) => {
 exports.getAllKelas = asyncHandler(async (req, res) => {
     const { id_matakuliah, id_dosen, ruangan, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const where = { deletedAt: null };
-    
+
     if (id_matakuliah) where.id_matakuliah = parseInt(id_matakuliah);
     if (id_dosen) where.id_dosen = parseInt(id_dosen);
     if (ruangan) where.ruangan = { contains: ruangan, mode: 'insensitive' };
-    
+
     const [kelas, total] = await prisma.$transaction([
         prisma.kelas.findMany({
             where,
@@ -354,9 +354,9 @@ exports.getAllKelas = asyncHandler(async (req, res) => {
         }),
         prisma.kelas.count({ where })
     ]);
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         data: kelas,
         pagination: {
             total,
@@ -369,9 +369,9 @@ exports.getAllKelas = asyncHandler(async (req, res) => {
 
 exports.getKelasByDosen = asyncHandler(async (req, res) => {
     const id_dosen = req.user.id_user;
-    
+
     const kelas = await prisma.kelas.findMany({
-        where: { 
+        where: {
             id_dosen,
             deletedAt: null
         },
@@ -399,20 +399,20 @@ exports.getKelasByDosen = asyncHandler(async (req, res) => {
         },
         orderBy: { createdAt: 'desc' }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
-        data: kelas 
+
+    res.status(200).json({
+        status: "success",
+        data: kelas
     });
 });
 
 exports.getKelasById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         },
         include: {
             matakuliah: true,
@@ -437,97 +437,97 @@ exports.getKelasById = asyncHandler(async (req, res) => {
             }
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
-    res.status(200).json({ 
-        status: "success", 
-        data: kelas 
+
+    res.status(200).json({
+        status: "success",
+        data: kelas
     });
 });
 
 exports.updateKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan } = req.body;
-    
+
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // If user is DOSEN, they can only update their own class
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "You can only update your own classes" 
+        return res.status(403).json({
+            status: "error",
+            message: "You can only update your own classes"
         });
     }
-    
+
     // Validate matakuliah if provided
     if (id_matakuliah) {
         const matakuliah = await prisma.matakuliah.findFirst({
-            where: { 
+            where: {
                 id_matakuliah: parseInt(id_matakuliah),
                 deletedAt: null
             }
         });
-        
+
         if (!matakuliah) {
-            return res.status(404).json({ 
-                status: "error", 
-                message: "Matakuliah not found" 
+            return res.status(404).json({
+                status: "error",
+                message: "Matakuliah not found"
             });
         }
     }
-    
+
     // Validate dosen if provided
     if (id_dosen) {
         const dosen = await prisma.user.findFirst({
-            where: { 
+            where: {
                 id_user: parseInt(id_dosen),
                 role: 'DOSEN',
                 deletedAt: null
             }
         });
-        
+
         if (!dosen) {
-            return res.status(404).json({ 
-                status: "error", 
-                message: "Dosen not found or invalid role" 
+            return res.status(404).json({
+                status: "error",
+                message: "Dosen not found or invalid role"
             });
         }
     }
-    
+
     // Validate time format if provided
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
     if ((jam_mulai && !timeRegex.test(jam_mulai)) || (jam_berakhir && !timeRegex.test(jam_berakhir))) {
-        return res.status(400).json({ 
-            status: "error", 
-            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)" 
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
         });
     }
-    
+
     // Build update data
     const updateData = {};
     if (id_matakuliah) updateData.id_matakuliah = parseInt(id_matakuliah);
     if (id_dosen) updateData.id_dosen = parseInt(id_dosen);
     if (nama_kelas) updateData.nama_kelas = nama_kelas.trim();
     if (ruangan) updateData.ruangan = ruangan.trim();
-    
+
     // Handle time fields separately with raw query if provided
     if (jam_mulai || jam_berakhir) {
         const timeUpdateQuery = `
@@ -538,10 +538,10 @@ exports.updateKelas = asyncHandler(async (req, res) => {
                 updated_at = NOW()
             WHERE id_kelas = ${parseInt(id)}
         `;
-        
+
         await prisma.$executeRawUnsafe(timeUpdateQuery);
     }
-    
+
     // Update other fields
     if (Object.keys(updateData).length > 0) {
         await prisma.kelas.update({
@@ -549,7 +549,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
             data: updateData
         });
     }
-    
+
     // Fetch updated kelas
     const updatedKelas = await prisma.kelas.findFirst({
         where: { id_kelas: parseInt(id) },
@@ -564,39 +564,39 @@ exports.updateKelas = asyncHandler(async (req, res) => {
             }
         }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         message: "Kelas updated successfully",
-        data: updatedKelas 
+        data: updatedKelas
     });
 });
 
 exports.deleteKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // If user is DOSEN, they can only delete their own class
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "You can only delete your own classes" 
+        return res.status(403).json({
+            status: "error",
+            message: "You can only delete your own classes"
         });
     }
-    
+
     // Soft delete kelas and all its peserta
     await prisma.$transaction([
         prisma.kelas.update({
@@ -604,17 +604,17 @@ exports.deleteKelas = asyncHandler(async (req, res) => {
             data: { deletedAt: new Date() }
         }),
         prisma.pesertaKelas.updateMany({
-            where: { 
+            where: {
                 id_kelas: parseInt(id),
                 deletedAt: null
             },
             data: { deletedAt: new Date() }
         })
     ]);
-    
-    res.status(200).json({ 
-        status: "success", 
-        message: "Kelas deleted successfully" 
+
+    res.status(200).json({
+        status: "success",
+        message: "Kelas deleted successfully"
     });
 });
 
@@ -623,10 +623,10 @@ exports.deleteKelas = asyncHandler(async (req, res) => {
 exports.daftarKelas = asyncHandler(async (req, res) => {
     const { id_kelas } = req.body;
     const id_mahasiswa = req.user.id_user;
-    
+
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id_kelas),
             deletedAt: null
         },
@@ -634,32 +634,32 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
             matakuliah: true
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // Check if already enrolled
     const existingPeserta = await prisma.pesertaKelas.findUnique({
-        where: { 
+        where: {
             id_mahasiswa_id_kelas: {
                 id_mahasiswa,
                 id_kelas: parseInt(id_kelas)
             }
         }
     });
-    
+
     // If already enrolled and not deleted
     if (existingPeserta && !existingPeserta.deletedAt) {
-        return res.status(409).json({ 
-            status: "error", 
-            message: "Already enrolled in this class" 
+        return res.status(409).json({
+            status: "error",
+            message: "Already enrolled in this class"
         });
     }
-    
+
     // If previously dropped, restore
     if (existingPeserta && existingPeserta.deletedAt) {
         const restored = await prisma.pesertaKelas.update({
@@ -671,7 +671,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
             },
             data: { deletedAt: null },
         });
-        
+
         // Fetch with relations
         const pesertaWithRelations = await prisma.pesertaKelas.findUnique({
             where: {
@@ -694,14 +694,14 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
                 }
             }
         });
-        
-        return res.status(200).json({ 
-            status: "success", 
+
+        return res.status(200).json({
+            status: "success",
             message: "Re-enrolled in class successfully",
             data: pesertaWithRelations
         });
     }
-    
+
     // Create new enrollment
     const peserta = await prisma.pesertaKelas.create({
         data: {
@@ -722,9 +722,9 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
             }
         }
     });
-    
-    res.status(201).json({ 
-        status: "success", 
+
+    res.status(201).json({
+        status: "success",
         message: "Enrolled in class successfully",
         data: peserta
     });
@@ -733,7 +733,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
 exports.dropKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const id_mahasiswa = req.user.id_user;
-    
+
     const peserta = await prisma.pesertaKelas.findUnique({
         where: {
             id_mahasiswa_id_kelas: {
@@ -742,14 +742,14 @@ exports.dropKelas = asyncHandler(async (req, res) => {
             }
         }
     });
-    
+
     if (!peserta || peserta.deletedAt) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Not enrolled in this class" 
+        return res.status(404).json({
+            status: "error",
+            message: "Not enrolled in this class"
         });
     }
-    
+
     await prisma.pesertaKelas.update({
         where: {
             id_mahasiswa_id_kelas: {
@@ -759,18 +759,18 @@ exports.dropKelas = asyncHandler(async (req, res) => {
         },
         data: { deletedAt: new Date() }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
-        message: "Dropped class successfully" 
+
+    res.status(200).json({
+        status: "success",
+        message: "Dropped class successfully"
     });
 });
 
 exports.getKelasKu = asyncHandler(async (req, res) => {
     const id_mahasiswa = req.user.id_user;
-    
+
     const pesertaKelas = await prisma.pesertaKelas.findMany({
-        where: { 
+        where: {
             id_mahasiswa,
             deletedAt: null,
             kelas: {
@@ -793,41 +793,41 @@ exports.getKelasKu = asyncHandler(async (req, res) => {
         },
         orderBy: { createdAt: 'desc' }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
-        data: pesertaKelas 
+
+    res.status(200).json({
+        status: "success",
+        data: pesertaKelas
     });
 });
 
 exports.getPesertaKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // Check authorization
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "You can only view peserta for your own classes" 
+        return res.status(403).json({
+            status: "error",
+            message: "You can only view peserta for your own classes"
         });
     }
-    
+
     const peserta = await prisma.pesertaKelas.findMany({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
             deletedAt: null
         },
@@ -840,16 +840,96 @@ exports.getPesertaKelas = asyncHandler(async (req, res) => {
                 }
             }
         },
-        orderBy: { 
+        orderBy: {
             mahasiswa: {
                 nama: 'asc'
             }
         }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
-        data: peserta 
+
+    res.status(200).json({
+        status: "success",
+        data: peserta
+    });
+});
+
+// Admin add peserta to kelas
+exports.adminAddPeserta = asyncHandler(async (req, res) => {
+    const { id_kelas, id_mahasiswa } = req.body;
+
+    // Validate kelas exists
+    const kelas = await prisma.kelas.findFirst({
+        where: {
+            id_kelas: parseInt(id_kelas),
+            deletedAt: null
+        }
+    });
+
+    if (!kelas) {
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
+        });
+    }
+
+    // Validate mahasiswa exists and is a MAHASISWA
+    const mahasiswa = await prisma.user.findFirst({
+        where: {
+            id_user: parseInt(id_mahasiswa),
+            role: 'MAHASISWA',
+            deletedAt: null
+        }
+    });
+
+    if (!mahasiswa) {
+        return res.status(404).json({
+            status: "error",
+            message: "Mahasiswa not found"
+        });
+    }
+
+    // Check if already enrolled
+    const existingPeserta = await prisma.pesertaKelas.findUnique({
+        where: {
+            id_mahasiswa_id_kelas: {
+                id_mahasiswa: parseInt(id_mahasiswa),
+                id_kelas: parseInt(id_kelas)
+            }
+        }
+    });
+
+    // If already enrolled and not deleted
+    if (existingPeserta && !existingPeserta.deletedAt) {
+        return res.status(409).json({
+            status: "error",
+            message: "Mahasiswa already enrolled in this class"
+        });
+    }
+
+    // If previously dropped, restore
+    if (existingPeserta && existingPeserta.deletedAt) {
+        await prisma.pesertaKelas.update({
+            where: {
+                id_mahasiswa_id_kelas: {
+                    id_mahasiswa: parseInt(id_mahasiswa),
+                    id_kelas: parseInt(id_kelas)
+                }
+            },
+            data: { deletedAt: null }
+        });
+    } else {
+        // Create new enrollment
+        await prisma.pesertaKelas.create({
+            data: {
+                id_mahasiswa: parseInt(id_mahasiswa),
+                id_kelas: parseInt(id_kelas)
+            }
+        });
+    }
+
+    res.status(201).json({
+        status: "success",
+        message: "Mahasiswa added to class successfully"
     });
 });
 
@@ -861,60 +941,57 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     const id_user = req.user.id_user;
 
     if (req.user.role !== 'DOSEN' && req.user.role !== 'ADMIN') {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "Not authorized to open absensi" 
+        return res.status(403).json({
+            status: "error",
+            message: "Not authorized to open absensi"
         });
     }
 
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id_kelas),
-            deletedAt: null 
+            deletedAt: null
         }
     });
 
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
 
     // If DOSEN, check if teaching this kelas
     if (req.user.role === 'DOSEN' && kelas.id_dosen !== req.user.id_user) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "Not authorized for this class" 
+        return res.status(403).json({
+            status: "error",
+            message: "Not authorized for this class"
         });
     }
 
     // Validate type_absensi enum
     if (!['REMOTE_ABSENSI', 'LOKAL_ABSENSI'].includes(type_absensi)) {
-        return res.status(400).json({ 
-            status: "error", 
-            message: "Invalid type_absensi. Must be REMOTE_ABSENSI or LOKAL_ABSENSI" 
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid type_absensi. Must be REMOTE_ABSENSI or LOKAL_ABSENSI"
         });
     }
 
     // Validate coordinates
-    const lat = parseFloat(latitude);
-    const lng = parseFloat(longitude);
+    let lat = parseFloat(latitude);
+    let lng = parseFloat(longitude);
+    let radius = radius_meter ? parseInt(radius_meter) : null;
 
     if (type_absensi === 'REMOTE_ABSENSI' && !pjj) {
-        lat = parseFloat(latitude);
-        lng = parseFloat(longitude);
-        radius = parseInt(radius_meter);
-
         if (
-        isNaN(lat) || isNaN(lng) || isNaN(radius) ||
-        lat < -90 || lat > 90 || lng < -180 || lng > 180 || radius <= 0
+            isNaN(lat) || isNaN(lng) || isNaN(radius) ||
+            lat < -90 || lat > 90 || lng < -180 || lng > 180 || radius <= 0
         ) {
-        return res.status(400).json({
-            status: "error",
-            message: "Invalid coordinates or radius for REMOTE_ABSENSI"
-        });
+            return res.status(400).json({
+                status: "error",
+                message: "Invalid coordinates or radius for REMOTE_ABSENSI"
+            });
         }
     }
 
@@ -923,29 +1000,29 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     const selesaiTime = new Date(selesai);
 
     if (isNaN(mulaiTime.getTime()) || isNaN(selesaiTime.getTime()) || mulaiTime >= selesaiTime) {
-        return res.status(400).json({ 
-            status: "error", 
-            message: "Invalid mulai or selesai time" 
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid mulai or selesai time"
         });
     }
 
     // Create absensi session
     const sesi = await prisma.sesiAbsensi.create({
         data: {
-        id_kelas: parseInt(id_kelas),
-        type_absensi,
-        latitude: lat,
-        longitude: lng,
-        radius_meter: radius,
-        mulai: mulaiTime,
-        selesai: selesaiTime,
-        status: true,
-        createdBy: id_user
+            id_kelas: parseInt(id_kelas),
+            type_absensi,
+            latitude: lat || null,
+            longitude: lng || null,
+            radius_meter: radius,
+            mulai: mulaiTime,
+            selesai: selesaiTime,
+            status: true,
+            createdBy: id_user
         }
     });
 
-    res.status(201).json({ 
-        status: "success", 
+    res.status(201).json({
+        status: "success",
         message: "Absensi session opened successfully",
         data: sesi
     });
@@ -953,156 +1030,157 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
 });
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // meter
-  const toRad = deg => (deg * Math.PI) / 180;
+    const R = 6371000; // meter
+    const toRad = deg => (deg * Math.PI) / 180;
 
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 exports.createAbsensi = asyncHandler(async (req, res) => {
-  const { id_kelas, id_sesi_absensi, latitude, longitude } = req.body;
-  const id_user = req.user.id_user;
+    const { id_kelas, id_sesi_absensi, latitude, longitude } = req.body;
+    const id_user = req.user.id_user;
 
-  const kelas = await prisma.kelas.findFirst({
-    where: {
-      id_kelas: parseInt(id_kelas),
-      deletedAt: null
+    const kelas = await prisma.kelas.findFirst({
+        where: {
+            id_kelas: parseInt(id_kelas),
+            deletedAt: null
+        }
+    });
+
+    if (!kelas) {
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
+        });
     }
-  });
 
-  if (!kelas) {
-    return res.status(404).json({
-      status: "error",
-      message: "Kelas not found"
-    });
-  }
+    if (req.user.role === 'MAHASISWA') {
+        const peserta = await prisma.pesertaKelas.findFirst({
+            where: {
+                id_mahasiswa: id_user,
+                id_kelas: parseInt(id_kelas),
+                deletedAt: null
+            }
+        });
 
-  if (req.user.role === 'MAHASISWA') {
-    const peserta = await prisma.pesertaKelas.findFirst({
-      where: {
-        id_mahasiswa: id_user,
-        id_kelas: parseInt(id_kelas),
-        deletedAt: null
-      }
-    });
-
-    if (!peserta) {
-      return res.status(403).json({
-        status: "error",
-        message: "Not enrolled in this class"
-      });
+        if (!peserta) {
+            return res.status(403).json({
+                status: "error",
+                message: "Not enrolled in this class"
+            });
+        }
     }
-  }
 
-  const sesi = await prisma.sesiAbsensi.findFirst({
-    where: {
-      id_sesi_absensi: parseInt(id_sesi_absensi),
-      id_kelas: parseInt(id_kelas),
-      deletedAt: null,
-      status: 'OPEN'
+    const sesi = await prisma.sesiAbsensi.findFirst({
+        where: {
+            id_sesi_absensi: parseInt(id_sesi_absensi),
+            id_kelas: parseInt(id_kelas),
+            deletedAt: null,
+            status: 'OPEN'
+        }
+    });
+
+    if (!sesi) {
+        return res.status(404).json({
+            status: "error",
+            message: "Sesi absensi tidak ditemukan atau sudah ditutup"
+        });
     }
-  });
 
-  if (!sesi) {
-    return res.status(404).json({
-      status: "error",
-      message: "Sesi absensi tidak ditemukan atau sudah ditutup"
-    });
-  }
-
-  const now = new Date();
-  if (now < sesi.mulai || now > sesi.selesai) {
-    return res.status(400).json({
-      status: "error",
-      message: "Di luar waktu absensi"
-    });
-  }
-
-  const existingAbsensi = await prisma.absensi.findFirst({
-    where: {
-      id_user,
-      id_sesi_absensi: sesi.id_sesi_absensi,
-      deletedAt: null
+    const now = new Date();
+    if (now < sesi.mulai || now > sesi.selesai) {
+        return res.status(400).json({
+            status: "error",
+            message: "Di luar waktu absensi"
+        });
     }
-  });
 
-  if (existingAbsensi) {
-    return res.status(409).json({
-      status: "error",
-      message: "Sudah melakukan absensi pada sesi ini"
+    const existingAbsensi = await prisma.absensi.findFirst({
+        where: {
+            id_user,
+            id_sesi_absensi: sesi.id_sesi_absensi,
+            deletedAt: null
+        }
     });
-  }
 
-  const lat = parseFloat(latitude);
-  const lng = parseFloat(longitude);
-
-  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    return res.status(400).json({
-      status: "error",
-      message: "Invalid coordinates"
-    });
-  }
-
-  if (sesi.type_absensi === 'REMOTE_ABSENSI' && sesi.latitude !== null && sesi.longitude !== null && sesi.radius_meter !== null) {
-    const distance = haversineDistance(
-      sesi.latitude,
-      sesi.longitude,
-      lat,
-      lng
-    );
-
-    if (distance > sesi.radius_meter) {
-      return res.status(403).json({
-        status: "error",
-        message: "Lokasi di luar area absensi"
-      });
+    if (existingAbsensi) {
+        return res.status(409).json({
+            status: "error",
+            message: "Sudah melakukan absensi pada sesi ini"
+        });
     }
-  }
 
-  // TODO: kalau LOKAL_ABSENSI + face recognition:
-  // terima flag / hasil dari service face-recognition di sini
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
 
-  await prisma.$executeRaw`
-    INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat)
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid coordinates"
+        });
+    }
+
+    if (sesi.type_absensi === 'REMOTE_ABSENSI' && sesi.latitude !== null && sesi.longitude !== null && sesi.radius_meter !== null) {
+        const distance = haversineDistance(
+            sesi.latitude,
+            sesi.longitude,
+            lat,
+            lng
+        );
+
+        if (distance > sesi.radius_meter) {
+            return res.status(403).json({
+                status: "error",
+                message: "Lokasi di luar area absensi"
+            });
+        }
+    }
+
+    // TODO: kalau LOKAL_ABSENSI + face recognition:
+    // terima flag / hasil dari service face-recognition di sini
+
+    await prisma.$executeRaw`
+    INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, "updatedAt")
     VALUES (
       ${id_user},
       ${parseInt(id_kelas)},
       ${sesi.id_sesi_absensi},
-      ${sesi.type_absensi}::type_absensi,
-      POINT(${lng}, ${lat})
+      ${sesi.type_absensi}::"TypeAbsensi",
+      POINT(${lng}, ${lat}),
+      NOW()
     )
   `;
 
-  const absensi = await prisma.absensi.findFirst({
-    where: {
-      id_user,
-      id_sesi_absensi: sesi.id_sesi_absensi
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      kelas: {
+    const absensi = await prisma.absensi.findFirst({
+        where: {
+            id_user,
+            id_sesi_absensi: sesi.id_sesi_absensi
+        },
+        orderBy: { createdAt: 'desc' },
         include: {
-          matakuliah: true
+            kelas: {
+                include: {
+                    matakuliah: true
+                }
+            },
+            sesiAbsensi: true
         }
-      },
-      sesiAbsensi: true
-    }
-  });
+    });
 
-  res.status(201).json({
-    status: "success",
-    message: "Absensi recorded successfully",
-    data: absensi
-  });
+    res.status(201).json({
+        status: "success",
+        message: "Absensi recorded successfully",
+        data: absensi
+    });
 });
 
 
@@ -1110,15 +1188,15 @@ exports.getAbsensiKu = asyncHandler(async (req, res) => {
     const id_user = req.user.id_user;
     const { id_kelas, type_absensi, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const where = { 
+
+    const where = {
         id_user,
         deletedAt: null
     };
-    
+
     if (id_kelas) where.id_kelas = parseInt(id_kelas);
     if (type_absensi) where.type_absensi = type_absensi;
-    
+
     const [absensi, total] = await prisma.$transaction([
         prisma.absensi.findMany({
             where,
@@ -1141,9 +1219,9 @@ exports.getAbsensiKu = asyncHandler(async (req, res) => {
         }),
         prisma.absensi.count({ where })
     ]);
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         data: absensi,
         pagination: {
             total,
@@ -1158,50 +1236,50 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { type_absensi, date, page = 1, limit = 50 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // Check authorization
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "You can only view absensi for your own classes" 
+        return res.status(403).json({
+            status: "error",
+            message: "You can only view absensi for your own classes"
         });
     }
-    
-    const where = { 
+
+    const where = {
         id_kelas: parseInt(id),
         deletedAt: null
     };
-    
+
     if (type_absensi) where.type_absensi = type_absensi;
-    
+
     // Filter by date if provided
     if (date) {
         const targetDate = new Date(date);
         targetDate.setHours(0, 0, 0, 0);
         const nextDate = new Date(targetDate);
         nextDate.setDate(nextDate.getDate() + 1);
-        
+
         where.createdAt = {
             gte: targetDate,
             lt: nextDate
         };
     }
-    
+
     const [absensi, total] = await prisma.$transaction([
         prisma.absensi.findMany({
             where,
@@ -1221,9 +1299,9 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
         }),
         prisma.absensi.count({ where })
     ]);
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         data: absensi,
         pagination: {
             total,
@@ -1236,30 +1314,30 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
 
 exports.getAbsensiStats = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
+
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
-        where: { 
+        where: {
             id_kelas: parseInt(id),
-            deletedAt: null 
+            deletedAt: null
         }
     });
-    
+
     if (!kelas) {
-        return res.status(404).json({ 
-            status: "error", 
-            message: "Kelas not found" 
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
         });
     }
-    
+
     // Check authorization
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
-        return res.status(403).json({ 
-            status: "error", 
-            message: "You can only view statistics for your own classes" 
+        return res.status(403).json({
+            status: "error",
+            message: "You can only view statistics for your own classes"
         });
     }
-    
+
     // Get total peserta
     const totalPeserta = await prisma.pesertaKelas.count({
         where: {
@@ -1267,7 +1345,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
             deletedAt: null
         }
     });
-    
+
     // Get total absensi
     const totalAbsensi = await prisma.absensi.count({
         where: {
@@ -1275,7 +1353,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
             deletedAt: null
         }
     });
-    
+
     // Get absensi by type
     const absensiByType = await prisma.absensi.groupBy({
         by: ['type_absensi'],
@@ -1287,7 +1365,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
             id_absensi: true
         }
     });
-    
+
     // Get absensi by mahasiswa
     const absensiPerMahasiswa = await prisma.absensi.groupBy({
         by: ['id_user'],
@@ -1302,9 +1380,9 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
             id_absensi: true
         }
     });
-    
-    res.status(200).json({ 
-        status: "success", 
+
+    res.status(200).json({
+        status: "success",
         data: {
             totalPeserta,
             totalAbsensi,
@@ -1313,10 +1391,354 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
                 return acc;
             }, {}),
             totalMahasiswaAbsensi: absensiPerMahasiswa.length,
-            averageAbsensiPerMahasiswa: absensiPerMahasiswa.length > 0 
+            averageAbsensiPerMahasiswa: absensiPerMahasiswa.length > 0
                 ? (absensiPerMahasiswa.reduce((sum, item) => sum + item._count.id_absensi, 0) / absensiPerMahasiswa.length).toFixed(2)
                 : 0
         }
+    });
+});
+
+// ==================== SESI ABSENSI CONTROLLERS ====================
+
+/**
+ * Get all sesi absensi for a kelas (for dosen)
+ */
+exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Validate kelas exists
+    const kelas = await prisma.kelas.findFirst({
+        where: {
+            id_kelas: parseInt(id),
+            deletedAt: null
+        }
+    });
+
+    if (!kelas) {
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas not found"
+        });
+    }
+
+    // Check authorization
+    if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
+        return res.status(403).json({
+            status: "error",
+            message: "You can only view sesi for your own classes"
+        });
+    }
+
+    // Get total peserta for this kelas
+    const totalPeserta = await prisma.pesertaKelas.count({
+        where: {
+            id_kelas: parseInt(id),
+            deletedAt: null
+        }
+    });
+
+    const where = {
+        id_kelas: parseInt(id),
+        deletedAt: null
+    };
+
+    // Filter by status if provided
+    if (status !== undefined) {
+        where.status = status === 'true';
+    }
+
+    const [sesiList, total] = await prisma.$transaction([
+        prisma.sesiAbsensi.findMany({
+            where,
+            skip,
+            take: parseInt(limit),
+            include: {
+                _count: {
+                    select: {
+                        absensi: {
+                            where: { deletedAt: null }
+                        }
+                    }
+                }
+            },
+            orderBy: { mulai: 'desc' }
+        }),
+        prisma.sesiAbsensi.count({ where })
+    ]);
+
+    // Add total_peserta to each sesi
+    const sesiWithStats = sesiList.map(sesi => ({
+        ...sesi,
+        total_peserta: totalPeserta,
+        jumlah_hadir: sesi._count.absensi
+    }));
+
+    res.status(200).json({
+        status: "success",
+        data: sesiWithStats,
+        pagination: {
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+        }
+    });
+});
+
+/**
+ * Get detail absensi for a specific sesi (who attended, who didn't)
+ */
+exports.getSesiAbsensiDetail = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // Get sesi with kelas info
+    const sesi = await prisma.sesiAbsensi.findFirst({
+        where: {
+            id_sesi_absensi: parseInt(id),
+            deletedAt: null
+        },
+        include: {
+            kelas: {
+                include: {
+                    matakuliah: true,
+                    dosen: {
+                        select: {
+                            id_user: true,
+                            nama: true
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    if (!sesi) {
+        return res.status(404).json({
+            status: "error",
+            message: "Sesi absensi not found"
+        });
+    }
+
+    // Check authorization
+    if (req.user.role === 'DOSEN' && req.user.id_user !== sesi.kelas.id_dosen) {
+        return res.status(403).json({
+            status: "error",
+            message: "You can only view detail for your own classes"
+        });
+    }
+
+    // Get all peserta for this kelas
+    const pesertaList = await prisma.pesertaKelas.findMany({
+        where: {
+            id_kelas: sesi.id_kelas,
+            deletedAt: null
+        },
+        include: {
+            mahasiswa: {
+                select: {
+                    id_user: true,
+                    nama: true,
+                    username: true
+                }
+            }
+        },
+        orderBy: {
+            mahasiswa: { nama: 'asc' }
+        }
+    });
+
+    // Get absensi records for this sesi
+    const absensiRecords = await prisma.absensi.findMany({
+        where: {
+            id_sesi_absensi: parseInt(id),
+            deletedAt: null
+        },
+        select: {
+            id_user: true,
+            createdAt: true
+        }
+    });
+
+    // Create a map for quick lookup
+    const absensiMap = new Map();
+    absensiRecords.forEach(a => {
+        absensiMap.set(a.id_user, a.createdAt);
+    });
+
+    // Build peserta list with hadir status
+    const pesertaWithStatus = pesertaList.map(p => ({
+        id_user: p.mahasiswa.id_user,
+        nama: p.mahasiswa.nama,
+        username: p.mahasiswa.username,
+        hadir: absensiMap.has(p.mahasiswa.id_user),
+        waktu_absen: absensiMap.get(p.mahasiswa.id_user) || null
+    }));
+
+    res.status(200).json({
+        status: "success",
+        data: {
+            sesi: {
+                id_sesi_absensi: sesi.id_sesi_absensi,
+                type_absensi: sesi.type_absensi,
+                mulai: sesi.mulai,
+                selesai: sesi.selesai,
+                status: sesi.status,
+                kelas: sesi.kelas
+            },
+            peserta: pesertaWithStatus,
+            stats: {
+                total_peserta: pesertaList.length,
+                total_hadir: absensiRecords.length,
+                total_tidak_hadir: pesertaList.length - absensiRecords.length,
+                persentase: pesertaList.length > 0
+                    ? ((absensiRecords.length / pesertaList.length) * 100).toFixed(1)
+                    : 0
+            }
+        }
+    });
+});
+
+/**
+ * Close a sesi absensi
+ */
+exports.closeSesiAbsensi = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const sesi = await prisma.sesiAbsensi.findFirst({
+        where: {
+            id_sesi_absensi: parseInt(id),
+            deletedAt: null
+        },
+        include: {
+            kelas: true
+        }
+    });
+
+    if (!sesi) {
+        return res.status(404).json({
+            status: "error",
+            message: "Sesi absensi not found"
+        });
+    }
+
+    // Check authorization
+    if (req.user.role === 'DOSEN' && req.user.id_user !== sesi.kelas.id_dosen) {
+        return res.status(403).json({
+            status: "error",
+            message: "You can only close sesi for your own classes"
+        });
+    }
+
+    if (!sesi.status) {
+        return res.status(400).json({
+            status: "error",
+            message: "Sesi absensi sudah ditutup"
+        });
+    }
+
+    // Close the sesi
+    await prisma.sesiAbsensi.update({
+        where: { id_sesi_absensi: parseInt(id) },
+        data: { status: false }
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: "Sesi absensi berhasil ditutup"
+    });
+});
+
+/**
+ * Get mahasiswa attendance history with all sessions (hadir/tidak hadir)
+ */
+exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
+    const id_user = req.user.id_user;
+    const { id_kelas } = req.query;
+
+    // Get enrolled classes
+    const enrolledClasses = await prisma.pesertaKelas.findMany({
+        where: {
+            id_mahasiswa: id_user,
+            deletedAt: null,
+            ...(id_kelas && { id_kelas: parseInt(id_kelas) }),
+            kelas: { deletedAt: null }
+        },
+        include: {
+            kelas: {
+                include: {
+                    matakuliah: true,
+                    dosen: {
+                        select: { id_user: true, nama: true }
+                    }
+                }
+            }
+        }
+    });
+
+    // For each enrolled class, get all sesi and user's attendance
+    const result = await Promise.all(enrolledClasses.map(async (pk) => {
+        // Get all sesi for this kelas
+        const allSesi = await prisma.sesiAbsensi.findMany({
+            where: {
+                id_kelas: pk.id_kelas,
+                deletedAt: null
+            },
+            orderBy: { mulai: 'desc' }
+        });
+
+        // Get user's absensi for this kelas
+        const userAbsensi = await prisma.absensi.findMany({
+            where: {
+                id_user,
+                id_kelas: pk.id_kelas,
+                deletedAt: null
+            },
+            select: {
+                id_sesi_absensi: true,
+                createdAt: true,
+                type_absensi: true
+            }
+        });
+
+        // Create map for quick lookup
+        const absensiMap = new Map();
+        userAbsensi.forEach(a => {
+            absensiMap.set(a.id_sesi_absensi, {
+                waktu: a.createdAt,
+                type: a.type_absensi
+            });
+        });
+
+        // Build sessions with hadir status
+        const sessions = allSesi.map(sesi => ({
+            id_sesi: sesi.id_sesi_absensi,
+            tanggal: sesi.mulai,
+            hadir: absensiMap.has(sesi.id_sesi_absensi),
+            type_absensi: absensiMap.get(sesi.id_sesi_absensi)?.type || null,
+            waktu_absen: absensiMap.get(sesi.id_sesi_absensi)?.waktu || null
+        }));
+
+        const totalHadir = sessions.filter(s => s.hadir).length;
+
+        return {
+            kelas: pk.kelas,
+            sessions,
+            stats: {
+                total_sesi: allSesi.length,
+                total_hadir: totalHadir,
+                total_tidak_hadir: allSesi.length - totalHadir,
+                persentase: allSesi.length > 0
+                    ? ((totalHadir / allSesi.length) * 100).toFixed(1)
+                    : 0
+            }
+        };
+    }));
+
+    res.status(200).json({
+        status: "success",
+        data: result
     });
 });
 

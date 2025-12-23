@@ -16,6 +16,12 @@ import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
+import '../pages/kendaraan/admin/admin_pengajuan_list_page.dart';
+import '../pages/admin/admin_akademik_page.dart';
+import '../pages/admin/admin_biometrik_page.dart';
+import '../pages/admin/admin_user_management_page.dart';
+import '../pages/admin/admin_absensi_monitoring_page.dart';
+
 class AppRoutes {
   static const String login = '/login';
   static const String home = '/home';
@@ -32,6 +38,11 @@ class AppRoutes {
   static const String historiParkir = '/histori-parkir';
   static const String account = '/account';
   static const String notification = '/notification';
+  static const String adminPengajuanList = '/admin-pengajuan-list';
+  static const String adminAkademik = '/admin-akademik';
+  static const String adminBiometrik = '/admin-biometrik';
+  static const String adminUserManagement = '/admin-user-management';
+  static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
       name: login,
@@ -93,6 +104,26 @@ class AppRoutes {
     GetPage<dynamic>(
       name: notification,
       page: () => const NotificationPage(),
-    )
+    ),
+    GetPage<dynamic>(
+      name: adminPengajuanList,
+      page: () => const AdminPengajuanListPage(),
+    ),
+    GetPage<dynamic>(
+      name: adminAkademik,
+      page: () => const AdminAkademikPage(),
+    ),
+    GetPage<dynamic>(
+      name: adminBiometrik,
+      page: () => const AdminBiometrikPage(),
+    ),
+    GetPage<dynamic>(
+      name: adminUserManagement,
+      page: () => const AdminUserManagementPage(),
+    ),
+    GetPage<dynamic>(
+      name: adminAbsensiMonitoring,
+      page: () => const AdminAbsensiMonitoringPage(),
+    ),
   ];
 }

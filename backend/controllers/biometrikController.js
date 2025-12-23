@@ -476,3 +476,207 @@ exports.scanWajah = asyncHandler(async (req, res) => {
         throw error;
     }
 });
+
+/**
+ * Haversine distance helper
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // meter
+    const toRad = deg => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+/**
+ * @desc    Biometric attendance - verify face + check session + check location + mark present
+ * @route   POST /api/biometrik/absen
+ * @access  Protected (MAHASISWA)
+ */
+exports.biometrikAbsen = asyncHandler(async (req, res) => {
+    const { latitude, longitude } = req.body;
+    const id_user = req.user.id_user;
+
+    if (!req.file) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Image file is required'
+        });
+    }
+
+    // Validate coordinates
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid coordinates'
+        });
+    }
+
+    try {
+        // Step 1: Verify face
+        const formData = new FormData();
+        formData.append('image', fs.createReadStream(req.file.path));
+        const faceResult = await callPythonService('/detect-face', formData);
+
+        fs.unlinkSync(req.file.path);
+
+        if (!faceResult.success) {
+            return res.status(400).json({
+                status: 'error',
+                message: faceResult.error || 'Face detection failed'
+            });
+        }
+
+        // Get user's biometric data
+        const userBiometric = await prisma.dataBiometrik.findUnique({
+            where: { id_user },
+            include: { user: { select: { id_user: true, nama: true, username: true } } }
+        });
+
+        if (!userBiometric || userBiometric.deletedAt) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Anda belum terdaftar biometrik. Hubungi admin untuk pendaftaran.'
+            });
+        }
+
+        // Compare embeddings
+        const matchResult = await callPythonService('/find-match', {
+            target_embedding: faceResult.embedding,
+            embeddings_list: [userBiometric.face_embedding]
+        });
+
+        if (!matchResult.is_match) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Wajah tidak cocok',
+                similarity: matchResult.similarity
+            });
+        }
+
+        // Step 2: Get user's enrolled classes
+        const enrolledClasses = await prisma.pesertaKelas.findMany({
+            where: {
+                id_mahasiswa: id_user,
+                deletedAt: null,
+                kelas: { deletedAt: null }
+            },
+            select: { id_kelas: true }
+        });
+
+        if (enrolledClasses.length === 0) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Anda tidak terdaftar di kelas manapun'
+            });
+        }
+
+        const kelasIds = enrolledClasses.map(p => p.id_kelas);
+
+        // Step 3: Find OPEN attendance session for enrolled classes
+        const now = new Date();
+        const activeSesi = await prisma.sesiAbsensi.findFirst({
+            where: {
+                id_kelas: { in: kelasIds },
+                status: true,  // true = sesi masih terbuka
+                mulai: { lte: now },
+                selesai: { gte: now },
+                deletedAt: null
+            },
+            include: {
+                kelas: {
+                    include: {
+                        matakuliah: true,
+                        dosen: { select: { id_user: true, nama: true } }
+                    }
+                }
+            }
+        });
+
+        if (!activeSesi) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
+            });
+        }
+
+        // Step 4: Check if already marked attendance
+        const existingAbsensi = await prisma.absensi.findFirst({
+            where: {
+                id_user,
+                id_sesi_absensi: activeSesi.id_sesi_absensi,
+                deletedAt: null
+            }
+        });
+
+        if (existingAbsensi) {
+            return res.status(409).json({
+                status: 'error',
+                message: 'Anda sudah melakukan absensi pada sesi ini',
+                kelas: activeSesi.kelas.matakuliah?.nama_matakuliah || activeSesi.kelas.nama_kelas
+            });
+        }
+
+        // Step 5: Check location (if session has location requirements)
+        if (activeSesi.latitude !== null && activeSesi.longitude !== null && activeSesi.radius_meter !== null) {
+            const distance = haversineDistance(activeSesi.latitude, activeSesi.longitude, lat, lng);
+            if (distance > activeSesi.radius_meter) {
+                return res.status(403).json({
+                    status: 'error',
+                    message: 'Lokasi Anda di luar area absensi',
+                    distance: Math.round(distance),
+                    required_radius: activeSesi.radius_meter
+                });
+            }
+        }
+
+        // Step 6: Create attendance record
+        await prisma.$executeRaw`
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, "updatedAt")
+            VALUES (
+                ${id_user},
+                ${activeSesi.id_kelas},
+                ${activeSesi.id_sesi_absensi},
+                ${activeSesi.type_absensi}::"TypeAbsensi",
+                POINT(${lng}, ${lat}),
+                NOW()
+            )
+        `;
+
+        const absensi = await prisma.absensi.findFirst({
+            where: { id_user, id_sesi_absensi: activeSesi.id_sesi_absensi },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                kelas: { include: { matakuliah: true } },
+                sesiAbsensi: true
+            }
+        });
+
+        res.status(201).json({
+            status: 'success',
+            message: 'Absensi berhasil dicatat',
+            data: {
+                nama: userBiometric.user.nama,
+                kelas: activeSesi.kelas.matakuliah?.nama_matakuliah || activeSesi.kelas.nama_kelas,
+                ruangan: activeSesi.kelas.ruangan,
+                waktu: absensi.createdAt,
+                type: activeSesi.type_absensi,
+                similarity: matchResult.similarity
+            }
+        });
+
+    } catch (error) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        throw error;
+    }
+});
