@@ -24,6 +24,8 @@ router.get('/users',
     protect,
     authorize('ADMIN'),
     getAllUsers
+);
+
 router.put('/profile',
     protect,
     validateRequired(['nama']),
