@@ -164,6 +164,9 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
                 hasPrevPage: pageNum > 1
             }
         }
+    });
+});
+
 exports.updateProfile = asyncHandler(async (req, res) => {
     const { nama } = req.body;
     const userId = req.user.id_user;
