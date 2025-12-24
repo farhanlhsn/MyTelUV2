@@ -6,7 +6,7 @@ This script runs on Raspberry Pi 2 to:
 1. Capture images from camera
 2. Detect license plates using lightweight YOLO model
 3. Send detected plates to server for OCR recognition
-4. Log parking entry
+4. Control parking gate based on server response
 
 Optimized for Raspberry Pi 2 (ARMv7, 1GB RAM)
 """
@@ -28,6 +28,90 @@ except ImportError:
     ort = None
 
 
+class GateController:
+    """Controls the parking gate barrier"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+        self.gate_type = config.get('gate', {}).get('type', 'MASUK')
+        self.open_duration = config.get('gate', {}).get('open_duration', 5)
+        self.gpio_enabled = config.get('gpio', {}).get('enabled', False)
+        self.relay_pin = config.get('gpio', {}).get('relay_pin', 17)
+        
+        if self.gpio_enabled:
+            try:
+                import RPi.GPIO as GPIO
+                self.GPIO = GPIO
+                GPIO.setmode(GPIO.BCM)
+                GPIO.setup(self.relay_pin, GPIO.OUT)
+                GPIO.output(self.relay_pin, GPIO.LOW)
+                self.logger.info(f"GPIO initialized on pin {self.relay_pin}")
+            except ImportError:
+                self.logger.warning("RPi.GPIO not available, using simulation mode")
+                self.gpio_enabled = False
+            except Exception as e:
+                self.logger.error(f"GPIO initialization error: {e}")
+                self.gpio_enabled = False
+        
+        self.logger.info(f"GateController initialized (type: {self.gate_type}, GPIO: {self.gpio_enabled})")
+    
+    def open_gate(self):
+        """Open the gate barrier"""
+        gate_name = f"PALANG {self.gate_type}"
+        
+        self.logger.info(f"🚧 {gate_name}: MEMBUKA...")
+        print(f"\n{'='*50}")
+        print(f"🚧 {gate_name}: BUKA")
+        print(f"{'='*50}\n")
+        
+        if self.gpio_enabled:
+            self.GPIO.output(self.relay_pin, self.GPIO.HIGH)
+    
+    def close_gate(self):
+        """Close the gate barrier"""
+        gate_name = f"PALANG {self.gate_type}"
+        
+        self.logger.info(f"🚧 {gate_name}: MENUTUP...")
+        print(f"\n{'='*50}")
+        print(f"🚧 {gate_name}: TUTUP")
+        print(f"{'='*50}\n")
+        
+        if self.gpio_enabled:
+            self.GPIO.output(self.relay_pin, self.GPIO.LOW)
+    
+    def execute_gate_action(self, action, message=""):
+        """Execute gate action based on server response"""
+        if action == "OPEN":
+            print(f"\n✅ {message}")
+            self.open_gate()
+            
+            # Wait for vehicle to pass
+            self.logger.info(f"Waiting {self.open_duration}s for vehicle to pass...")
+            time.sleep(self.open_duration)
+            
+            self.close_gate()
+            return True
+        
+        elif action == "DENY":
+            print(f"\n❌ AKSES DITOLAK: {message}")
+            self.logger.warning(f"Gate denied: {message}")
+            return False
+        
+        else:
+            self.logger.error(f"Unknown gate action: {action}")
+            return False
+    
+    def cleanup(self):
+        """Cleanup GPIO on exit"""
+        if self.gpio_enabled:
+            try:
+                self.GPIO.cleanup()
+                self.logger.info("GPIO cleanup completed")
+            except Exception as e:
+                self.logger.error(f"GPIO cleanup error: {e}")
+
+
 class PlateDetector:
     def __init__(self, config_path='config.yaml'):
         """Initialize plate detector with configuration"""
@@ -41,6 +125,9 @@ class PlateDetector:
             format='%(asctime)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize gate controller
+        self.gate_controller = GateController(self.config)
         
         # Load model
         model_path = self.config['model']['path']
@@ -70,6 +157,7 @@ class PlateDetector:
         self.camera_height = self.config['camera']['height']
         
         self.logger.info("PlateDetector initialized successfully")
+
     
     def letterbox(self, img, new_shape=(640, 640)):
         """Resize and pad image while maintaining aspect ratio"""
@@ -243,33 +331,46 @@ class PlateDetector:
         return result
     
     def send_to_server(self, plate_img):
-        """Send plate image to server for OCR recognition"""
+        """Send plate image to server for OCR recognition and get gate command"""
         try:
             # Encode image as JPEG with high quality
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 95]
             _, img_encoded = cv2.imencode('.jpg', plate_img, encode_param)
             
-            # Send to server with lower confidence threshold
+            # Get gate config
+            gate_type = self.config.get('gate', {}).get('type', 'MASUK')
+            parkiran_id = self.config.get('gate', {}).get('parkiran_id', 1)
+            
+            # Send to server with gate info
             files = {'image': ('plate.jpg', img_encoded.tobytes(), 'image/jpeg')}
+            data = {
+                'parkiran_id': parkiran_id,
+                'gate_type': gate_type
+            }
+            
             response = requests.post(
-                f"{self.server_url}/api/recognize-plate?confidence=0.15",
+                f"{self.server_url}/api/parking/process",
                 files=files,
+                data=data,
                 timeout=self.server_timeout
             )
             
-            if response.status_code == 200:
-                result = response.json()
-                return result
+            result = response.json()
+            
+            # Log result
+            if result.get('success'):
+                self.logger.info(f"✅ Server: {result.get('message')}")
             else:
-                self.logger.error(f"Server error: {response.status_code}")
-                return None
+                self.logger.warning(f"❌ Server: {result.get('message', result.get('error'))}")
+            
+            return result
                 
         except Exception as e:
             self.logger.error(f"Error sending to server: {e}")
-            return None
+            return {'gate_action': 'DENY', 'error': str(e)}
     
     def process_frame(self, frame, save_dir=None):
-        """Process a single frame"""
+        """Process a single frame and control gate"""
         start_time = time.time()
         
         # Detect plates
@@ -302,17 +403,22 @@ class PlateDetector:
                 cv2.imwrite(str(debug_dir / f"{timestamp}_original.jpg"), plate_img)
                 cv2.imwrite(str(debug_dir / f"{timestamp}_preprocessed.jpg"), plate_img_preprocessed)
             
-            # Send to server for OCR
-            ocr_result = self.send_to_server(plate_img_preprocessed)
+            # Send to server for OCR and validation
+            server_result = self.send_to_server(plate_img_preprocessed)
             
-            if ocr_result:
-                plate_text = ocr_result.get('plate_text', '')
-                ocr_confidence = ocr_result.get('confidence', 0.0)
+            if server_result:
+                plate_text = server_result.get('plate_text', '')
+                ocr_confidence = server_result.get('ocr_confidence', server_result.get('confidence', 0.0))
+                gate_action = server_result.get('gate_action', 'DENY')
+                message = server_result.get('message', '')
                 
                 self.logger.info(
                     f"Detected plate: {plate_text} "
                     f"(det_conf: {conf:.2f}, ocr_conf: {ocr_confidence:.2f})"
                 )
+                
+                # Execute gate action
+                self.gate_controller.execute_gate_action(gate_action, message)
                 
                 # Save if requested
                 if save_dir:
@@ -328,13 +434,15 @@ class PlateDetector:
                     'plate_text': plate_text,
                     'detection_confidence': conf,
                     'ocr_confidence': ocr_confidence,
+                    'gate_action': gate_action,
                     'detection_time': detect_time
                 })
         
         return results
+
     
     def run_camera(self, save_dir='detections'):
-        """Run continuous detection from camera"""
+        """Run continuous detection from camera with interactive mode switching"""
         self.logger.info("Starting camera capture...")
         
         cap = cv2.VideoCapture(self.camera_index)
@@ -344,6 +452,20 @@ class PlateDetector:
         if not cap.isOpened():
             self.logger.error("Failed to open camera")
             return
+        
+        # Interactive mode - can be changed with keyboard
+        current_gate_type = self.config.get('gate', {}).get('type', 'MASUK')
+        
+        print("\n" + "="*60)
+        print("🚗 LICENSE PLATE DETECTION - INTERACTIVE MODE")
+        print("="*60)
+        print("Keyboard Controls:")
+        print("  [M] - Switch to MASUK (Entry) mode")
+        print("  [K] - Switch to KELUAR (Exit) mode")
+        print("  [Q] - Quit")
+        print("="*60)
+        print(f"Current mode: {current_gate_type}")
+        print("="*60 + "\n")
         
         self.logger.info("Camera opened successfully. Press 'q' to quit.")
         
@@ -357,6 +479,25 @@ class PlateDetector:
                     continue
                 
                 frame_count += 1
+                
+                # Check for keyboard input (always check, not just when show_preview)
+                key = cv2.waitKey(1) & 0xFF
+                
+                if key == ord('q'):
+                    print("\n👋 Quitting...")
+                    break
+                elif key == ord('m') or key == ord('M'):
+                    current_gate_type = 'MASUK'
+                    self.config['gate']['type'] = 'MASUK'
+                    self.gate_controller.gate_type = 'MASUK'
+                    print(f"\n🔄 Mode changed to: MASUK (Entry)")
+                    self.logger.info("Switched to MASUK mode")
+                elif key == ord('k') or key == ord('K'):
+                    current_gate_type = 'KELUAR'
+                    self.config['gate']['type'] = 'KELUAR'
+                    self.gate_controller.gate_type = 'KELUAR'
+                    print(f"\n🔄 Mode changed to: KELUAR (Exit)")
+                    self.logger.info("Switched to KELUAR mode")
                 
                 # Process every N frames to reduce load
                 if frame_count % self.config['camera']['process_every_n_frames'] == 0:
@@ -374,15 +515,20 @@ class PlateDetector:
                 
                 # Display frame (optional, disable on headless Raspberry Pi)
                 if self.config['camera'].get('show_preview', False):
-                    cv2.imshow('License Plate Detection', frame)
+                    # Add mode indicator to frame
+                    mode_color = (0, 255, 0) if current_gate_type == 'MASUK' else (0, 165, 255)
+                    cv2.putText(frame, f"Mode: {current_gate_type}", (10, 30),
+                              cv2.FONT_HERSHEY_SIMPLEX, 1, mode_color, 2)
+                    cv2.putText(frame, "[M] MASUK  [K] KELUAR  [Q] Quit", (10, 60),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                     
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+                    cv2.imshow('License Plate Detection', frame)
         
         finally:
             cap.release()
             cv2.destroyAllWindows()
             self.logger.info("Camera capture stopped")
+
 
 
 def main():
@@ -398,36 +544,45 @@ def main():
     # Initialize detector
     detector = PlateDetector(args.config)
     
-    if args.test_image:
-        # Test mode
-        img = cv2.imread(args.test_image)
-        if img is None:
-            print(f"Failed to load image: {args.test_image}")
-            return
-        
-        print("Processing test image...")
-        results = detector.process_frame(img, args.save_dir)
-        
-        print(f"\nDetected {len(results)} plate(s):")
-        for i, result in enumerate(results):
-            print(f"  {i+1}. {result['plate_text']} "
-                  f"(conf: {result['detection_confidence']:.2f})")
-        
-        # Display result
-        for result in results:
-            bbox = result['bbox']
-            text = result['plate_text']
-            cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), 
-                        (0, 255, 0), 2)
-            cv2.putText(img, text, (bbox[0], bbox[1]-10),
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-        
-        cv2.imshow('Result', img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    else:
-        # Live camera mode
-        detector.run_camera(args.save_dir)
+    try:
+        if args.test_image:
+            # Test mode
+            img = cv2.imread(args.test_image)
+            if img is None:
+                print(f"Failed to load image: {args.test_image}")
+                return
+            
+            print("Processing test image...")
+            results = detector.process_frame(img, args.save_dir)
+            
+            print(f"\nDetected {len(results)} plate(s):")
+            for i, result in enumerate(results):
+                print(f"  {i+1}. {result['plate_text']} "
+                      f"(conf: {result['detection_confidence']:.2f}, gate: {result.get('gate_action', 'N/A')})")
+            
+            # Display result
+            for result in results:
+                bbox = result['bbox']
+                text = result['plate_text']
+                cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), 
+                            (0, 255, 0), 2)
+                cv2.putText(img, text, (bbox[0], bbox[1]-10),
+                          cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            
+            cv2.imshow('Result', img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        else:
+            # Live camera mode
+            detector.run_camera(args.save_dir)
+    
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user")
+    
+    finally:
+        # Cleanup GPIO
+        detector.gate_controller.cleanup()
+        print("Cleanup completed. Goodbye!")
 
 
 if __name__ == '__main__':

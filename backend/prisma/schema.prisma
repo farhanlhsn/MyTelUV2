@@ -27,6 +27,10 @@ enum StatusPengajuan {
   DISETUJUI
   DITOLAK
 }
+enum ParkingType {
+  MASUK
+  KELUAR
+}
 
 // =================== Models ===================
 model User {
@@ -115,11 +119,14 @@ model Parkiran {
 }
 
 model LogParkir {
-  id_log_parkir Int       @id @default(autoincrement())
+  id_log_parkir Int         @id @default(autoincrement())
   id_kendaraan  Int
   id_parkiran   Int
   id_user       Int?
-  timestamp     DateTime  @default(now())
+  type          ParkingType // MASUK atau KELUAR
+  confidence    Float?      // OCR confidence score
+  image_url     String?     // Captured plate image URL
+  timestamp     DateTime    @default(now())
 
   kendaraan Kendaraan @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)
   parkiran  Parkiran  @relation(fields: [id_parkiran], references: [id_parkiran], onDelete: Restrict)
@@ -129,6 +136,7 @@ model LogParkir {
   @@index([id_parkiran, timestamp], map: "idx_log_parkiran_ts")
   @@index([id_user, timestamp], map: "idx_log_user_ts")
   @@index([timestamp], map: "idx_log_ts")
+  @@index([type], map: "idx_log_type")
   @@map("log_parkir")
 }
 
