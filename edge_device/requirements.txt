@@ -1,0 +1,19 @@
+# Requirements for Raspberry Pi 2 Edge Device
+# Minimal dependencies for resource-constrained environment
+
+# Core dependencies
+numpy>=1.19.0,<1.24.0  # Specify version compatible with Raspberry Pi
+opencv-python-headless==4.5.5.64  # Headless version (no GUI dependencies)
+PyYAML>=5.4.1
+requests>=2.25.1
+pillow>=8.0.0
+
+# ONNX Runtime for ARM
+# For Raspberry Pi 2 (ARMv7), you may need to build from source or use:
+# onnxruntime==1.10.0  # Check compatibility with your Pi
+
+# Alternative: Use OpenCV DNN backend (no onnxruntime needed)
+# The code has fallback to OpenCV DNN if onnxruntime is not available
+
+# Camera support (if using Pi Camera module)
+# picamera>=1.13  # Uncomment if using Pi Camera

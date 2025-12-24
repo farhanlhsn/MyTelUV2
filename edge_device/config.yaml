@@ -1,0 +1,31 @@
+# Edge Device Configuration for Raspberry Pi 2
+# License Plate Detection System
+
+# Model Configuration
+model:
+  path: "models/license_plate_detection.onnx"  # Path to detection model
+  img_size: 640  # Input image size
+  confidence_threshold: 0.5  # Minimum confidence for detection
+
+# Server Configuration
+server:
+  url: "http://127.0.0.1:5001"  # Replace with your server URL
+  timeout: 10  # Request timeout in seconds
+
+# Camera Configuration
+camera:
+  index: 1  # Camera device index (0 for default camera)
+  width: 1280  # Camera capture width (increased for better quality)
+  height: 720  # Camera capture height (increased for better quality)
+  process_every_n_frames: 10  # Process every Nth frame (higher quality, less frequent)
+  show_preview: false  # Set to true for debugging (disable on headless Raspberry Pi)
+
+# Debug Configuration
+debug:
+  save_images: true  # Save original and preprocessed plate images for analysis
+  
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_detections: true  # Save detected plate images
+  detections_dir: "detections"  # Directory for saved images

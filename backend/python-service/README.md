@@ -1,163 +1,221 @@
-# Face Recognition Python Service
+# Python Services
 
-Python Flask API service untuk face detection dan recognition menggunakan InsightFace.
+Layanan Python untuk MyTelUV2 yang terdiri dari dua service terpisah:
+1. **Face Recognition** - Deteksi dan pengenalan wajah menggunakan InsightFace
+2. **License Plate Recognition** - Pengenalan plat nomor kendaraan menggunakan YOLOv8
 
-## 🚀 Quick Start
+## Struktur Folder
 
-### 1. Setup Virtual Environment
-```bash
-cd backend/python-service
-python3 -m venv venv
-source venv/bin/activate  # Mac/Linux
-# atau
-venv\Scripts\activate  # Windows
+```
+python-service/
+├── face_recognition/          # Service face recognition
+│   ├── __init__.py
+│   ├── app.py                # Flask server (port 5051)
+│   ├── face_processor.py     # Logika face detection & embedding
+│   ├── requirements.txt      # Dependencies untuk face recognition
+│   └── models/               # Face recognition models (if any)
+│
+├── plate_recognition/         # Service license plate recognition
+│   ├── __init__.py
+│   ├── app.py                # Flask server (port 5001)
+│   ├── requirements.txt      # Dependencies untuk plate recognition
+│   └── models/               # Plate recognition models
+│       ├── license_plate_recognition.pt
+│       ├── license_plate_recognition.onnx
+│       └── classes.names
+│
+├── shared/                    # Utilities bersama (bila ada)
+│   └── __init__.py
+│
+├── README.md                  # Dokumentasi ini
+└── setup.sh                   # Script setup otomatis
 ```
 
-### 2. Install Dependencies
+## Service 1: Face Recognition
+
+### Port: 5051
+
+### Endpoints:
+- `GET /health` - Health check
+- `POST /detect-face` - Deteksi single face dan ekstrak embedding
+- `POST /detect-multiple` - Deteksi multiple faces (untuk CCTV)
+- `POST /compare` - Bandingkan dua embeddings
+- `POST /find-match` - Cari match terbaik dari list embeddings
+
+### Cara Menjalankan:
+
 ```bash
+cd face_recognition
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-**Note**: First installation akan download InsightFace models (~300MB). Ini normal dan hanya terjadi sekali.
-
-### 3. Run Service
-```bash
+# Jalankan server
 python app.py
 ```
 
-Service akan berjalan di `http://localhost:5051`
+Server akan berjalan di `http://localhost:5051`
 
----
+### Contoh Penggunaan:
 
-## 📡 API Endpoints
-
-### Health Check
-```http
-GET /health
-```
-
-### Detect Single Face
-```http
-POST /detect-face
-Content-Type: multipart/form-data
-
-Body:
-- image: file (jpg/png)
-
-Response:
-{
-  "success": true,
-  "embedding": [512D float array],
-  "bbox": [x1, y1, x2, y2],
-  "face_score": 0.99
-}
-```
-
-### Detect Multiple Faces (CCTV)
-```http
-POST /detect-multiple
-Content-Type: multipart/form-data
-
-Body:
-- image: file (jpg/png)
-
-Response:
-{
-  "success": true,
-  "faces": [
-    {
-      "embedding": [512D float array],
-      "bbox": [x1, y1, x2, y2],
-      "face_score": 0.99
-    }
-  ],
-  "count": 5
-}
-```
-
-### Compare Embeddings
-```http
-POST /compare
-Content-Type: application/json
-
-Body:
-{
-  "embedding1": [512D array],
-  "embedding2": [512D array]
-}
-
-Response:
-{
-  "similarity": 0.87,
-  "is_same_person": true,
-  "threshold": 0.6
-}
-```
-
-### Find Best Match
-```http
-POST /find-match
-Content-Type: application/json
-
-Body:
-{
-  "target_embedding": [512D array],
-  "embeddings_list": [[512D array], ...]
-}
-
-Response:
-{
-  "best_match_index": 2,
-  "similarity": 0.85,
-  "is_match": true,
-  "threshold": 0.6
-}
-```
-
----
-
-## 🔧 Technical Details
-
-### Model
-- **InsightFace buffalo_l**: Accurate & fast model
-- **Face Detection**: RetinaFace/SCRFD
-- **Face Recognition**: ArcFace (512D embeddings)
-
-### Similarity Threshold
-- **> 0.6**: Same person (match)
-- **0.4 - 0.6**: Uncertain
-- **< 0.4**: Different person
-
-### Performance
-- Single face detection: ~100-200ms
-- Multiple faces (10 faces): ~500-800ms
-- CPU mode (dapat upgrade ke GPU untuk faster processing)
-
----
-
-## 🐛 Troubleshooting
-
-### Error: `No module named 'insightface'`
 ```bash
+# Detect single face
+curl -X POST http://localhost:5051/detect-face \
+  -F "image=@path/to/face.jpg"
+
+# Compare embeddings
+curl -X POST http://localhost:5051/compare \
+  -H "Content-Type: application/json" \
+  -d '{"embedding1": [...], "embedding2": [...]}'
+```
+
+## Service 2: License Plate Recognition
+
+### Port: 5001
+
+### Model Requirements:
+This service requires trained YOLO models in `plate_recognition/models/`:
+- `license_plate_recognition.pt` - YOLOv8 PyTorch model
+- `license_plate_recognition.onnx` - ONNX format (optional)
+- `classes.names` - Character class names (0-9, A-Z)
+
+**To get the models:**
+1. Train using `license-plate-recognition-training.ipynb` in project root
+2. Copy trained models:
+   ```bash
+   cp /path/to/models/recognition/* backend/python-service/plate_recognition/models/
+   ```
+
+### Endpoints:
+- `GET /health` - Health check
+- `POST /api/recognize-plate` - Recognize characters dari gambar plat
+- `POST /api/parking/entry` - Log parking entry dengan plate recognition
+
+### Cara Menjalankan:
+
+```bash
+cd plate_recognition
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Jalankan server
+python app.py
 ```
 
-### Error: Model download failed
-Coba install ulang dengan koneksi internet yang stabil:
+Server akan berjalan di `http://localhost:5001`
+
+### Model Requirements:
+Service ini membutuhkan model YOLOv8 di lokasi:
+- `../models/recognition/license_plate_recognition.pt`
+- `../models/recognition/classes.names`
+
+### Contoh Penggunaan:
+
 ```bash
-pip uninstall insightface
-pip install insightface==0.7.3
+# Recognize plate
+curl -X POST http://localhost:5001/api/recognize-plate \
+  -F "image=@path/to/plate.jpg"
+
+# Parking entry
+curl -X POST http://localhost:5001/api/parking/entry \
+  -F "image=@path/to/plate.jpg"
 ```
 
-### Error: `ONNX Runtime error`
+## Setup Otomatis
+
+Gunakan script `setup.sh` untuk setup kedua service sekaligus:
+
 ```bash
-pip install onnxruntime==1.17.0
+bash setup.sh
 ```
 
----
+Script akan:
+1. Membuat virtual environment untuk masing-masing service
+2. Install dependencies yang diperlukan
+3. Memberikan instruksi cara menjalankan service
 
-## 📝 Notes
+## Development
 
-- Service ini **harus running** bersamaan dengan Node.js backend
-- Default port: 5051 (dapat diubah di `app.py`)
-- CORS sudah enabled untuk komunikasi dengan Node.js
+### Menjalankan Kedua Service Secara Bersamaan
+
+Untuk development, Anda bisa menjalankan kedua service di terminal terpisah:
+
+**Terminal 1 (Face Recognition):**
+```bash
+cd face_recognition
+source venv/bin/activate  # jika pakai venv
+python app.py
+```
+
+**Terminal 2 (Plate Recognition):**
+```bash
+cd plate_recognition
+source venv/bin/activate  # jika pakai venv
+python app.py
+```
+
+### Running dengan Docker (Optional)
+
+Setiap service bisa dijalankan dengan Docker container terpisah untuk isolasi yang lebih baik.
+
+## Integration dengan Backend
+
+Backend Node.js memanggil service-service ini via HTTP:
+
+### Face Recognition Integration:
+```javascript
+const faceApiUrl = 'http://localhost:5051';
+
+// Detect face
+const formData = new FormData();
+formData.append('image', imageFile);
+const response = await axios.post(`${faceApiUrl}/detect-face`, formData);
+```
+
+### Plate Recognition Integration:
+```javascript
+const plateApiUrl = 'http://localhost:5001';
+
+// Recognize plate
+const formData = new FormData();
+formData.append('image', plateImage);
+const response = await axios.post(`${plateApiUrl}/api/recognize-plate`, formData);
+```
+
+## Troubleshooting
+
+### InsightFace Model Download
+Pada run pertama, InsightFace akan download model `buffalo_l` (~300MB). Pastikan koneksi internet stabil.
+
+### YOLOv8 Model Not Found
+Pastikan model `license_plate_recognition.pt` ada di folder `models/recognition/`.
+
+### Port Already in Use
+Jika port sudah digunakan, ubah port di `app.py`:
+```python
+app.run(host='0.0.0.0', port=XXXX, debug=True)
+```
+
+## Dependencies
+
+### Face Recognition
+- Flask & Flask-CORS
+- InsightFace (deep learning face recognition)
+- ONNX Runtime
+- OpenCV
+- NumPy
+- Pillow
+
+### Plate Recognition
+- Flask & Flask-CORS
+- Ultralytics (YOLOv8)
+- ONNX Runtime (alternative)
+- OpenCV
+- NumPy
+- Pillow
+- PyYAML
+
+## License
+
+Part of MyTelUV2 Project
