@@ -138,6 +138,13 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
             role: true,
             createdAt: true,
             updatedAt: true,
+            dataBiometrik: {
+                select: {
+                    id_biometrik: true,
+                    photo_url: true,
+                    deletedAt: true
+                }
+            }
             // Exclude password
         },
         orderBy: {
@@ -147,6 +154,14 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
         take: limitNum
     });
 
+    // Transform to include biometric status
+    const usersWithBioStatus = users.map(user => ({
+        ...user,
+        has_biometric: user.dataBiometrik && !user.dataBiometrik.deletedAt,
+        biometric_photo: user.dataBiometrik?.photo_url || null,
+        dataBiometrik: undefined // Remove nested object
+    }));
+
     // Calculate pagination metadata
     const totalPages = Math.ceil(totalUsers / limitNum);
 
@@ -154,7 +169,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
         status: "success",
         message: 'Users retrieved successfully',
         data: {
-            users,
+            users: usersWithBioStatus,
             pagination: {
                 currentPage: pageNum,
                 totalPages,
@@ -238,5 +253,48 @@ exports.changePassword = asyncHandler(async (req, res) => {
     res.status(200).json({
         status: "success",
         message: 'Password changed successfully'
+    });
+});
+
+// Admin reset password for any user
+exports.adminResetPassword = asyncHandler(async (req, res) => {
+    const { id_user, new_password } = req.body;
+
+    if (!id_user || !new_password) {
+        return res.status(400).json({
+            status: "error",
+            message: 'id_user and new_password are required'
+        });
+    }
+
+    if (new_password.length < 6) {
+        return res.status(400).json({
+            status: "error",
+            message: 'Password must be at least 6 characters'
+        });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+        where: { id_user: parseInt(id_user) }
+    });
+
+    if (!user || user.deletedAt) {
+        return res.status(404).json({
+            status: "error",
+            message: 'User not found'
+        });
+    }
+
+    // Hash and save new password
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    await prisma.user.update({
+        where: { id_user: parseInt(id_user) },
+        data: { password: hashedPassword }
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: `Password for ${user.nama} has been reset successfully`
     });
 });

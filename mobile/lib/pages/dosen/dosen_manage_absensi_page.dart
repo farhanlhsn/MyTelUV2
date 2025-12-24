@@ -1,0 +1,507 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../services/dosen_service.dart';
+import 'dosen_sesi_detail_page.dart';
+
+class DosenManageAbsensiPage extends StatefulWidget {
+  const DosenManageAbsensiPage({super.key});
+
+  @override
+  State<DosenManageAbsensiPage> createState() => _DosenManageAbsensiPageState();
+}
+
+class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
+  final DosenService _dosenService = DosenService();
+
+  List<Map<String, dynamic>> _kelasList = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  // Track expanded state for each kelas
+  Map<int, bool> _expandedKelas = {};
+  Map<int, List<Map<String, dynamic>>> _sesiMap = {};
+  Map<int, bool> _loadingSesi = {};
+
+  final Color primaryRed = const Color(0xFFE63946);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKelas();
+  }
+
+  Future<void> _loadKelas() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final kelas = await _dosenService.getKelasDiampu();
+      setState(() {
+        _kelasList = kelas;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadSesiForKelas(int idKelas) async {
+    setState(() => _loadingSesi[idKelas] = true);
+
+    try {
+      final sesiList = await _dosenService.getSesiAbsensi(idKelas);
+      setState(() {
+        _sesiMap[idKelas] = sesiList;
+        _loadingSesi[idKelas] = false;
+      });
+    } catch (e) {
+      setState(() {
+        _loadingSesi[idKelas] = false;
+      });
+      Get.snackbar(
+        'Error',
+        'Gagal memuat sesi: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _toggleExpand(int idKelas) {
+    final isExpanded = _expandedKelas[idKelas] ?? false;
+    setState(() {
+      _expandedKelas[idKelas] = !isExpanded;
+    });
+
+    // Load sesi if expanding and not loaded yet
+    if (!isExpanded && !_sesiMap.containsKey(idKelas)) {
+      _loadSesiForKelas(idKelas);
+    }
+  }
+
+  void _showOpenAbsensiDialog(Map<String, dynamic> kelas) {
+    final idKelas = kelas['id_kelas'] as int;
+    final namaKelas = kelas['nama_kelas'] ?? 'Kelas';
+    final matakuliah = kelas['matakuliah'] as Map<String, dynamic>?;
+    final namaMk = matakuliah?['nama_matakuliah'] ?? '';
+
+    String typeAbsensi = 'LOKAL_ABSENSI';
+    int durasiMenit = 30;
+    int radiusMeter = 100;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Buka Absensi\n$namaMk ($namaKelas)', style: const TextStyle(fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: typeAbsensi,
+                  decoration: const InputDecoration(labelText: 'Tipe Absensi'),
+                  items: const [
+                    DropdownMenuItem(value: 'LOKAL_ABSENSI', child: Text('Lokal (Face Recognition)')),
+                    DropdownMenuItem(value: 'REMOTE_ABSENSI', child: Text('Remote (GPS)')),
+                  ],
+                  onChanged: (v) => setDialogState(() => typeAbsensi = v!),
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  initialValue: durasiMenit.toString(),
+                  decoration: const InputDecoration(labelText: 'Durasi (menit)'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => durasiMenit = int.tryParse(v) ?? 30,
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  initialValue: radiusMeter.toString(),
+                  decoration: const InputDecoration(labelText: 'Radius (meter)'),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) => radiusMeter = int.tryParse(v) ?? 100,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => _openAbsensi(idKelas, typeAbsensi, durasiMenit, radiusMeter),
+              style: ElevatedButton.styleFrom(backgroundColor: primaryRed),
+              child: const Text('Buka Absensi', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAbsensi(int idKelas, String typeAbsensi, int durasiMenit, int radiusMeter) async {
+    Navigator.pop(context);
+
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition();
+    } catch (_) {}
+
+    final now = DateTime.now();
+    final selesai = now.add(Duration(minutes: durasiMenit));
+
+    try {
+      final result = await _dosenService.openAbsensi(
+        idKelas: idKelas,
+        typeAbsensi: typeAbsensi,
+        mulai: now,
+        selesai: selesai,
+        latitude: position?.latitude ?? -6.970063,
+        longitude: position?.longitude ?? 107.627469,
+        radiusMeter: radiusMeter,
+      );
+
+      if (result['status'] == 'success') {
+        Get.snackbar(
+          'Berhasil',
+          'Sesi absensi dibuka sampai ${selesai.hour}:${selesai.minute.toString().padLeft(2, '0')}',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+        // Refresh sesi list
+        _loadSesiForKelas(idKelas);
+      } else {
+        Get.snackbar(
+          'Gagal',
+          result['message'] ?? 'Gagal membuka sesi',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        e.toString(),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: primaryRed,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Get.back(),
+                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    "Kelola Absensi",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _errorMessage != null
+                        ? Center(child: Text(_errorMessage!))
+                        : _kelasList.isEmpty
+                            ? _buildEmptyState()
+                            : _buildKelasList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.class_outlined, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text('Tidak ada kelas', style: TextStyle(color: Colors.grey.shade600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKelasList() {
+    return RefreshIndicator(
+      onRefresh: _loadKelas,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(20),
+        itemCount: _kelasList.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final kelas = _kelasList[index];
+          return _buildKelasCard(kelas);
+        },
+      ),
+    );
+  }
+
+  Widget _buildKelasCard(Map<String, dynamic> kelas) {
+    final idKelas = kelas['id_kelas'] as int;
+    final namaKelas = kelas['nama_kelas'] ?? 'Kelas';
+    final ruangan = kelas['ruangan'] ?? '-';
+    final matakuliah = kelas['matakuliah'] as Map<String, dynamic>?;
+    final namaMk = matakuliah?['nama_matakuliah'] ?? '';
+    final kodeMk = matakuliah?['kode_matakuliah'] ?? '';
+
+    final isExpanded = _expandedKelas[idKelas] ?? false;
+    final sesiList = _sesiMap[idKelas] ?? [];
+    final isLoadingSesi = _loadingSesi[idKelas] ?? false;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryRed.withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Kelas Header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$namaMk ($kodeMk)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$namaKelas • $ruangan',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showOpenAbsensiDialog(kelas),
+                        icon: const Icon(Icons.play_arrow, size: 18, color: Colors.white),
+                        label: const Text(
+                          'Buka Sesi',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryRed,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _toggleExpand(idKelas),
+                        icon: Icon(
+                          isExpanded ? Icons.expand_less : Icons.history,
+                          size: 18,
+                          color: primaryRed,
+                        ),
+                        label: Text(
+                          isExpanded ? 'Tutup' : 'History',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryRed),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: primaryRed),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Sesi List (Expandable)
+          if (isExpanded)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: isLoadingSesi
+                  ? const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : sesiList.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Center(
+                            child: Text(
+                              'Belum ada sesi absensi',
+                              style: TextStyle(color: Colors.grey.shade500),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(12),
+                          itemCount: sesiList.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final sesi = sesiList[index];
+                            return _buildSesiItem(sesi, '$namaMk ($namaKelas)');
+                          },
+                        ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSesiItem(Map<String, dynamic> sesi, String kelasName) {
+    final idSesi = sesi['id_sesi_absensi'] as int;
+    final bool isOpen = sesi['status'] == true;
+    final jumlahHadir = sesi['jumlah_hadir'] ?? sesi['_count']?['absensi'] ?? 0;
+    final totalPeserta = sesi['total_peserta'] ?? 0;
+
+    DateTime? mulai;
+    try {
+      mulai = DateTime.parse(sesi['mulai'].toString()).toLocal();
+    } catch (_) {}
+
+    return GestureDetector(
+      onTap: () {
+        Get.to(() => DosenSesiDetailPage(idSesi: idSesi, kelasName: kelasName));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isOpen ? Colors.green.shade200 : Colors.grey.shade200,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: isOpen ? Colors.green : Colors.grey,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    mulai != null
+                        ? '${mulai.day}/${mulai.month}/${mulai.year} ${mulai.hour.toString().padLeft(2, '0')}:${mulai.minute.toString().padLeft(2, '0')}'
+                        : '-',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isOpen ? 'Sedang Berlangsung' : 'Selesai',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isOpen ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$jumlahHadir/$totalPeserta',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -4,6 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:mobile/pages/home/maps_page.dart';
 import 'package:mobile/pages/home/post_page.dart';
 import 'package:mobile/pages/home/settings_page.dart';
+import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
+import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
+import 'package:mobile/pages/absensi/absensi_page.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
@@ -449,6 +452,12 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildCardCarousel() {
     return Obx(() {
+      // Hide card carousel for ADMIN role
+      final userRole = _homeController.currentUser.value?.role;
+      if (userRole == 'ADMIN') {
+        return const SizedBox.shrink();
+      }
+
       if (_homeController.isLoadingKelas.value) {
         return const SizedBox(
           height: 220,
@@ -678,26 +687,53 @@ class _HomePageState extends State<HomePage> {
             20.0,
             100.0,
           ), // Padding atas 20, bawah 100
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.0,
-            ),
-            itemCount: gridMenuItems.length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              final item = gridMenuItems[index];
-              return _buildGridItem(
-                item['icon'],
-                item['label'],
-                item['color'],
-                item['route'],
-              );
-            },
-          ),
+          child: Obx(() {
+            // Filter menu items based on role (hide Biometric for DOSEN)
+            final userRole = _homeController.currentUser.value?.role;
+            final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems.where((item) {
+              if (item['label'] == 'Biometric' && userRole == 'DOSEN') {
+                return false;
+              }
+              return true;
+            }).toList();
+
+            // Add Academic menu for ADMIN
+            if (userRole == 'ADMIN') {
+              filteredMenuItems.add({
+                'icon': Icons.school,
+                'label': 'Academic',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.adminAkademik,
+              });
+              filteredMenuItems.add({
+                'icon': Icons.manage_accounts,
+                'label': 'Users',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.adminUserManagement,
+              });
+            }
+
+            return GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: filteredMenuItems.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemBuilder: (context, index) {
+                final item = filteredMenuItems[index];
+                return _buildGridItem(
+                  item['icon'],
+                  item['label'],
+                  item['color'],
+                  item['route'],
+                );
+              },
+            );
+          }),
         ),
       ),
     );
@@ -712,7 +748,24 @@ class _HomePageState extends State<HomePage> {
     return InkWell(
       onTap: () {
         if (label == 'Biometric'){
-          _showBiometricDialog();
+          // Role-based navigation for Biometric
+          final userRole = _homeController.currentUser.value?.role;
+          if (userRole == 'ADMIN') {
+            Get.toNamed(AppRoutes.adminBiometrik);
+          } else {
+            Get.to(() => const BiometrikAbsenPage());
+          }
+        }
+        else if (label == 'Absence'){
+          // Role-based navigation for Absence
+          final userRole = _homeController.currentUser.value?.role;
+          if (userRole == 'ADMIN') {
+            Get.toNamed(AppRoutes.adminAbsensiMonitoring);
+          } else if (userRole == 'DOSEN') {
+            Get.to(() => const DosenManageAbsensiPage());
+          } else {
+            Get.to(() => const AbsensiPage());
+          }
         }
         else if (label == 'Parking'){
           _showParkingOptions();
@@ -860,6 +913,9 @@ class _HomePageState extends State<HomePage> {
 
   // Show options for License Plate menu
   void _showLicensePlateOptions() {
+    final userRole = _homeController.currentUser.value?.role;
+    final isAdmin = userRole == 'ADMIN';
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -876,6 +932,21 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
+
+              // Admin only: Persetujuan Kendaraan
+              if (isAdmin) ...[
+                ListTile(
+                  leading: const Icon(Icons.verified_user, color: Color(0xFFE63946)),
+                  title: const Text('Persetujuan Kendaraan'),
+                  subtitle: const Text('Setujui atau tolak pengajuan'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Get.toNamed(AppRoutes.adminPengajuanList);
+                  },
+                ),
+                const Divider(),
+              ],
+
               ListTile(
                 leading: const Icon(Icons.add_circle, color: Color(0xFFE63946)),
                 title: const Text('Daftar Kendaraan Baru'),

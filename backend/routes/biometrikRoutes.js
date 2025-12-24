@@ -6,7 +6,8 @@ const {
     deleteBiometrik,
     editBiometrik,
     verifyWajah,
-    scanWajah
+    scanWajah,
+    biometrikAbsen
 } = require('../controllers/biometrikController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { validateRequired } = require('../middlewares/validationMiddleware');
@@ -78,6 +79,15 @@ router.post('/scan',
     protect,
     upload.single('image'),
     scanWajah
+);
+
+// Biometric attendance - MAHASISWA absen pakai wajah
+router.post('/absen',
+    protect,
+    authorize('MAHASISWA'),
+    upload.single('image'),
+    validateRequired(['latitude', 'longitude']),
+    biometrikAbsen
 );
 
 module.exports = router;

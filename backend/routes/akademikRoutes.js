@@ -1,12 +1,12 @@
 const express = require('express');
-const { 
+const {
     // Matakuliah
-    createMatakuliah, 
+    createMatakuliah,
     getAllMatakuliah,
     getMatakuliahById,
     updateMatakuliah,
     deleteMatakuliah,
-    
+
     // Kelas
     createKelas,
     getAllKelas,
@@ -14,19 +14,26 @@ const {
     getKelasById,
     updateKelas,
     deleteKelas,
-    
+
     // Peserta Kelas
     daftarKelas,
     dropKelas,
     getKelasKu,
     getPesertaKelas,
-    
+    adminAddPeserta,
+
     // Absensi
     openAbsensi,
     createAbsensi,
     getAbsensiKu,
     getAbsensiKelas,
-    getAbsensiStats
+    getAbsensiStats,
+
+    // Sesi Absensi
+    getSesiAbsensiByKelas,
+    getSesiAbsensiDetail,
+    closeSesiAbsensi,
+    getAbsensiKuWithHistory
 } = require('../controllers/akademikController');
 
 const { validateRequired } = require('../middlewares/validationMiddleware');
@@ -129,6 +136,13 @@ router.get('/kelas/:id/peserta',
     getPesertaKelas
 );
 
+router.post('/kelas/peserta/add',
+    protect,
+    authorize('ADMIN'),
+    validateRequired(['id_kelas', 'id_mahasiswa']),
+    adminAddPeserta
+);
+
 //TODO: Route untuk GET kelas hari ini
 
 // ==================== ABSENSI ROUTES ====================
@@ -163,6 +177,32 @@ router.get('/absensi/kelas/:id/stats',
     getAbsensiStats
 );
 
+// ==================== SESI ABSENSI ROUTES ====================
+// Get all sesi absensi for a kelas
+router.get('/kelas/:id/sesi',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    getSesiAbsensiByKelas
+);
+
+// Get attendance detail for a specific sesi
+router.get('/absensi/sesi/:id',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    getSesiAbsensiDetail
+);
+
+// Close a sesi absensi
+router.put('/absensi/sesi/:id/close',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    closeSesiAbsensi
+);
+
+// Get mahasiswa attendance history with all sessions
+router.get('/absensi/ku/history',
+    protect,
+    getAbsensiKuWithHistory
+);
+
 module.exports = router;
-
-
