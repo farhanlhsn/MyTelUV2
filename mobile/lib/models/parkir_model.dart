@@ -3,6 +3,9 @@ class LogParkirModel {
   final int idKendaraan;
   final int idParkiran;
   final int? idUser;
+  final String? type; // MASUK or KELUAR
+  final double? confidence;
+  final String? imageUrl;
   final DateTime timestamp;
   final KendaraanInfo? kendaraan;
   final ParkiranInfo? parkiran;
@@ -12,10 +15,22 @@ class LogParkirModel {
     required this.idKendaraan,
     required this.idParkiran,
     this.idUser,
+    this.type,
+    this.confidence,
+    this.imageUrl,
     required this.timestamp,
     this.kendaraan,
     this.parkiran,
   });
+
+  /// Get timestamp in local timezone
+  DateTime get localTimestamp => timestamp.toLocal();
+
+  /// Check if this is an entry log
+  bool get isMasuk => type == 'MASUK';
+
+  /// Check if this is an exit log  
+  bool get isKeluar => type == 'KELUAR';
 
   factory LogParkirModel.fromJson(Map<String, dynamic> json) {
     return LogParkirModel(
@@ -23,6 +38,11 @@ class LogParkirModel {
       idKendaraan: json['id_kendaraan'] as int,
       idParkiran: json['id_parkiran'] as int,
       idUser: json['id_user'] as int?,
+      type: json['type'] as String?,
+      confidence: json['confidence'] != null 
+          ? (json['confidence'] as num).toDouble() 
+          : null,
+      imageUrl: json['image_url'] as String?,
       timestamp: DateTime.parse(json['timestamp'] as String),
       kendaraan: json['kendaraan'] != null
           ? KendaraanInfo.fromJson(json['kendaraan'] as Map<String, dynamic>)
@@ -33,6 +53,7 @@ class LogParkirModel {
     );
   }
 }
+
 
 class KendaraanInfo {
   final int idKendaraan;

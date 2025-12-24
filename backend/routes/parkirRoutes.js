@@ -1,7 +1,12 @@
 const express = require('express');
-const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran } = require('../controllers/parkirController');
+const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry } = require('../controllers/parkirController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const router = express.Router();
+
+// Edge device parking entry/exit (internal API - uses X-Edge-Secret header)
+router.post('/edge-entry',
+    processEdgeEntry
+);
 
 // Get histori parkir user
 router.get('/histori',

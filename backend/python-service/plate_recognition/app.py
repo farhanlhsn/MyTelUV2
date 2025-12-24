@@ -17,6 +17,9 @@ import logging
 from flask import Flask, request, jsonify
 from PIL import Image
 import io
+import os
+import requests as http_requests
+from dotenv import load_dotenv
 
 try:
     from ultralytics import YOLO
@@ -26,6 +29,15 @@ except ImportError:
     import onnxruntime as ort
     USE_ULTRALYTICS = False
 
+# Load environment variables from root project .env
+# Path: backend/python-service/plate_recognition -> root
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent  # Go up 4 levels to project root
+ENV_PATH = ROOT_DIR / '.env'
+load_dotenv(dotenv_path=ENV_PATH)
+
+# Environment Configuration
+NODEJS_BACKEND_URL = os.getenv('NODEJS_BACKEND_URL', 'http://localhost:3000')
+EDGE_DEVICE_SECRET = os.getenv('EDGE_DEVICE_SECRET', 'your-secret-key')
 
 class PlateRecognizer:
     def __init__(self, model_path, classes_path):
@@ -229,60 +241,95 @@ def recognize_plate():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/parking/entry', methods=['POST'])
-def parking_entry():
+@app.route('/api/parking/process', methods=['POST'])
+def process_parking():
     """
-    Log parking entry with plate recognition.
+    Process parking entry/exit from edge device.
     
-    Expects: multipart/form-data with 'image' file
-    Returns: JSON with plate_text and entry record
+    Expects: multipart/form-data with 'image' file and form fields:
+    - parkiran_id: int
+    - gate_type: 'MASUK' or 'KELUAR'
+    
+    Returns: JSON with gate_action and message
     """
     init_recognizer()
     
     try:
-        # Recognize plate
+        # 1. Validate request
         if 'image' not in request.files:
-            return jsonify({'error': 'No image provided'}), 400
+            return jsonify({'gate_action': 'DENY', 'error': 'No image provided'}), 400
         
+        parkiran_id = request.form.get('parkiran_id')
+        gate_type = request.form.get('gate_type', 'MASUK')
+        
+        if not parkiran_id:
+            return jsonify({'gate_action': 'DENY', 'error': 'parkiran_id required'}), 400
+        
+        # 2. Recognize plate
         file = request.files['image']
         img_bytes = file.read()
         img_array = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         
         if img is None:
-            return jsonify({'error': 'Invalid image'}), 400
+            return jsonify({'gate_action': 'DENY', 'error': 'Invalid image'}), 400
         
-        # Recognize plate
         result = recognizer.recognize(img)
         
-        if not result['success']:
-            return jsonify({'error': 'Recognition failed'}), 500
+        if not result['success'] or not result['plate_text']:
+            return jsonify({
+                'gate_action': 'DENY',
+                'error': 'Tidak dapat membaca plat nomor',
+                'ocr_result': result
+            }), 400
         
         plate_text = result['plate_text']
         confidence = result['confidence']
         
-        # TODO: Save to database
-        # Example: Use Prisma or your database to save parking entry
-        # parking_entry = {
-        #     'plate_number': plate_text,
-        #     'entry_time': datetime.now(),
-        #     'confidence': confidence,
-        #     'image_path': 'path/to/saved/image'
-        # }
+        app.logger.info(f"Recognized: {plate_text} (conf: {confidence:.2f})")
         
-        app.logger.info(f"Parking entry: {plate_text} (conf: {confidence:.2f})")
-        
-        return jsonify({
-            'success': True,
-            'plate_text': plate_text,
-            'confidence': confidence,
-            'entry_time': 'timestamp',  # Replace with actual timestamp
-            'message': 'Parking entry logged successfully'
-        }), 200
+        # 3. Forward to Node.js backend for validation
+        try:
+            response = http_requests.post(
+                f"{NODEJS_BACKEND_URL}/api/parkir/edge-entry",
+                json={
+                    'plate_text': plate_text,
+                    'confidence': confidence,
+                    'parkiran_id': int(parkiran_id),
+                    'gate_type': gate_type
+                },
+                headers={'X-Edge-Secret': EDGE_DEVICE_SECRET},
+                timeout=10
+            )
+            
+            backend_result = response.json()
+            
+            # Add OCR info to response
+            backend_result['plate_text'] = plate_text
+            backend_result['ocr_confidence'] = confidence
+            
+            app.logger.info(f"Backend response: {backend_result.get('gate_action')} - {backend_result.get('message')}")
+            
+            return jsonify(backend_result), response.status_code
+            
+        except http_requests.exceptions.RequestException as e:
+            app.logger.error(f"Backend connection error: {e}")
+            return jsonify({
+                'gate_action': 'DENY',
+                'error': f'Backend tidak dapat dihubungi: {str(e)}',
+                'plate_text': plate_text
+            }), 503
     
     except Exception as e:
-        app.logger.error(f"Error logging parking entry: {e}")
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error processing parking: {e}")
+        return jsonify({'gate_action': 'DENY', 'error': str(e)}), 500
+
+
+# Keep old endpoint for backward compatibility
+@app.route('/api/parking/entry', methods=['POST'])
+def parking_entry():
+    """Legacy endpoint - redirects to process_parking"""
+    return process_parking()
 
 
 if __name__ == '__main__':

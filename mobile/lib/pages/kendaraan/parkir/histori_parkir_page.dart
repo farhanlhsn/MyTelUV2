@@ -154,7 +154,8 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             platNomor: log.kendaraan?.platNomor ?? 'Unknown',
             namaKendaraan: log.kendaraan?.namaKendaraan ?? '',
             lokasi: log.parkiran?.namaParkiran ?? 'Unknown',
-            waktu: _formatDateTime(log.timestamp),
+            waktu: _formatDateTime(log.localTimestamp), // Use localTimestamp
+            type: log.type,
             primaryColor: primaryColor,
           );
         },
@@ -169,13 +170,21 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
            '${dateTime.hour.toString().padLeft(2, '0')}.${dateTime.minute.toString().padLeft(2, '0')} WIB';
   }
 
+
   Widget _buildHistoryCard({
     required String platNomor,
     required String namaKendaraan,
     required String lokasi,
     required String waktu,
+    String? type,
     required Color primaryColor,
   }) {
+    // Colors for entry/exit badges
+    final isMasuk = type == 'MASUK';
+    final typeColor = isMasuk ? Colors.green : Colors.orange;
+    final typeIcon = isMasuk ? Icons.login : Icons.logout;
+    final typeText = isMasuk ? 'MASUK' : 'KELUAR';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -194,14 +203,45 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Plat Nomor (Bold)
-          Text(
-            platNomor,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          // Header Row: Plat Nomor + Type Badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Plat Nomor (Bold)
+              Text(
+                platNomor,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              // Type Badge
+              if (type != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: typeColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: typeColor, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(typeIcon, size: 14, color: typeColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        typeText,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: typeColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           if (namaKendaraan.isNotEmpty) ...[
             const SizedBox(height: 4),
