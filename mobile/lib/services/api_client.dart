@@ -3,19 +3,37 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-String _detectBaseUrl() {
-  // Android emulator uses 10.0.2.2 to reach host machine
-  const String androidHost = 'http://10.0.2.2:5050';
-  const String defaultHost = 'http://localhost:5050';
-  try {
-    return Platform.isAndroid ? androidHost : defaultHost;
-  } catch (_) {
-    return defaultHost;
+/// Environment configuration for API URLs
+/// 
+/// Usage:
+/// - Development: `flutter run` (default, uses localhost)
+/// - Production: `flutter run --dart-define=ENV=prod` or `flutter build apk --dart-define=ENV=prod`
+class AppConfig {
+  static const String _env = String.fromEnvironment('ENV', defaultValue: 'dev');
+  
+  static bool get isProduction => _env == 'prod';
+  static bool get isDevelopment => _env == 'dev';
+  
+  static String get baseUrl {
+    if (isProduction) {
+      // Production URL (dengan HTTPS)
+      return 'https://mytelu.farhanlhsn.web.id';
+    }
+    
+    // Development URL
+    try {
+      // Android emulator uses 10.0.2.2 to reach host machine
+      return Platform.isAndroid ? 'http://10.0.2.2:5050' : 'http://localhost:5050';
+    } catch (_) {
+      return 'http://localhost:5050';
+    }
   }
+  
+  static String get envName => _env.toUpperCase();
 }
 
 class ApiClient {
-  static final String baseUrl = _detectBaseUrl();
+  static final String baseUrl = AppConfig.baseUrl;
   static final FlutterSecureStorage _secureStorage =
       const FlutterSecureStorage();
 
@@ -23,7 +41,7 @@ class ApiClient {
 
   static Dio get dio {
     if (_dioInstance == null) {
-      print('🔧 Initializing Dio with baseUrl: $baseUrl');
+      print('🔧 Initializing Dio with baseUrl: $baseUrl (ENV: ${AppConfig.envName})');
 
       _dioInstance = Dio(
         BaseOptions(
@@ -46,14 +64,18 @@ class ApiClient {
             print(
               '🌐 Request: ${options.method} ${options.baseUrl}${options.path}',
             );
-            print('📤 Headers: ${options.headers}');
+            if (AppConfig.isDevelopment) {
+              print('📤 Headers: ${options.headers}');
+            }
 
             // Get token from secure storage
             try {
               final String? token = await _secureStorage.read(key: 'token');
-              print(
-                '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
-              );
+              if (AppConfig.isDevelopment) {
+                print(
+                  '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
+                );
+              }
 
               // Add token to header if exists
               if (token != null && token.isNotEmpty) {
@@ -69,13 +91,17 @@ class ApiClient {
             print(
               '✅ Response: ${response.statusCode} ${response.statusMessage}',
             );
-            print('📥 Data: ${response.data}');
+            if (AppConfig.isDevelopment) {
+              print('📥 Data: ${response.data}');
+            }
             return handler.next(response);
           },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
             print('❌ DioError Type: ${error.type}');
             print('❌ DioError Message: ${error.message}');
-            print('❌ DioError Response: ${error.response?.data}');
+            if (AppConfig.isDevelopment) {
+              print('❌ DioError Response: ${error.response?.data}');
+            }
 
             // Handle 401 Unauthorized
             if (error.response?.statusCode == 401) {

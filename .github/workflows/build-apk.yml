@@ -49,13 +49,13 @@ jobs:
         run: flutter analyze --no-fatal-infos
         continue-on-error: true
 
-      - name: Build APK (Release)
+      - name: Build APK (Release - Production)
         working-directory: mobile
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define=ENV=prod
 
-      - name: Build APK (Split per ABI)
+      - name: Build APK (Split per ABI - Production)
         working-directory: mobile
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi --dart-define=ENV=prod
 
       - name: Upload APK (Universal)
         uses: actions/upload-artifact@v4
