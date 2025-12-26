@@ -2,15 +2,18 @@ const express = require('express');
 const { login, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword } = require('../controllers/authController');
 const { validateRequired, validatePassword } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();
 
 router.post('/register',
+    authLimiter,
     validateRequired(['nama', 'username', 'password']),
     validatePassword,
     register
 );
 
 router.post('/login',
+    authLimiter,
     validateRequired(['username', 'password']),
     login
 );

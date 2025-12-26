@@ -68,7 +68,7 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes); // authLimiter now applied individually in authRoutes.js
 app.use('/api/kendaraan', kendaraanRoutes);
 app.use('/api/akademik', akademikRoutes);
 app.use('/api/biometrik', biometrikRoutes);
