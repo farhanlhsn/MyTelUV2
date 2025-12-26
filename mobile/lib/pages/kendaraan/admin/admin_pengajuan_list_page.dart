@@ -14,24 +14,56 @@ class AdminPengajuanListPage extends StatefulWidget {
 class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   List<PengajuanPlatModel> _pengajuanList = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String? _errorMessage;
+  
+  // Pagination variables
+  int _currentPage = 1;
+  int _totalPages = 1;
+  final int _limit = 10;
+  
+  // Scroll controller for infinite scroll
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadPengajuan();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    // Load more when reaching 80% of the scroll
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+      if (!_isLoadingMore && _currentPage < _totalPages) {
+        _loadMorePengajuan();
+      }
+    }
   }
 
   Future<void> _loadPengajuan() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _currentPage = 1;
     });
 
     try {
-      final pengajuan = await KendaraanService.getAllUnverifiedKendaraan();
+      final result = await KendaraanService.getAllUnverifiedKendaraan(
+        page: 1,
+        limit: _limit,
+      );
+      
       setState(() {
-        _pengajuanList = pengajuan;
+        _pengajuanList = result['items'] as List<PengajuanPlatModel>;
+        _totalPages = result['totalPages'] as int;
+        _currentPage = result['currentPage'] as int;
         _isLoading = false;
       });
     } catch (e) {
@@ -39,6 +71,32 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMorePengajuan() async {
+    if (_isLoadingMore || _currentPage >= _totalPages) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final result = await KendaraanService.getAllUnverifiedKendaraan(
+        page: _currentPage + 1,
+        limit: _limit,
+      );
+      
+      setState(() {
+        _pengajuanList.addAll(result['items'] as List<PengajuanPlatModel>);
+        _currentPage = result['currentPage'] as int;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      print('Error loading more pengajuan: $e');
+      setState(() {
+        _isLoadingMore = false;
       });
     }
   }
@@ -227,13 +285,26 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
       onRefresh: _loadPengajuan,
       color: const Color(0xFFE63946),
       child: ListView.separated(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 24,
         ),
-        itemCount: _pengajuanList.length,
+        itemCount: _pengajuanList.length + (_isLoadingMore ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 16),
         itemBuilder: (context, index) {
+          // Show loading indicator at the bottom
+          if (index == _pengajuanList.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.0),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFE63946),
+                ),
+              ),
+            );
+          }
+          
           final pengajuan = _pengajuanList[index];
           return _buildPengajuanCard(pengajuan);
         },

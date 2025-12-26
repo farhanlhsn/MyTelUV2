@@ -1,0 +1,67 @@
+# Docker Compose for MyTelUV2
+# Development configuration
+
+services:
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myteluv2-backend
+    ports:
+      - "5050:5050"
+    environment:
+      - NODE_ENV=production
+      - PORT=5050
+      - FACE_API_URL=http://face-recognition:5051
+      - PLATE_API_URL=http://plate-recognition:5001
+    env_file:
+      - .env
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      face-recognition:
+        condition: service_healthy
+      plate-recognition:
+        condition: service_healthy
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Face Recognition Service (InsightFace)
+  face-recognition:
+    build:
+      context: ./backend/python-service/face_recognition
+      dockerfile: Dockerfile
+    container_name: myteluv2-face-recognition
+    ports:
+      - "5051:5051"
+    volumes:
+      # Persist InsightFace models to avoid re-downloading
+      - insightface-models:/root/.insightface
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Plate Recognition Service (YOLOv8)
+  plate-recognition:
+    build:
+      context: ./backend/python-service/plate_recognition
+      dockerfile: Dockerfile
+    container_name: myteluv2-plate-recognition
+    ports:
+      - "5001:5001"
+    volumes:
+      # Persist YOLO models
+      - ./backend/python-service/plate_recognition/models:/app/models
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+networks:
+  myteluv2-network:
+    driver: bridge
+
+volumes:
+  insightface-models:
+    name: myteluv2-insightface-models

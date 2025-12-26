@@ -1,0 +1,88 @@
+# Docker Compose Production Configuration for MyTelUV2
+# Uses Caddy for HTTPS reverse proxy
+
+services:
+  # Caddy Reverse Proxy (HTTPS)
+  caddy:
+    image: caddy:2-alpine
+    container_name: myteluv2-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - face-recognition
+      - plate-recognition
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: myteluv2-backend
+    expose:
+      - "5050"
+    environment:
+      - NODE_ENV=production
+      - PORT=5050
+      - FACE_API_URL=http://face-recognition:5051
+      - PLATE_API_URL=http://plate-recognition:5001
+    env_file:
+      - .env
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      face-recognition:
+        condition: service_healthy
+      plate-recognition:
+        condition: service_healthy
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Face Recognition Service (InsightFace)
+  face-recognition:
+    build:
+      context: ./backend/python-service/face_recognition
+      dockerfile: Dockerfile
+    container_name: myteluv2-face-recognition
+    expose:
+      - "5051"
+    volumes:
+      - insightface-models:/root/.insightface
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Plate Recognition Service (YOLOv8)
+  plate-recognition:
+    build:
+      context: ./backend/python-service/plate_recognition
+      dockerfile: Dockerfile
+    container_name: myteluv2-plate-recognition
+    expose:
+      - "5001"
+    volumes:
+      - ./backend/python-service/plate_recognition/models:/app/models
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+networks:
+  myteluv2-network:
+    driver: bridge
+
+volumes:
+  insightface-models:
+    name: myteluv2-insightface-models
+  caddy-data:
+    name: myteluv2-caddy-data
+  caddy-config:
+    name: myteluv2-caddy-config

@@ -30,7 +30,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
 
       final data = await KendaraanService.getAllUnverifiedKendaraan();
       setState(() {
-        pengajuanList = data;
+        pengajuanList = data['items'] as List<PengajuanPlatModel>;
         _isLoading = false;
       });
     } catch (e) {

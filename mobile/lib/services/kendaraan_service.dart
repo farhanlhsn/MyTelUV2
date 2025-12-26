@@ -185,15 +185,31 @@ class KendaraanService {
   // ========== ADMIN METHODS ==========
 
   // Get all unverified kendaraan (for Admin)
-  static Future<List<PengajuanPlatModel>> getAllUnverifiedKendaraan() async {
+  static Future<Map<String, dynamic>> getAllUnverifiedKendaraan({
+    int page = 1,
+    int limit = 10,
+  }) async {
     try {
-      final response = await _dio.get('/api/kendaraan/all-unverified');
+      final response = await _dio.get(
+        '/api/kendaraan/all-unverified',
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+        },
+      );
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final List<dynamic> data = response.data['data'] ?? [];
-        return data
+        final items = data
             .map((item) => PengajuanPlatModel.fromJson(item as Map<String, dynamic>))
             .toList();
+        
+        return {
+          'items': items,
+          'totalPages': response.data['totalPages'] ?? 1,
+          'total': response.data['total'] ?? 0,
+          'currentPage': response.data['currentPage'] ?? 1,
+        };
       } else {
         throw Exception(
           response.data['message'] ?? 'Failed to fetch unverified kendaraan',

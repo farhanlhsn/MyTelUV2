@@ -1,0 +1,83 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.prod.yml'
+      - 'deploy/**'
+      - '.github/workflows/deploy-backend.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            
+            echo "📦 Navigating to project directory..."
+            cd /opt/myteluv2
+            
+            echo "📥 Pulling latest changes..."
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "🔧 Updating .env file..."
+            # Ensure .env exists (create from example if not)
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              echo "⚠️ .env created from .env.example - please update with actual values!"
+            fi
+            
+            echo "🏗️ Building and deploying containers..."
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --build
+            
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+            
+            echo "✅ Deployment complete!"
+            docker compose -f docker-compose.prod.yml ps
+
+      - name: Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "🏥 Running health checks..."
+            sleep 30  # Wait for services to start
+            
+            # Check if containers are running
+            if docker compose -f /opt/myteluv2/docker-compose.prod.yml ps | grep -q "healthy\|Up"; then
+              echo "✅ All containers are running!"
+            else
+              echo "❌ Some containers failed to start"
+              docker compose -f /opt/myteluv2/docker-compose.prod.yml logs --tail=50
+              exit 1
+            fi
