@@ -1,0 +1,40 @@
+# Caddyfile for MyTelUV2
+# Automatic HTTPS with Let's Encrypt
+
+mytelu.farhanlhsn.web.id {
+    # Enable compression
+    encode gzip
+
+    # Backend API endpoints
+    handle /api/* {
+        reverse_proxy backend:5050
+    }
+
+    # Face Recognition Service (internal, but exposed for edge devices if needed)
+    handle /face/* {
+        uri strip_prefix /face
+        reverse_proxy face-recognition:5051
+    }
+
+    # Plate Recognition Service (internal, but exposed for edge devices if needed)
+    handle /plate/* {
+        uri strip_prefix /plate
+        reverse_proxy plate-recognition:5001
+    }
+
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+
+    # Default response for root
+    handle {
+        respond "MyTelUV2 API Server" 200
+    }
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
