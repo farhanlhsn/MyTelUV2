@@ -5,13 +5,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies required for OpenCV and InsightFace
+# Install system dependencies required for OpenCV and InsightFace compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build tools for compiling InsightFace
+    build-essential \
+    g++ \
+    gcc \
+    # OpenCV dependencies
     libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    # Utilities
     wget \
     && rm -rf /var/lib/apt/lists/*
 
