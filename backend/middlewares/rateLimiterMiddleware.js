@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit');
 // General API rate limiter
 exports.generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // More lenient in development
+  max: process.env.NODE_ENV === 'production' ? 500 : 1000,
   message: {
     status: "error",
     error: 'Too many requests from this IP, please try again later.'
@@ -11,6 +11,10 @@ exports.generalLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   skip: (req) => {
+    // Skip rate limiting for edge device endpoints
+    if (req.path.includes('/edge-entry')) {
+      return true;
+    }
     // Skip rate limiting for localhost in development
     if (process.env.NODE_ENV !== 'production') {
       const ip = req.ip || req.connection.remoteAddress;

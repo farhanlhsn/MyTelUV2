@@ -21,13 +21,15 @@ import '../pages/admin/admin_akademik_page.dart';
 import '../pages/admin/admin_biometrik_page.dart';
 import '../pages/admin/admin_user_management_page.dart';
 import '../pages/admin/admin_absensi_monitoring_page.dart';
+import '../pages/splash_page.dart';
 
 class AppRoutes {
+  static const String splash = '/';
   static const String login = '/login';
   static const String home = '/home';
   static const String me = '/me';
   static const String register = '/register';
-  static const String registerPlat = '/';
+  static const String registerPlat = '/register-plat';
   static const String registerSuccess = '/success';
   static const String pengajuanList = '/pengajuan-list';
   static const String otpVerification = '/otp-verification';
@@ -44,6 +46,10 @@ class AppRoutes {
   static const String adminUserManagement = '/admin-user-management';
   static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
+    GetPage<dynamic>(
+      name: splash,
+      page: () => const SplashPage(),
+    ),
     GetPage<dynamic>(
       name: login,
       page: () => const LoginPage(),
