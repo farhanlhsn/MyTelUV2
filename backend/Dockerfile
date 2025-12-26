@@ -14,7 +14,7 @@ RUN npm ci
 # Copy prisma schema
 COPY prisma ./prisma/
 
-# Generate Prisma Client
+# Generate Prisma Client to ./generated/prisma
 RUN npx prisma generate --schema prisma/schema.prisma
 
 # Production stage
@@ -22,8 +22,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy node_modules with generated Prisma client
+# Copy node_modules
 COPY --from=builder /app/node_modules ./node_modules
+
+# Copy generated Prisma client (output is at ./generated/prisma)
+COPY --from=builder /app/generated ./generated
 
 # Copy application files
 COPY package*.json ./

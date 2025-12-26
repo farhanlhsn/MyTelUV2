@@ -1,34 +1,15 @@
 # Docker Compose Production Configuration for MyTelUV2
-# Uses Caddy for HTTPS reverse proxy
+# Uses EXISTING Caddy on VPS for reverse proxy
 
 services:
-  # Caddy Reverse Proxy (HTTPS)
-  caddy:
-    image: caddy:2-alpine
-    container_name: myteluv2-caddy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - backend
-      - face-recognition
-      - plate-recognition
-    networks:
-      - myteluv2-network
-    restart: unless-stopped
-
   # Node.js Backend API
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: myteluv2-backend
-    expose:
-      - "5050"
+    ports:
+      - "5050:5050"
     environment:
       - NODE_ENV=production
       - PORT=5050
@@ -53,8 +34,8 @@ services:
       context: ./backend/python-service/face_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-face-recognition
-    expose:
-      - "5051"
+    ports:
+      - "5051:5051"
     volumes:
       - insightface-models:/root/.insightface
     networks:
@@ -67,8 +48,8 @@ services:
       context: ./backend/python-service/plate_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-plate-recognition
-    expose:
-      - "5001"
+    ports:
+      - "5001:5001"
     volumes:
       - ./backend/python-service/plate_recognition/models:/app/models
     networks:
@@ -82,7 +63,3 @@ networks:
 volumes:
   insightface-models:
     name: myteluv2-insightface-models
-  caddy-data:
-    name: myteluv2-caddy-data
-  caddy-config:
-    name: myteluv2-caddy-config
