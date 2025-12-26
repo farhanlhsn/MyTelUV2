@@ -85,10 +85,10 @@ last.pt
 yolov*.pt
 
 # Test files
-test/
-tests/
-*.test.js
-*.test.py
+# test/
+# tests/
+# *.test.js
+# *.test.py
 
 # Temporary files
 *.tmp

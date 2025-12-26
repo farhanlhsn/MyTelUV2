@@ -7,7 +7,8 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
     "prisma:reset": "npx dotenv -e ../.env -- prisma migrate reset --schema prisma/schema.prisma",
     "prisma:migrate": "npx dotenv -e ../.env -- prisma migrate dev --schema prisma/schema.prisma",
     "prisma:generate": "npx dotenv -e ../.env -- prisma generate --schema prisma/schema.prisma"
@@ -33,7 +34,18 @@
   },
   "devDependencies": {
     "dotenv-cli": "^10.0.0",
+    "jest": "^29.7.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.18.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "controllers/**/*.js"
+    ],
+    "coverageDirectory": "./coverage"
   }
 }
