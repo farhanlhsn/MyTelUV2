@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../services/auth_service.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import '../models/user.dart';
 
 class AuthController extends GetxController {
@@ -52,6 +53,9 @@ class AuthController extends GetxController {
       // Reset Dio instance to ensure new token is used
       ApiClient.reset();
       print('🔄 Reset Dio instance');
+
+      // Register FCM token for push notifications
+      await NotificationService.registerToken();
 
       return true;
     } on DioException catch (e) {
@@ -103,6 +107,9 @@ class AuthController extends GetxController {
       // Reset Dio instance to clear any cached requests
       ApiClient.reset();
       print('🚪 Logged out and reset Dio instance');
+
+      // Unregister FCM token
+      await NotificationService.unregisterToken();
 
       return true;
     } catch (e) {

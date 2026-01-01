@@ -45,6 +45,9 @@ venv.bak/
 .env.*.local
 *.env
 
+# Firebase Admin SDK credentials (sensitive)
+*-firebase-adminsdk-*.json
+
 # macOS
 .DS_Store
 .AppleDouble
