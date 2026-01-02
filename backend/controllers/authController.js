@@ -298,3 +298,26 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
         message: `Password for ${user.nama} has been reset successfully`
     });
 });
+
+// Register/Update FCM token for push notifications
+exports.registerFcmToken = asyncHandler(async (req, res) => {
+    const { fcm_token } = req.body;
+    const userId = req.user.id_user;
+
+    if (!fcm_token || fcm_token.trim() === '') {
+        return res.status(400).json({
+            status: "error",
+            message: 'FCM token is required'
+        });
+    }
+
+    await prisma.user.update({
+        where: { id_user: userId },
+        data: { fcm_token: fcm_token.trim() }
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: 'FCM token registered successfully'
+    });
+});

@@ -1,5 +1,5 @@
 const express = require('express');
-const { login, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword } = require('../controllers/authController');
+const { login, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken } = require('../controllers/authController');
 const { validateRequired, validatePassword } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
@@ -46,6 +46,13 @@ router.put('/admin/reset-password',
     authorize('ADMIN'),
     validateRequired(['id_user', 'new_password']),
     adminResetPassword
+);
+
+// FCM Token Registration
+router.post('/fcm-token',
+    protect,
+    validateRequired(['fcm_token']),
+    registerFcmToken
 );
 
 module.exports = router;
