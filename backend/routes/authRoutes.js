@@ -1,6 +1,6 @@
 const express = require('express');
-const { login, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken } = require('../controllers/authController');
-const { validateRequired, validatePassword } = require('../middlewares/validationMiddleware');
+const { login, logout, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken } = require('../controllers/authController');
+const { validateRequired, validatePassword, validateUsername } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();
@@ -8,6 +8,7 @@ const router = express.Router();
 router.post('/register',
     authLimiter,
     validateRequired(['nama', 'username', 'password']),
+    validateUsername,
     validatePassword,
     register
 );
@@ -21,6 +22,11 @@ router.post('/login',
 router.get('/me',
     protect,
     getMe
+);
+
+router.post('/logout',
+    protect,
+    logout
 );
 
 router.get('/users',

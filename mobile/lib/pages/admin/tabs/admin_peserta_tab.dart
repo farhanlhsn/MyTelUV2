@@ -90,9 +90,12 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
         .map((p) => (p['mahasiswa'] as Map<String, dynamic>?)?['id_user'] as int?)
         .whereType<int>()
         .toSet();
+    
+    // Sort mahasiswa by name
     final availableMahasiswa = _mahasiswaList
         .where((m) => !existingIds.contains(m['id_user'] as int))
-        .toList();
+        .toList()
+      ..sort((a, b) => (a['nama'] as String).compareTo(b['nama'] as String));
 
     if (availableMahasiswa.isEmpty) {
       Get.snackbar('Info', 'Semua mahasiswa sudah terdaftar di kelas ini',
@@ -100,31 +103,66 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
       return;
     }
 
-    int? selectedMahasiswa;
+    final Set<int> selectedIds = {};
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Tambah Peserta', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: DropdownButtonFormField<int>(
-            value: selectedMahasiswa,
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: 'Pilih Mahasiswa',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            items: availableMahasiswa.map((m) {
-              return DropdownMenuItem(
-                value: m['id_user'] as int,
-                child: Text(
-                  '${m['nama']} (${m['username']})',
-                  overflow: TextOverflow.ellipsis,
+          title: Text('Tambah Peserta (${availableMahasiswa.length} tersedia)', 
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              children: [
+                // "Select All" Option
+                CheckboxListTile(
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Pilih Semua', style: TextStyle(fontWeight: FontWeight.bold)),
+                  value: selectedIds.length == availableMahasiswa.length,
+                  activeColor: const Color(0xFFE63946),
+                  onChanged: (bool? value) {
+                    setDialogState(() {
+                      if (value == true) {
+                        selectedIds.addAll(availableMahasiswa.map((m) => m['id_user'] as int));
+                      } else {
+                        selectedIds.clear();
+                      }
+                    });
+                  },
                 ),
-              );
-            }).toList(),
-            onChanged: (value) => setDialogState(() => selectedMahasiswa = value),
+                const Divider(),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: availableMahasiswa.length,
+                    itemBuilder: (context, index) {
+                      final m = availableMahasiswa[index];
+                      final id = m['id_user'] as int;
+                      final isSelected = selectedIds.contains(id);
+
+                      return CheckboxListTile(
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(m['nama'] as String),
+                        subtitle: Text(m['username'] as String),
+                        value: isSelected,
+                        activeColor: const Color(0xFFE63946),
+                        onChanged: (bool? value) {
+                          setDialogState(() {
+                            if (value == true) {
+                              selectedIds.add(id);
+                            } else {
+                              selectedIds.remove(id);
+                            }
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -132,17 +170,18 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
               child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: selectedMahasiswa == null
+              onPressed: selectedIds.isEmpty
                   ? null
                   : () async {
                       Navigator.pop(context);
-                      await _addPeserta(selectedMahasiswa!);
+                      await _addPeserta(selectedIds.toList());
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('TAMBAH', style: TextStyle(color: Colors.white)),
+              child: Text('TAMBAH (${selectedIds.length})', 
+                  style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -150,13 +189,13 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
     );
   }
 
-  Future<void> _addPeserta(int idMahasiswa) async {
+  Future<void> _addPeserta(List<int> ids) async {
     try {
       await _akademikService.adminAddPeserta(
         idKelas: _selectedKelas!.idKelas,
-        idMahasiswa: idMahasiswa,
+        idsMahasiswa: ids,
       );
-      Get.snackbar('Berhasil', 'Peserta berhasil ditambahkan',
+      Get.snackbar('Berhasil', '${ids.length} Peserta berhasil ditambahkan',
           backgroundColor: Colors.green, colorText: Colors.white);
       _loadPeserta(_selectedKelas!.idKelas);
     } catch (e) {

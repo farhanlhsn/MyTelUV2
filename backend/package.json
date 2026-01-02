@@ -14,7 +14,6 @@
     "prisma:generate": "npx dotenv -e ../.env -- prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
-    "firebase-admin": "^13.0.0",
     "@aws-sdk/client-s3": "^3.926.0",
     "@prisma/client": "^6.18.0",
     "axios": "^1.13.2",
@@ -25,13 +24,17 @@
     "express": "^5.1.0",
     "express-async-handler": "^1.2.0",
     "express-rate-limit": "^8.1.0",
+    "firebase-admin": "^13.0.0",
     "form-data": "^4.0.5",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "node": "^22.21.0",
+    "pdfkit": "^0.17.2",
+    "pdfkit-table": "^0.1.99",
     "uuid": "^13.0.0",
-    "validator": "^13.15.20"
+    "validator": "^13.15.20",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "dotenv-cli": "^10.0.0",

@@ -20,6 +20,10 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
   bool _isLoading = true;
   String? _error;
 
+  final List<String> _days = [
+    'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -81,20 +85,40 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     }
   }
 
-  void _showCreateDialog() {
-    int? selectedMatakuliah;
-    int? selectedDosen;
-    final namaKelasController = TextEditingController();
-    final ruanganController = TextEditingController();
-    final jamMulaiController = TextEditingController(text: '08:00:00');
-    final jamBerakhirController = TextEditingController(text: '10:00:00');
+  void _showFormDialog({KelasModel? kelas}) {
+    final isEdit = kelas != null;
+    int? selectedMatakuliah = kelas?.matakuliah?.idMatakuliah;
+    int? selectedDosen = kelas?.dosen?.idUser;
+    
+    // Convert backend day (1-7) to dropdown value if exists
+    int? selectedHari = kelas?.hari; 
+    
+    final namaKelasController = TextEditingController(text: kelas?.namaKelas);
+    final ruanganController = TextEditingController(text: kelas?.ruangan);
+    
+    // Parse times if editing, else default
+    // Assuming format HH:MM:SS or HH:MM from backend
+    // Backend sends ISO string? No, backend sends Time string usually.
+    // Let's assume the string from model is usable or needs simple parsing.
+    // In createKelas controller we expect HH:MM:SS.
+    
+    // Existing values from model usually come as "08:00:00"
+    String initialMul = kelas?.jadwal?.split('-')[0].trim() ?? '08:00:00';
+    String initialSel = kelas?.jadwal?.split('-')[1].trim() ?? '10:00:00';
+    
+    // If jadwal string parsing failed or empty, use defaults
+    if (initialMul.isEmpty) initialMul = '08:00:00';
+    if (initialSel.isEmpty) initialSel = '10:00:00';
+
+    final jamMulaiController = TextEditingController(text: initialMul);
+    final jamBerakhirController = TextEditingController(text: initialSel);
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Tambah Kelas', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEdit ? 'Edit Kelas' : 'Tambah Kelas', style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -145,6 +169,24 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                   onChanged: _dosenList.isEmpty 
                       ? null 
                       : (value) => setDialogState(() => selectedDosen = value),
+                ),
+                const SizedBox(height: 16),
+                
+                // Hari Dropdown
+                DropdownButtonFormField<int>(
+                  value: selectedHari,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Hari',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: List.generate(7, (index) {
+                     return DropdownMenuItem(
+                       value: index + 1,
+                       child: Text(_days[index]),
+                     );
+                  }),
+                  onChanged: (value) => setDialogState(() => selectedHari = value),
                 ),
                 const SizedBox(height: 16),
 
@@ -215,14 +257,29 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                   return;
                 }
                 Navigator.pop(context);
-                await _createKelas(
-                  idMatakuliah: selectedMatakuliah!,
-                  idDosen: selectedDosen!,
-                  namaKelas: namaKelasController.text,
-                  ruangan: ruanganController.text,
-                  jamMulai: jamMulaiController.text,
-                  jamBerakhir: jamBerakhirController.text,
-                );
+                
+                if (isEdit) {
+                  await _updateKelas(
+                    idKelas: kelas.idKelas,
+                    idMatakuliah: selectedMatakuliah!,
+                    idDosen: selectedDosen!,
+                    namaKelas: namaKelasController.text,
+                    ruangan: ruanganController.text,
+                    jamMulai: jamMulaiController.text,
+                    jamBerakhir: jamBerakhirController.text,
+                    hari: selectedHari,
+                  );
+                } else {
+                  await _createKelas(
+                    idMatakuliah: selectedMatakuliah!,
+                    idDosen: selectedDosen!,
+                    namaKelas: namaKelasController.text,
+                    ruangan: ruanganController.text,
+                    jamMulai: jamMulaiController.text,
+                    jamBerakhir: jamBerakhirController.text,
+                    hari: selectedHari,
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
@@ -243,6 +300,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     required String ruangan,
     required String jamMulai,
     required String jamBerakhir,
+    int? hari,
   }) async {
     try {
       await _akademikService.createKelas(
@@ -252,8 +310,39 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
         ruangan: ruangan,
         jamMulai: jamMulai,
         jamBerakhir: jamBerakhir,
+        hari: hari,
       );
       Get.snackbar('Berhasil', 'Kelas berhasil ditambahkan',
+          backgroundColor: Colors.green, colorText: Colors.white);
+      _loadData();
+    } catch (e) {
+      Get.snackbar('Error', e.toString(),
+          backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
+  Future<void> _updateKelas({
+    required int idKelas,
+    required int idMatakuliah,
+    required int idDosen,
+    required String namaKelas,
+    required String ruangan,
+    required String jamMulai,
+    required String jamBerakhir,
+    int? hari,
+  }) async {
+    try {
+      await _akademikService.updateKelas(
+        idKelas: idKelas,
+        idMatakuliah: idMatakuliah,
+        idDosen: idDosen,
+        namaKelas: namaKelas,
+        ruangan: ruangan,
+        jamMulai: jamMulai,
+        jamBerakhir: jamBerakhir,
+        hari: hari,
+      );
+      Get.snackbar('Berhasil', 'Kelas berhasil diperbarui',
           backgroundColor: Colors.green, colorText: Colors.white);
       _loadData();
     } catch (e) {
@@ -287,6 +376,40 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     try {
       await _akademikService.deleteKelas(kelas.idKelas);
       Get.snackbar('Berhasil', 'Kelas berhasil dihapus',
+          backgroundColor: Colors.green, colorText: Colors.white);
+      _loadData();
+    } catch (e) {
+      Get.snackbar('Error', e.toString(),
+          backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
+  Future<void> _deleteAllKelas() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus SEMUA Kelas'),
+        content: const Text(
+            'Apakah Anda yakin ingin menghapus SEMUA kelas? Tindakan ini tidak dapat dibatalkan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('HAPUS SEMUA', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _akademikService.deleteAllKelas();
+      Get.snackbar('Berhasil', 'Semua kelas berhasil dihapus',
           backgroundColor: Colors.green, colorText: Colors.white);
       _loadData();
     } catch (e) {
@@ -335,24 +458,47 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                         ),
         ),
 
-        // Add button
+        // Buttons
         Padding(
           padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _showCreateDialog,
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text(
-                'Tambah Kelas',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showFormDialog(),
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text(
+                    'Tambah Kelas',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE63946),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+              if (_kelasList.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _deleteAllKelas,
+                    icon: const Icon(Icons.delete_forever, color: Colors.red),
+                    label: const Text(
+                      'Hapus Semua Kelas',
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ],
@@ -360,6 +506,11 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
   }
 
   Widget _buildKelasCard(KelasModel kelas) {
+    String hariStr = '';
+    if (kelas.hari != null && kelas.hari! >= 1 && kelas.hari! <= 7) {
+      hariStr = _days[kelas.hari! - 1];
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -414,9 +565,23 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                onPressed: () => _deleteKelas(kelas),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                    onPressed: () => _showFormDialog(kelas: kelas),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    onPressed: () => _deleteKelas(kelas),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
             ],
           ),
@@ -425,17 +590,34 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
             children: [
               Icon(Icons.person, size: 16, color: Colors.grey[500]),
               const SizedBox(width: 6),
-              Text(
-                kelas.dosen?.nama ?? '-',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              Expanded(
+                child: Text(
+                  kelas.dosen?.nama ?? '-',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const SizedBox(width: 16),
+            ],
+          ),
+           const SizedBox(height: 6),
+          Row(
+            children: [
               Icon(Icons.room, size: 16, color: Colors.grey[500]),
               const SizedBox(width: 6),
               Text(
                 kelas.ruangan ?? '-',
                 style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),
+              const SizedBox(width: 16),
+              if (hariStr.isNotEmpty) ...[
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey[500]),
+                const SizedBox(width: 6),
+                Text(
+                  hariStr,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+                const SizedBox(width: 16),
+              ],
             ],
           ),
           if (kelas.jadwal != null) ...[

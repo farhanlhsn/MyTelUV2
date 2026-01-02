@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
@@ -198,6 +201,35 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     }
   }
 
+  Future<void> _downloadRekap(int idKelas, String fileName) async {
+    Get.dialog(
+      const Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+    );
+    try {
+      final bytes = await _dosenService.downloadLaporanKelas(idKelas);
+
+      final dir = await getApplicationDocumentsDirectory();
+      // Sanitize filename
+      final sanitized = fileName.replaceAll(RegExp(r'[^\w\s\-]'), '_');
+      final file = File('${dir.path}/Rekap_$sanitized.pdf');
+
+      await file.writeAsBytes(bytes);
+
+      Get.back(); // close dialog
+      
+      final result = await OpenFile.open(file.path);
+      if (result.type != ResultType.done) {
+         Get.snackbar('Info', 'File tersimpan di ${file.path}. Tidak dapat membuka otomatis: ${result.message}', 
+            backgroundColor: Colors.orange, colorText: Colors.white);
+      }
+
+    } catch (e) {
+      Get.back();
+      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -338,6 +370,8 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                const SizedBox(height: 12),
+                // Action Buttons
                 Row(
                   children: [
                     Expanded(
@@ -376,6 +410,23 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _downloadRekap(idKelas, '$namaMk - $namaKelas'),
+                    icon: Icon(Icons.picture_as_pdf, size: 18, color: primaryRed),
+                    label: Text(
+                      'Download Laporan Kelas',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryRed),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: primaryRed),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
                 ),
               ],
             ),

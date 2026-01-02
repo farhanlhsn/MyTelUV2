@@ -29,6 +29,7 @@ class KelasModel {
   final String namaKelas;
   final String? ruangan;
   final String? jadwal;
+  final int? hari;
   final MatakuliahModel? matakuliah;
   final DosenModel? dosen;
   final DateTime? createdAt;
@@ -39,6 +40,7 @@ class KelasModel {
     required this.namaKelas,
     this.ruangan,
     this.jadwal,
+    this.hari,
     this.matakuliah,
     this.dosen,
     this.createdAt,
@@ -51,6 +53,7 @@ class KelasModel {
       namaKelas: json['nama_kelas'] as String? ?? '',
       ruangan: json['ruangan'] as String?,
       jadwal: json['jadwal'] as String?,
+      hari: json['hari'] as int?,
       matakuliah: json['matakuliah'] != null
           ? MatakuliahModel.fromJson(json['matakuliah'] as Map<String, dynamic>)
           : null,
@@ -72,6 +75,7 @@ class KelasModel {
       'nama_kelas': namaKelas,
       'ruangan': ruangan,
       'jadwal': jadwal,
+      'hari': hari,
       'matakuliah': matakuliah?.toJson(),
       'dosen': dosen?.toJson(),
       'createdAt': createdAt?.toIso8601String(),

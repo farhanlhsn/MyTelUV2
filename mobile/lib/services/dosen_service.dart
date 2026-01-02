@@ -85,4 +85,22 @@ class DosenService {
     }
     return <String, dynamic>{};
   }
+
+  /// Download Laporan Sesi
+  Future<List<int>> downloadLaporanSesi(int idSesi) async {
+    final response = await _dio.get(
+      '/api/akademik/laporan/sesi/$idSesi/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
+
+  /// Download Laporan Kelas (Rekap)
+  Future<List<int>> downloadLaporanKelas(int idKelas) async {
+    final response = await _dio.get(
+      '/api/akademik/laporan/kelas/$idKelas/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
 }

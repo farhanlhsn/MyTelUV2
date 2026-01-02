@@ -22,6 +22,8 @@ import '../pages/admin/admin_biometrik_page.dart';
 import '../pages/admin/admin_user_management_page.dart';
 import '../pages/admin/admin_absensi_monitoring_page.dart';
 import '../pages/splash_page.dart';
+import '../pages/jadwal/jadwal_mingguan_page.dart';
+import '../pages/jadwal/form_jadwal_pengganti_page.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -45,6 +47,9 @@ class AppRoutes {
   static const String adminBiometrik = '/admin-biometrik';
   static const String adminUserManagement = '/admin-user-management';
   static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
+  static const String jadwalMingguan = '/jadwal-mingguan';
+  static const String formJadwalPengganti = '/form-jadwal-pengganti';
+  
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
       name: splash,
@@ -130,6 +135,14 @@ class AppRoutes {
     GetPage<dynamic>(
       name: adminAbsensiMonitoring,
       page: () => const AdminAbsensiMonitoringPage(),
+    ),
+    GetPage<dynamic>(
+      name: jadwalMingguan,
+      page: () => const JadwalMingguanPage(),
+    ),
+    GetPage<dynamic>(
+      name: formJadwalPengganti,
+      page: () => const FormJadwalPenggantiPage(),
     ),
   ];
 }

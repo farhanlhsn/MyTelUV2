@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
@@ -88,6 +91,33 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
           colorText: Colors.white,
         );
       }
+    }
+  }
+
+  Future<void> _downloadLaporan() async {
+    Get.dialog(
+      const Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+    );
+    try {
+      final bytes = await _dosenService.downloadLaporanSesi(widget.idSesi);
+
+      final dir = await getApplicationDocumentsDirectory();
+      final sanitized = widget.kelasName.replaceAll(RegExp(r'[^\w\s\-]'), '_');
+      final file = File('${dir.path}/Sesi_${widget.idSesi}_$sanitized.pdf');
+
+      await file.writeAsBytes(bytes);
+
+      Get.back(); // close dialog
+      
+      final result = await OpenFile.open(file.path);
+      if (result.type != ResultType.done) {
+         Get.snackbar('Info', 'File tersimpan di ${file.path}.', 
+            backgroundColor: Colors.orange, colorText: Colors.white);
+      }
+    } catch (e) {
+      Get.back();
+      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
     }
   }
 
@@ -258,6 +288,21 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
                 ),
               ],
             ],
+          ),
+
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _downloadLaporan,
+              icon: Icon(Icons.picture_as_pdf, size: 18, color: primaryRed),
+              label: Text('Download Laporan Sesi', style: TextStyle(color: primaryRed)),
+               style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: primaryRed),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+            ),
           ),
 
           const SizedBox(height: 20),

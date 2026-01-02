@@ -199,10 +199,7 @@ class _PostPageState extends State<PostPage> {
                           color: Colors.black87,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: primaryColor),
-                        onPressed: _loadPosts,
-                      ),
+// Refresh button removed (redundant with Pull-to-Refresh)
                     ],
                   ),
                   const SizedBox(height: 12),

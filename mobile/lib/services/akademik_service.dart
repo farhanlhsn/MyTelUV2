@@ -1,11 +1,101 @@
 import 'package:dio/dio.dart';
 import '../models/kelas.dart';
+import '../models/kelas_hari_ini.dart';
 import '../models/matakuliah.dart';
 import '../models/absensi.dart';
 import 'api_client.dart';
 
 class AkademikService {
   final Dio _dio = ApiClient.dio;
+
+  /// Get kelas hari ini (classes scheduled for today based on user role)
+  Future<List<KelasHariIniModel>> getKelasHariIni() async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        '/api/akademik/kelas/hari-ini',
+      );
+
+      if (response.data is Map<String, dynamic>) {
+        final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+        final List<dynamic> kelasData = data['data'] as List<dynamic>? ?? [];
+
+        return kelasData
+            .map(
+              (dynamic item) =>
+                  KelasHariIniModel.fromJson(item as Map<String, dynamic>),
+            )
+            .toList();
+      }
+      return [];
+    } on DioException catch (e) {
+      throw Exception('Failed to get kelas hari ini: ${e.message}');
+    }
+  }
+
+  /// Get jadwal mingguan (weekly schedule grouped by day)
+  Future<Map<String, List<dynamic>>> getJadwalMingguan() async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        '/api/akademik/kelas/jadwal-mingguan',
+      );
+
+      if (response.data is Map<String, dynamic>) {
+        final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+        final Map<String, dynamic> jadwalData = data['data'] as Map<String, dynamic>? ?? {};
+
+        return jadwalData.map((key, value) => MapEntry(
+          key,
+          (value as List<dynamic>),
+        ));
+      }
+      return {};
+    } on DioException catch (e) {
+      throw Exception('Failed to get jadwal mingguan: ${e.message}');
+    }
+  }
+
+  /// Create jadwal pengganti (override)
+  Future<bool> createJadwalPengganti({
+    required int idKelas,
+    required DateTime tanggalAsli,
+    required String status,
+    required String alasan,
+    DateTime? tanggalGanti,
+    String? ruanganGanti,
+  }) async {
+    try {
+      final data = {
+        'id_kelas': idKelas,
+        'tanggal_asli': tanggalAsli.toIso8601String(),
+        'status': status,
+        'alasan': alasan,
+        if (tanggalGanti != null) 'tanggal_ganti': tanggalGanti.toIso8601String(),
+        if (ruanganGanti != null) 'ruangan_ganti': ruanganGanti,
+      };
+
+      final Response<dynamic> response = await _dio.post(
+        '/api/akademik/kelas/$idKelas/jadwal-pengganti',
+        data: data,
+      );
+
+      return response.statusCode == 201;
+    } on DioException catch (e) {
+      throw Exception('Failed to create jadwal pengganti: ${e.message}');
+    }
+  }
+
+  /// Delete jadwal pengganti
+  Future<bool> deleteJadwalPengganti(int idJadwalPengganti) async {
+    try {
+      final Response<dynamic> response = await _dio.delete(
+        '/api/akademik/jadwal-pengganti/$idJadwalPengganti',
+      );
+
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      throw Exception('Failed to delete jadwal pengganti: ${e.message}');
+    }
+  }
 
   // Get kelas mahasiswa (kelas yang diikuti oleh mahasiswa)
   Future<List<PesertaKelasModel>> getKelasKu() async {
@@ -308,6 +398,18 @@ class AkademikService {
     }
   }
 
+  // Delete ALL kelas (Admin only)
+  Future<bool> deleteAllKelas() async {
+    try {
+      final Response<dynamic> response = await _dio.delete<dynamic>(
+        '/api/akademik/kelas/delete-all',
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      throw Exception('Failed to delete all kelas: ${e.message}');
+    }
+  }
+
   // Create kelas (Admin/Dosen)
   Future<KelasModel> createKelas({
     required int idMatakuliah,
@@ -316,6 +418,7 @@ class AkademikService {
     required String jamBerakhir,
     required String namaKelas,
     required String ruangan,
+    int? hari,
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
@@ -327,6 +430,7 @@ class AkademikService {
           'jam_berakhir': jamBerakhir,
           'nama_kelas': namaKelas,
           'ruangan': ruangan,
+          if (hari != null) 'hari': hari,
         },
       );
 
@@ -352,12 +456,17 @@ class AkademikService {
     String? jamBerakhir,
     String? namaKelas,
     String? ruangan,
+    int? hari,
   }) async {
     try {
       final Map<String, dynamic> data = {};
       if (idMatakuliah != null) data['id_matakuliah'] = idMatakuliah;
       if (idDosen != null) data['id_dosen'] = idDosen;
       if (jamMulai != null) data['jam_mulai'] = jamMulai;
+      if (jamBerakhir != null) data['jam_berakhir'] = jamBerakhir;
+      if (namaKelas != null) data['nama_kelas'] = namaKelas;
+      if (ruangan != null) data['ruangan'] = ruangan;
+      if (hari != null) data['hari'] = hari;
       if (jamBerakhir != null) data['jam_berakhir'] = jamBerakhir;
       if (namaKelas != null) data['nama_kelas'] = namaKelas;
       if (ruangan != null) data['ruangan'] = ruangan;
@@ -406,23 +515,23 @@ class AkademikService {
     }
   }
 
-  // Admin add peserta to kelas
+  // Admin add peserta to kelas (Single or Multiple)
   Future<bool> adminAddPeserta({
     required int idKelas,
-    required int idMahasiswa,
+    required List<int> idsMahasiswa,
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
         '/api/akademik/kelas/peserta/add',
         data: {
           'id_kelas': idKelas,
-          'id_mahasiswa': idMahasiswa,
+          'id_mahasiswa': idsMahasiswa,
         },
       );
       return response.statusCode == 201;
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
-        throw Exception('Mahasiswa sudah terdaftar di kelas ini');
+        throw Exception('Beberapa mahasiswa sudah terdaftar di kelas ini');
       }
       throw Exception('Failed to add peserta: ${e.message}');
     }
@@ -487,6 +596,36 @@ class AkademikService {
       } catch (_) {
         throw Exception('Failed to get dosen list: ${e.message}');
       }
+    }
+  }
+
+  /// Download Laporan Sesi PDF
+  Future<List<int>> downloadLaporanSesi(int idSesi) async {
+    try {
+      final response = await _dio.get(
+        '/api/akademik/laporan/sesi/$idSesi/pdf',
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Gagal download laporan: ${e.message}');
+    }
+  }
+
+  /// Download Laporan Kelas PDF
+  Future<List<int>> downloadLaporanKelas(int idKelas) async {
+    try {
+      final response = await _dio.get(
+        '/api/akademik/laporan/kelas/$idKelas/pdf',
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+      );
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Gagal download laporan: ${e.message}');
     }
   }
 }

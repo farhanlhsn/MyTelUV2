@@ -98,6 +98,10 @@ class AuthController extends GetxController {
 
   Future<bool> logout() async {
     try {
+      // Call backend logout to clear FCM token server-side
+      await _authService.logout();
+
+      // Clear local storage
       await _secureStorage.delete(key: 'token');
       await _secureStorage.delete(key: 'id_user');
       await _secureStorage.delete(key: 'username');
@@ -108,7 +112,7 @@ class AuthController extends GetxController {
       ApiClient.reset();
       print('🚪 Logged out and reset Dio instance');
 
-      // Unregister FCM token
+      // Unregister FCM token locally
       await NotificationService.unregisterToken();
 
       return true;

@@ -11,8 +11,11 @@ const {
     createKelas,
     getAllKelas,
     getKelasByDosen,
+    getKelasHariIni,
+    getKelasWithHari,
     getKelasById,
     updateKelas,
+    deleteAllKelas,
     deleteKelas,
 
     // Peserta Kelas
@@ -33,13 +36,31 @@ const {
     getSesiAbsensiByKelas,
     getSesiAbsensiDetail,
     closeSesiAbsensi,
-    getAbsensiKuWithHistory
+    getAbsensiKuWithHistory,
+
+    // Jadwal Pengganti
+    createJadwalPengganti,
+    getJadwalPenggantiByKelas,
+    deleteJadwalPengganti
 } = require('../controllers/akademikController');
 
 const { validateRequired } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
+const {
+    generateLaporanSesiPdf,
+    generateLaporanKelasPdf
+} = require('../controllers/laporanController');
+
 const router = express.Router();
+
+// ==================== LAPORAN ROUTES ====================
+// PDF Report for Sessions
+router.get('/laporan/sesi/:id/pdf', protect, authorize('DOSEN', 'ADMIN'), generateLaporanSesiPdf);
+
+// PDF Report for Class Recap
+router.get('/laporan/kelas/:id/pdf', protect, authorize('DOSEN', 'ADMIN'), generateLaporanKelasPdf);
+
 
 // ==================== MATAKULIAH ROUTES ====================
 
@@ -89,6 +110,56 @@ router.get('/kelas/dosen',
     protect,
     authorize('DOSEN'),
     getKelasByDosen
+);
+
+// Get kelas yang berlangsung hari ini (filtered by user role)
+router.get('/kelas/hari-ini',
+    protect,
+    getKelasHariIni
+);
+
+// Get all kelas with hari info grouped by day (for weekly schedule)
+router.get('/kelas/jadwal-mingguan',
+    protect,
+    getKelasWithHari
+);
+
+// ==================== JADWAL PENGGANTI ROUTES ====================
+
+// Create jadwal pengganti (LIBUR or GANTI_JADWAL)
+router.post('/kelas/:id/jadwal-pengganti',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    validateRequired(['tanggal_asli', 'status', 'alasan']),
+    createJadwalPengganti
+);
+
+// Get jadwal pengganti by kelas
+router.get('/kelas/:id/jadwal-pengganti',
+    protect,
+    getJadwalPenggantiByKelas
+);
+
+// Delete jadwal pengganti
+router.delete('/jadwal-pengganti/:id',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    deleteJadwalPengganti
+);
+
+
+// Delete ALL kelas (ADMIN ONLY)
+router.delete('/kelas/delete-all',
+    protect,
+    authorize('ADMIN'),
+    deleteAllKelas
+);
+
+// Delete kelas (ID specific)
+router.delete('/kelas/:id',
+    protect,
+    authorize('ADMIN', 'DOSEN'), // Dosen can only delete their own class (checked in controller)
+    deleteKelas
 );
 
 // ==================== PESERTA KELAS ROUTES ====================
