@@ -349,7 +349,7 @@ class PlateDetector:
             }
             
             response = requests.post(
-                f"{self.server_url}/plate/api/parking/process",
+                f"{self.server_url}/api/parking/process",
                 files=files,
                 data=data,
                 timeout=self.server_timeout
