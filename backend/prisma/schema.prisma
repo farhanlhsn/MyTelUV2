@@ -54,6 +54,7 @@ model User {
   posts          Post[]
   postLikes      PostLike[]
   postComments   PostComment[]
+  jadwalPengganti JadwalPengganti[] @relation("DosenJadwalPengganti")
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
@@ -160,6 +161,7 @@ model Kelas {
   id_kelas       Int       @id @default(autoincrement())
   id_matakuliah  Int
   id_dosen       Int
+  hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
   jam_mulai      Unsupported("time")
   jam_berakhir   Unsupported("time")
   nama_kelas     String
@@ -174,12 +176,38 @@ model Kelas {
   absensi    Absensi[]
   laporan    LaporanAnomali[]
   sesiAbsensi  SesiAbsensi[]
+  jadwalPengganti JadwalPengganti[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
   @@index([ruangan], map: "idx_kelas_ruangan")
   @@index([jam_mulai, jam_berakhir], map: "idx_kelas_waktu")
   @@index([deletedAt], map: "idx_kelas_deleted")
+  @@index([hari], map: "idx_kelas_hari")
   @@map("kelas")
+}
+
+// Jadwal pengganti untuk perubahan jadwal sementara (dosen tidak bisa hadir, dll)
+model JadwalPengganti {
+  id_jadwal_pengganti Int       @id @default(autoincrement())
+  id_kelas            Int
+  tanggal_asli        DateTime  // Tanggal kelas yang dijadwalkan aslinya
+  status              String    // LIBUR, GANTI_JADWAL
+  tanggal_ganti       DateTime? // Tanggal baru (null jika LIBUR)
+  jam_mulai_ganti     Unsupported("time")? // Jam baru (opsional)
+  jam_berakhir_ganti  Unsupported("time")? 
+  ruangan_ganti       String?   // Ruangan baru (opsional)
+  alasan              String    // Alasan perubahan
+  createdBy           Int       // ID dosen yang membuat
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  kelas               Kelas     @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  dosen               User      @relation("DosenJadwalPengganti", fields: [createdBy], references: [id_user])
+
+  @@index([id_kelas, tanggal_asli], map: "idx_jadwal_pengganti_kelas_tgl")
+  @@index([tanggal_ganti], map: "idx_jadwal_pengganti_tgl_ganti")
+  @@map("jadwal_pengganti")
 }
 
 model PesertaKelas {

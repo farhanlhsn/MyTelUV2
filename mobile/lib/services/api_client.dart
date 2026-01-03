@@ -17,7 +17,7 @@ class AppConfig {
   static String get baseUrl {
     if (isProduction) {
       // Production URL (dengan HTTPS)
-      return 'https://mytelu.farhanlhsn.web.id';
+      return 'http://213.210.37.132:5050';
     }
     
     // Development URL

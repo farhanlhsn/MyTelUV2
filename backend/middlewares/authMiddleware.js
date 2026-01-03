@@ -6,19 +6,16 @@ const prisma = require('../utils/prisma');
 exports.protect = asyncHandler(async (req, res, next) => {
   let token;
 
+  // Only accept token from Authorization header 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    // Extract token from Bearer token
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.body && req.body.token) {
-    // Get token from body
-    token = req.body.token;
   }
 
   // Make sure token exists
   if (!token) {
     return res.status(401).json({
-      success: false,
-      error: 'Not authorized to access this route'
+      status: "error",
+      message: 'Not authorized to access this route'
     });
   }
 
@@ -26,10 +23,11 @@ exports.protect = asyncHandler(async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Find user by ID from decoded token
+    // Find user by ID from decoded token (exclude soft-deleted users)
     req.user = await prisma.user.findUnique({
       where: {
-        id_user: decoded.id
+        id_user: decoded.id,
+        deletedAt: null // Exclude soft-deleted users
       },
       select: {
         id_user: true,
@@ -40,14 +38,14 @@ exports.protect = asyncHandler(async (req, res, next) => {
     });
 
     if (!req.user) {
-      return res.status(401).json({ status: "error", message: 'User not found' });
+      return res.status(401).json({ status: "error", message: 'User not found or has been deactivated' });
     }
 
     next();
   } catch (err) {
     return res.status(401).json({
-      success: false,
-      error: 'Not authorized to access this route'
+      status: "error",
+      message: 'Invalid or expired token'
     });
   }
 });
@@ -57,8 +55,8 @@ exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
-        success: false,
-        error: `User role ${req.user.role} is not authorized to access this route`
+        status: "error",
+        message: `User role ${req.user.role} is not authorized to access this route`
       });
     }
     next();

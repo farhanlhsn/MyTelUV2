@@ -18,6 +18,7 @@ from flask import Flask, request, jsonify
 from PIL import Image
 import io
 import os
+import time
 import requests as http_requests
 from dotenv import load_dotenv
 
@@ -253,11 +254,18 @@ def process_parking():
     Returns: JSON with gate_action and message
     """
     init_recognizer()
+    start_time = time.time()
     
     try:
         # 1. Validate request
+        print(f"DEBUG: process_parking called", flush=True)
         if 'image' not in request.files:
+            print(f"DEBUG: No image in request files. Files: {request.files}", flush=True)
             return jsonify({'gate_action': 'DENY', 'error': 'No image provided'}), 400
+        
+        file = request.files['image']
+        print(f"DEBUG: Image received: {file.filename}", flush=True)
+
         
         parkiran_id = request.form.get('parkiran_id')
         gate_type = request.form.get('gate_type', 'MASUK')
@@ -290,17 +298,26 @@ def process_parking():
         
         # 3. Forward to Node.js backend for validation
         try:
+            # Prepare multipart/form-data
+            files = {
+                'image': ('plate.jpg', img_bytes, 'image/jpeg')
+            }
+            data = {
+                'plate_text': plate_text,
+                'confidence': str(confidence),
+                'parkiran_id': str(parkiran_id),
+                'gate_type': gate_type
+            }
+
+            print(f"DEBUG: Forwarding to backend: {NODEJS_BACKEND_URL}/api/parkir/edge-entry", flush=True)
             response = http_requests.post(
                 f"{NODEJS_BACKEND_URL}/api/parkir/edge-entry",
-                json={
-                    'plate_text': plate_text,
-                    'confidence': confidence,
-                    'parkiran_id': int(parkiran_id),
-                    'gate_type': gate_type
-                },
+                files=files,
+                data=data,
                 headers={'X-Edge-Secret': EDGE_DEVICE_SECRET},
                 timeout=10
             )
+            print(f"DEBUG: Backend response status: {response.status_code}", flush=True)
             
             backend_result = response.json()
             
@@ -308,7 +325,8 @@ def process_parking():
             backend_result['plate_text'] = plate_text
             backend_result['ocr_confidence'] = confidence
             
-            app.logger.info(f"Backend response: {backend_result.get('gate_action')} - {backend_result.get('message')}")
+            process_time = (time.time() - start_time) * 1000
+            app.logger.info(f"backend response: {backend_result.get('gate_action')} - {backend_result.get('message')} (took {process_time:.1f}ms)")
             
             return jsonify(backend_result), response.status_code
             

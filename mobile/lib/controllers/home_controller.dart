@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/kelas.dart';
+import '../models/kelas_hari_ini.dart';
 import '../models/absensi.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
@@ -12,9 +13,11 @@ class HomeController extends GetxController {
   // Observable states
   final RxBool isLoading = false.obs;
   final RxBool isLoadingKelas = false.obs;
+  final RxBool isLoadingKelasHariIni = false.obs;
   final RxBool isLoadingAbsensi = false.obs;
 
   final RxList<PesertaKelasModel> kelasList = <PesertaKelasModel>[].obs;
+  final RxList<KelasHariIniModel> kelasHariIniList = <KelasHariIniModel>[].obs;
   final RxList<AbsensiModel> absensiList = <AbsensiModel>[].obs;
   final RxMap<int, AbsensiStatsModel> absensiStats =
       <int, AbsensiStatsModel>{}.obs;
@@ -50,17 +53,31 @@ class HomeController extends GetxController {
     }
   }
 
-  // Load all data (kelas and absensi)
+  // Load all data (kelas hari ini and absensi)
   Future<void> loadData() async {
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-      await Future.wait([loadKelas(), loadAbsensi()]);
+      await Future.wait([loadKelasHariIni(), loadKelas(), loadAbsensi()]);
     } catch (e) {
       errorMessage.value = 'Failed to load data: ${e.toString()}';
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  // Load kelas hari ini (classes for today)
+  Future<void> loadKelasHariIni() async {
+    isLoadingKelasHariIni.value = true;
+    try {
+      final List<KelasHariIniModel> kelas = await _akademikService.getKelasHariIni();
+      kelasHariIniList.value = kelas;
+    } catch (e) {
+      errorMessage.value = 'Failed to load kelas hari ini: ${e.toString()}';
+      kelasHariIniList.value = [];
+    } finally {
+      isLoadingKelasHariIni.value = false;
     }
   }
 

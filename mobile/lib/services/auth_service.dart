@@ -82,4 +82,13 @@ class AuthService {
     }
     return <String, dynamic>{};
   }
+
+  Future<void> logout() async {
+    try {
+      await _dio.post<dynamic>('/api/auth/logout');
+    } catch (e) {
+      // Ignore errors on logout - we'll clear local data anyway
+      print('⚠️ Logout API call failed: $e');
+    }
+  }
 }

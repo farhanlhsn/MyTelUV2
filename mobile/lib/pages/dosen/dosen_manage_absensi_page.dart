@@ -1,8 +1,27 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/dosen_service.dart';
 import 'dosen_sesi_detail_page.dart';
+
+/// Get Downloads directory path
+Future<Directory> _getDownloadsDirectory() async {
+  if (Platform.isAndroid) {
+    final dir = await getExternalStorageDirectory();
+    if (dir != null) {
+      final downloadPath = '${dir.path.split('Android')[0]}Download';
+      final downloadDir = Directory(downloadPath);
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+      return downloadDir;
+    }
+  }
+  return await getApplicationDocumentsDirectory();
+}
 
 class DosenManageAbsensiPage extends StatefulWidget {
   const DosenManageAbsensiPage({super.key});
@@ -198,6 +217,62 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     }
   }
 
+  Future<void> _downloadRekap(int idKelas, String fileName) async {
+    Get.dialog(
+      const Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+    );
+    try {
+      final bytes = await _dosenService.downloadLaporanKelas(idKelas);
+
+      final dir = await _getDownloadsDirectory();
+      final sanitized = fileName.replaceAll(RegExp(r'[^\w\s\-]'), '_');
+      final file = File('${dir.path}/Rekap_$sanitized.pdf');
+
+      await file.writeAsBytes(bytes);
+
+      Get.back();
+      
+      final result = await OpenFile.open(file.path);
+      if (result.type != ResultType.done) {
+         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
+            backgroundColor: Colors.green, colorText: Colors.white);
+      }
+
+    } catch (e) {
+      Get.back();
+      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
+  Future<void> _downloadRekapExcel(int idKelas, String fileName) async {
+    Get.dialog(
+      const Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+    );
+    try {
+      final bytes = await _dosenService.downloadLaporanKelasExcel(idKelas);
+
+      final dir = await _getDownloadsDirectory();
+      final sanitized = fileName.replaceAll(RegExp(r'[^\w\s\-]'), '_');
+      final file = File('${dir.path}/Rekap_$sanitized.xlsx');
+
+      await file.writeAsBytes(bytes);
+
+      Get.back();
+      
+      final result = await OpenFile.open(file.path);
+      if (result.type != ResultType.done) {
+         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
+            backgroundColor: Colors.green, colorText: Colors.white);
+      }
+
+    } catch (e) {
+      Get.back();
+      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -338,6 +413,8 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                const SizedBox(height: 12),
+                // Action Buttons
                 Row(
                   children: [
                     Expanded(
@@ -370,6 +447,43 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                         ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: primaryRed),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Download Buttons Row
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _downloadRekap(idKelas, '$namaMk - $namaKelas'),
+                        icon: Icon(Icons.picture_as_pdf, size: 16, color: primaryRed),
+                        label: Text(
+                          'PDF',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryRed),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: primaryRed),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _downloadRekapExcel(idKelas, '$namaMk - $namaKelas'),
+                        icon: Icon(Icons.table_chart, size: 16, color: Colors.green.shade700),
+                        label: Text(
+                          'Excel',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green.shade700),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.green.shade700),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),

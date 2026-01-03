@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
+const { sendPushNotification } = require('../utils/firebase');
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
     const { plat_nomor, nama_kendaraan } = req.body;
@@ -96,6 +97,20 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             data: kendaraan
         });
     } catch (error) {
+        // Cleanup uploaded files on database failure
+        for (const fotoUrl of uploadedFotoKendaraan) {
+            try {
+                if (await fileExists(fotoUrl)) await deleteFile(fotoUrl);
+            } catch (cleanupError) {
+                console.error(`Failed to cleanup foto kendaraan: ${cleanupError.message}`);
+            }
+        }
+        try {
+            if (await fileExists(uploadedFotoSTNK)) await deleteFile(uploadedFotoSTNK);
+        } catch (cleanupError) {
+            console.error(`Failed to cleanup foto STNK: ${cleanupError.message}`);
+        }
+
         return res.status(500).json({
             status: "error",
             message: `Failed to save kendaraan: ${error.message}`
@@ -171,6 +186,25 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
             status_pengajuan: 'DISETUJUI'
         }
     });
+
+    // Send push notification to user
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id_user: parseInt(id_user) },
+            select: { fcm_token: true }
+        });
+        if (user?.fcm_token) {
+            await sendPushNotification(
+                user.fcm_token,
+                '✅ Kendaraan Disetujui',
+                `Kendaraan ${kendaraan.plat_nomor} (${kendaraan.nama_kendaraan}) telah disetujui!`,
+                { type: 'KENDARAAN_APPROVED', id_kendaraan: id_kendaraan.toString() }
+            );
+        }
+    } catch (notifError) {
+        console.error('Failed to send notification:', notifError.message);
+    }
+
     res.status(200).json({ status: "success", message: "Kendaraan verified successfully", data: updatedKendaraan });
 });
 
@@ -178,13 +212,27 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const total = await prisma.kendaraan.count({ where: { statusVerif: false } });
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(total / parseInt(limit));
+
     const unverifiedKendaraan = await prisma.kendaraan.findMany({
         where: { statusVerif: false },
+        include: {
+            user: {
+                select: {
+                    id_user: true,
+                    nama: true,
+                    username: true
+                }
+            }
+        },
         skip: offset,
         take: parseInt(limit),
-        orderBy: { createdAt: 'desc' }
+        orderBy: [
+            { status_pengajuan: 'asc' }, // MENUNGGU comes before DITOLAK/DISETUJUI alphabetically
+            { createdAt: 'desc' }
+        ]
     });
+
     res.status(200).json({
         status: "success",
         message: "All unverified kendaraan retrieved successfully",
@@ -196,15 +244,23 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
 });
 
 exports.getAllKendaraan = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10 } = req.params;
+    const { page = 1, limit = 10 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const total = await prisma.kendaraan.count();
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(total / parseInt(limit));
     const kendaraan = await prisma.kendaraan.findMany({
         skip: offset,
-        take: parseInt(limit)
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' }
     });
-    res.status(200).json({ status: "success", message: "All unverified kendaraan retrieved successfully", data: kendaraan, totalPages: totalPages, total: total });
+    res.status(200).json({
+        status: "success",
+        message: "All kendaraan retrieved successfully",
+        data: kendaraan,
+        totalPages: totalPages,
+        total: total,
+        currentPage: parseInt(page)
+    });
 });
 
 // Get histori pengajuan kendaraan untuk user
@@ -274,6 +330,24 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
         }
     });
 
+    // Send push notification to user about rejection
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id_user: parseInt(id_user) },
+            select: { fcm_token: true }
+        });
+        if (user?.fcm_token) {
+            await sendPushNotification(
+                user.fcm_token,
+                '❌ Kendaraan Ditolak',
+                `Kendaraan ${kendaraan.plat_nomor} ditolak. Alasan: ${feedback}`,
+                { type: 'KENDARAAN_REJECTED', id_kendaraan: id_kendaraan.toString(), feedback: feedback }
+            );
+        }
+    } catch (notifError) {
+        console.error('Failed to send notification:', notifError.message);
+    }
+
     res.status(200).json({
         status: "success",
         message: "Kendaraan rejected successfully",
@@ -281,12 +355,4 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     });
 });
 
-//kayaknya ga butuh
-exports.getAllMyKendaraan = asyncHandler(async (req, res) => {
-    const kendaraan = await prisma.kendaraan.findMany({
-        where: {
-            id_user: req.user.id_user
-        }
-    });
-    res.status(200).json({ status: "success", message: "All my kendaraan retrieved successfully", data: kendaraan });
-});
+// Note: Use getKendaraan instead - this function was removed to avoid duplication

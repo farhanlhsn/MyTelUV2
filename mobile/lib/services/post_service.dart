@@ -4,7 +4,9 @@ import '../models/post_model.dart';
 import 'api_client.dart';
 
 class PostService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  PostService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   // Get all posts (feed)
   Future<List<PostModel>> getAllPosts({int page = 1, int limit = 10}) async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
 import 'create_post_page.dart';
@@ -18,9 +20,15 @@ class PostPage extends StatefulWidget {
 class _PostPageState extends State<PostPage> {
   final PostService _postService = PostService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final ScrollController _scrollController = ScrollController();
   
   List<PostModel> _posts = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  int _currentPage = 1;
+  static const int _limit = 10;
+  
   String? _errorMessage;
   int? _currentUserId;
   String? _currentUserName;
@@ -32,16 +40,31 @@ class _PostPageState extends State<PostPage> {
     super.initState();
     _loadCurrentUser();
     _loadPosts();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
+      _loadMorePosts();
+    }
   }
 
   Future<void> _loadCurrentUser() async {
     final userId = await _storage.read(key: 'id_user');
     final userName = await _storage.read(key: 'nama');
     if (userId != null) {
-      setState(() {
-        _currentUserId = int.tryParse(userId);
-        _currentUserName = userName ?? 'User';
-      });
+      if (mounted) {
+        setState(() {
+          _currentUserId = int.tryParse(userId);
+          _currentUserName = userName ?? 'User';
+        });
+      }
     }
   }
 
@@ -50,18 +73,64 @@ class _PostPageState extends State<PostPage> {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
+        _currentPage = 1;
+        _hasMore = true;
       });
 
-      final posts = await _postService.getAllPosts();
-      setState(() {
-        _posts = posts;
-        _isLoading = false;
-      });
+      final posts = await _postService.getAllPosts(page: 1, limit: _limit);
+      
+      if (mounted) {
+        setState(() {
+          _posts = posts;
+          _isLoading = false;
+          // If we got fewer items than the limit, we've reached the end
+          if (posts.length < _limit) {
+            _hasMore = false;
+          }
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMorePosts() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final nextPage = _currentPage + 1;
+      final posts = await _postService.getAllPosts(page: nextPage, limit: _limit);
+
+      if (mounted) {
+        setState(() {
+          if (posts.isEmpty) {
+            _hasMore = false;
+          } else {
+            _posts.addAll(posts);
+            _currentPage = nextPage;
+            if (posts.length < _limit) {
+              _hasMore = false;
+            }
+          }
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+          // Optionally show a snackbar for error loading more
+        });
+      }
     }
   }
 
@@ -71,47 +140,55 @@ class _PostPageState extends State<PostPage> {
       final bool isLiked = result['isLiked'] as bool? ?? false;
       final int likeCount = result['likeCount'] as int? ?? 0;
 
-      setState(() {
-        final index = _posts.indexWhere((p) => p.idPost == postId);
-        if (index != -1) {
-          final oldPost = _posts[index];
-          _posts[index] = PostModel(
-            idPost: oldPost.idPost,
-            idUser: oldPost.idUser,
-            content: oldPost.content,
-            media: oldPost.media,
-            latitude: oldPost.latitude,
-            longitude: oldPost.longitude,
-            locationName: oldPost.locationName,
-            createdAt: oldPost.createdAt,
-            updatedAt: oldPost.updatedAt,
-            user: oldPost.user,
-            isLiked: isLiked,
-            likeCount: likeCount,
-            commentCount: oldPost.commentCount,
-          );
-        }
-      });
+      if (mounted) {
+        setState(() {
+          final index = _posts.indexWhere((p) => p.idPost == postId);
+          if (index != -1) {
+            final oldPost = _posts[index];
+            _posts[index] = PostModel(
+              idPost: oldPost.idPost,
+              idUser: oldPost.idUser,
+              content: oldPost.content,
+              media: oldPost.media,
+              latitude: oldPost.latitude,
+              longitude: oldPost.longitude,
+              locationName: oldPost.locationName,
+              createdAt: oldPost.createdAt,
+              updatedAt: oldPost.updatedAt,
+              user: oldPost.user,
+              isLiked: isLiked,
+              likeCount: likeCount,
+              commentCount: oldPost.commentCount,
+            );
+          }
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   Future<void> _deletePost(int postId) async {
     try {
       await _postService.deletePost(postId);
-      setState(() {
-        _posts.removeWhere((p) => p.idPost == postId);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Postingan dihapus'), backgroundColor: Colors.green),
-      );
+      if (mounted) {
+        setState(() {
+          _posts.removeWhere((p) => p.idPost == postId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Postingan dihapus'), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -143,8 +220,13 @@ class _PostPageState extends State<PostPage> {
   void _navigateToCreatePost() async {
     final result = await Get.to(() => const CreatePostPage());
     if (result == true) {
-      _loadPosts();
+      _loadPosts(); // Reloads first page
     }
+  }
+
+  void _sharePost(PostModel post) {
+    final String content = '${post.user.nama} memposting:\n\n${post.content}${post.locationName != null ? '\n\n📍 ${post.locationName}' : ''}\n\nVia MyTelUV2';
+    Share.share(content);
   }
 
   String _formatTimeAgo(DateTime dateTime) {
@@ -188,20 +270,16 @@ class _PostPageState extends State<PostPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
-                  Row(
+                  const Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Postingan',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: primaryColor),
-                        onPressed: _loadPosts,
                       ),
                     ],
                   ),
@@ -283,11 +361,11 @@ class _PostPageState extends State<PostPage> {
   }
 
   Widget _buildContent() {
-    if (_isLoading) {
+    if (_isLoading && _posts.isEmpty) {
       return const Center(child: CircularProgressIndicator(color: primaryColor));
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _posts.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -360,9 +438,21 @@ class _PostPageState extends State<PostPage> {
       color: primaryColor,
       onRefresh: _loadPosts,
       child: ListView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(top: 8, bottom: 100), // Extra bottom padding for navbar
-        itemCount: _posts.length,
-        itemBuilder: (context, index) => _buildPostCard(_posts[index]),
+        itemCount: _posts.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _posts.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(
+                child: CircularProgressIndicator(color: primaryColor, strokeWidth: 3),
+              ),
+            );
+          }
+          return _buildPostCard(_posts[index]);
+        },
       ),
     );
   }
@@ -495,18 +585,22 @@ class _PostPageState extends State<PostPage> {
                 bottomRight: Radius.circular(20),
               ),
               child: SizedBox(
-                height: 220,
+                height: 250,
                 width: double.infinity,
                 child: post.media.length == 1
-                    ? Image.network(
-                        post.media[0],
+                    ? CachedNetworkImage(
+                        imageUrl: post.media[0],
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey.shade200,
-                            child: const Icon(Icons.broken_image, size: 40),
-                          );
-                        },
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey.shade100,
+                          child: const Center(
+                            child: CircularProgressIndicator(color: primaryColor),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.broken_image, size: 40),
+                        ),
                       )
                     : ListView.builder(
                         scrollDirection: Axis.horizontal,
@@ -514,19 +608,23 @@ class _PostPageState extends State<PostPage> {
                         itemCount: post.media.length,
                         itemBuilder: (context, index) {
                           return Container(
-                            width: 180,
+                            width: 200,
                             margin: EdgeInsets.only(right: index < post.media.length - 1 ? 8 : 0),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                post.media[index],
+                              child: CachedNetworkImage(
+                                imageUrl: post.media[index],
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.broken_image, size: 40),
-                                  );
-                                },
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey.shade100,
+                                  child: const Center(
+                                    child: CircularProgressIndicator(color: primaryColor),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.broken_image, size: 40),
+                                ),
                               ),
                             ),
                           );
@@ -615,7 +713,7 @@ class _PostPageState extends State<PostPage> {
                   icon: Icons.share_outlined,
                   label: 'Bagikan',
                   color: Colors.grey.shade600,
-                  onTap: () {},
+                  onTap: () => _sharePost(post),
                 ),
               ],
             ),

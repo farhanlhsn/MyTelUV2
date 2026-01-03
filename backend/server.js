@@ -75,10 +75,16 @@ app.use('/api/biometrik', biometrikRoutes);
 app.use('/api/parkir', parkirRoutes);
 app.use('/api/posts', postRoutes);
 
+// Import and initialize scheduler for background tasks
+const { initScheduler } = require('./utils/scheduler');
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`);
     console.log(`Local: http://localhost:${port}`);
     console.log(`Network: http://10.0.2.2:${port} (Android Emulator)`);
+
+    // Initialize scheduled tasks (auto-close sessions, etc.)
+    initScheduler();
 });
 
 module.exports = app;

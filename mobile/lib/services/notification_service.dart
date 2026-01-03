@@ -1,11 +1,15 @@
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 
 /// Background message handler - must be top-level function
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('📬 Background message: ${message.notification?.title}');
+  await NotificationService.saveNotification(message);
 }
 
 /// Service to handle Firebase Cloud Messaging for push notifications
@@ -64,7 +68,22 @@ class NotificationService {
       debugPrint('   Body: ${message.notification?.body}');
       debugPrint('   Data: ${message.data}');
 
-      // You can show a local notification or snackbar here
+      // Save notification locally
+      saveNotification(message);
+
+      // Show snackbar
+      if (message.notification != null) {
+        Get.snackbar(
+          message.notification!.title ?? 'Notifikasi',
+          message.notification!.body ?? '',
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 4),
+          onTap: (_) {
+            // Handle tap
+          },
+        );
+      }
+      
       _handleParkingNotification(message);
     });
 
@@ -75,8 +94,42 @@ class NotificationService {
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('📬 Notification tapped (from background):');
       debugPrint('   Data: ${message.data}');
-      // Navigate to parking history or relevant page
+      saveNotification(message); // Ensure saved if opened
     });
+  }
+
+  /// Save notification to SharedPreferences
+  static Future<void> saveNotification(RemoteMessage message) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? existingData = prefs.getString('local_notifications');
+      List<dynamic> notifications = [];
+      
+      if (existingData != null) {
+        notifications = jsonDecode(existingData);
+      }
+
+      final newNotification = {
+        'id': message.messageId,
+        'title': message.notification?.title ?? 'Notifikasi Baru',
+        'body': message.notification?.body ?? '',
+        'data': message.data,
+        'timestamp': DateTime.now().toIso8601String(),
+        'type': message.data['type'] ?? 'general',
+      };
+
+      notifications.add(newNotification);
+      
+      // Limit to last 50 notifications
+      if (notifications.length > 50) {
+        notifications = notifications.sublist(notifications.length - 50);
+      }
+
+      await prefs.setString('local_notifications', jsonEncode(notifications));
+      debugPrint('✅ Notification saved locally');
+    } catch (e) {
+      debugPrint('❌ Failed to save notification locally: $e');
+    }
   }
 
   /// Handle parking notification data
@@ -88,7 +141,6 @@ class NotificationService {
       final String parkiranName = message.data['parkiran_name'] ?? '';
 
       debugPrint('🚗 Parking notification: $parkingType - $platNomor at $parkiranName');
-      // Could show a snackbar or update UI here using GetX
     }
   }
 

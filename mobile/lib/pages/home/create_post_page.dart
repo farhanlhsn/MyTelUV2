@@ -33,9 +33,11 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   Future<void> _loadUserName() async {
     final name = await _storage.read(key: 'nama');
-    setState(() {
-      _userName = name ?? 'User';
-    });
+    if (mounted) {
+      setState(() {
+        _userName = name ?? 'User';
+      });
+    }
   }
 
   @override
@@ -45,6 +47,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   Future<void> _pickImages() async {
+    if (_isLoading) return;
     try {
       final List<XFile> images = await _picker.pickMultiImage(
         imageQuality: 80,
@@ -62,6 +65,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   Future<void> _pickVideo() async {
+    if (_isLoading) return;
     try {
       final XFile? video = await _picker.pickVideo(
         source: ImageSource.gallery,
@@ -79,6 +83,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -90,6 +95,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   void _removeMedia(int index) {
+    if (_isLoading) return;
     setState(() {
       _selectedMedia.removeAt(index);
     });
@@ -110,30 +116,35 @@ class _CreatePostPageState extends State<CreatePostPage> {
         locationName: _locationName,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Postingan berhasil dibuat!'),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Postingan berhasil dibuat!'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-      
-      Get.back(result: true);
+        );
+        
+        Get.back(result: true);
+      }
     } catch (e) {
-      _showError('Gagal membuat postingan');
+      _showError('Gagal membuat postingan: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _setLocation() {
+    if (_isLoading) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -265,27 +276,32 @@ class _CreatePostPageState extends State<CreatePostPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: ElevatedButton(
-              onPressed: _isLoading || _contentController.text.trim().isEmpty 
-                  ? null 
-                  : _submitPost,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                disabledBackgroundColor: primaryColor.withOpacity(0.5),
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text(
-                      'Posting',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
+            child: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _contentController,
+              builder: (context, value, child) {
+                return ElevatedButton(
+                  onPressed: _isLoading || value.text.trim().isEmpty 
+                      ? null 
+                      : _submitPost,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    disabledBackgroundColor: primaryColor.withOpacity(0.5),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Posting',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                );
+              },
             ),
           ),
         ],
@@ -348,8 +364,8 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     minLines: 6,
                     keyboardType: TextInputType.multiline,
                     autofocus: true,
+                    enabled: !_isLoading,
                     style: const TextStyle(fontSize: 17, height: 1.5),
-                    onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Apa yang sedang Anda pikirkan?',
@@ -377,7 +393,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                           ),
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: () => setState(() => _locationName = null),
+                            onTap: _isLoading ? null : () => setState(() => _locationName = null),
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
@@ -422,6 +438,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                                   ),
                                 ),
                               ),
+                              if (!_isLoading)
                               Positioned(
                                 top: 6,
                                 right: 16,
@@ -458,7 +475,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
             child: SafeArea(
               child: Row(
                 children: [
-                  _buildAttachmentButton(
+                   _buildAttachmentButton(
                     icon: Icons.photo_library,
                     color: Colors.green,
                     onTap: _pickImages,
@@ -476,9 +493,14 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     onTap: _setLocation,
                   ),
                   const Spacer(),
-                  Text(
-                    '${_contentController.text.length} karakter',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _contentController,
+                    builder: (context, value, child) {
+                      return Text(
+                        '${value.text.length} karakter',
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -494,8 +516,9 @@ class _CreatePostPageState extends State<CreatePostPage> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
+    return InkWell(
+      onTap: _isLoading ? null : onTap,
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(

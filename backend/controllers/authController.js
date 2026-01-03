@@ -2,9 +2,15 @@ const prisma = require('../utils/prisma');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
+const { logAudit } = require('../utils/auditLogger');
 
 exports.register = asyncHandler(async (req, res) => {
     const { nama, username, password, role } = req.body;
+
+    // Only allow MAHASISWA and DOSEN roles for public registration
+    // ADMIN role can only be assigned by existing admins
+    const allowedRoles = ['MAHASISWA', 'DOSEN'];
+    const userRole = allowedRoles.includes(role) ? role : 'MAHASISWA';
 
     const checkExisted = await prisma.user.findUnique({
         where: {
@@ -21,7 +27,7 @@ exports.register = asyncHandler(async (req, res) => {
             nama,
             username,
             password: hashedPassword,
-            role: role || 'MAHASISWA'
+            role: userRole
         }
     });
     if (user) {
@@ -46,7 +52,8 @@ exports.login = asyncHandler(async (req, res) => {
 
     const user = await prisma.user.findUnique({
         where: {
-            username: username
+            username: username,
+            deletedAt: null // Exclude soft-deleted users
         }
     });
     if (!user) {
@@ -84,6 +91,21 @@ exports.getMe = asyncHandler(async (req, res) => {
             nama: user.nama,
             role: user.role
         }
+    });
+});
+
+exports.logout = asyncHandler(async (req, res) => {
+    const userId = req.user.id_user;
+
+    // Clear FCM token on logout so user won't receive push notifications
+    await prisma.user.update({
+        where: { id_user: userId },
+        data: { fcm_token: null }
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: 'Logged out successfully'
     });
 });
 
@@ -291,6 +313,15 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     await prisma.user.update({
         where: { id_user: parseInt(id_user) },
         data: { password: hashedPassword }
+    });
+
+    // Audit log for sensitive action
+    logAudit({
+        action: 'ADMIN_RESET_PASSWORD',
+        performedBy: req.user.id_user,
+        targetUserId: parseInt(id_user),
+        details: `Admin ${req.user.nama} reset password for user ${user.nama}`,
+        ip: req.ip || req.headers['x-forwarded-for']
     });
 
     res.status(200).json({

@@ -1,10 +1,21 @@
 const express = require('express');
 const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry } = require('../controllers/parkirController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const multer = require('multer');
+
+// Configure multer for memory storage
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    }
+});
+
 const router = express.Router();
 
 // Edge device parking entry/exit (internal API - uses X-Edge-Secret header)
 router.post('/edge-entry',
+    upload.single('image'),
     processEdgeEntry
 );
 

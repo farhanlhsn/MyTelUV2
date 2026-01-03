@@ -1,10 +1,14 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { sendParkingNotification } = require('../utils/firebase');
+const { uploadFile } = require('../utils/r2FileHandler');
 
 // Get histori parkir untuk user (berdasarkan kendaraan yang dimiliki)
 exports.getHistoriParkir = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
     // Get all user's kendaraan IDs first
     const userKendaraan = await prisma.kendaraan.findMany({
@@ -22,9 +26,22 @@ exports.getHistoriParkir = asyncHandler(async (req, res) => {
         return res.status(200).json({
             status: "success",
             message: "No parking history found",
-            data: []
+            data: [],
+            meta: {
+                page,
+                limit,
+                total: 0,
+                total_pages: 0
+            }
         });
     }
+
+    // Get total count for pagination
+    const totalCount = await prisma.logParkir.count({
+        where: {
+            id_kendaraan: { in: kendaraanIds }
+        }
+    });
 
     // Get parking logs for user's kendaraan
     const logParkir = await prisma.logParkir.findMany({
@@ -47,13 +64,20 @@ exports.getHistoriParkir = asyncHandler(async (req, res) => {
             }
         },
         orderBy: { timestamp: 'desc' },
-        take: 50 // Limit to last 50 records
+        skip: skip,
+        take: limit
     });
 
     res.status(200).json({
         status: "success",
         message: "Parking history retrieved successfully",
-        data: logParkir
+        data: logParkir,
+        meta: {
+            page,
+            limit,
+            total: totalCount,
+            total_pages: Math.ceil(totalCount / limit)
+        }
     });
 });
 
@@ -213,6 +237,23 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         });
     }
 
+    // Jika nama berubah, cek unique
+    if (nama_parkiran) {
+        const nameCheck = await prisma.$queryRaw`
+            SELECT id_parkiran FROM parkiran 
+            WHERE nama_parkiran = ${nama_parkiran.trim()} 
+            AND id_parkiran != ${parseInt(id)}
+            AND "deletedAt" IS NULL
+        `;
+
+        if (nameCheck.length > 0) {
+            return res.status(409).json({
+                status: "error",
+                message: "Nama parkiran already exists"
+            });
+        }
+    }
+
     // Build update query dynamically
     let updates = [];
     if (nama_parkiran) updates.push(`nama_parkiran = '${nama_parkiran.trim()}'`);
@@ -283,10 +324,10 @@ exports.deleteParkiran = asyncHandler(async (req, res) => {
 
 // Process parking entry/exit from edge device
 // POST /api/parkir/edge-entry
-// Body: { plate_text, confidence, parkiran_id, gate_type: "MASUK"|"KELUAR" }
-// Headers: X-Edge-Secret (for authentication)
+// Supports multipart/form-data for image upload
 exports.processEdgeEntry = asyncHandler(async (req, res) => {
     const { plate_text, confidence, parkiran_id, gate_type } = req.body;
+    const file = req.file;
 
     // 1. Validate edge device secret
     const edgeSecret = req.headers['x-edge-secret'];
@@ -343,6 +384,29 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     }
 
     const parkiranData = parkiran[0];
+    // Async image upload handling
+    let imageUrl = null;
+    const processImageUpload = async (logId) => {
+        if (file) {
+            try {
+                const uploadResult = await uploadFile(
+                    file.buffer,
+                    file.originalname,
+                    file.mimetype,
+                    'parkir_logs'
+                );
+
+                // Update log with image URL
+                await prisma.logParkir.update({
+                    where: { id_log_parkir: logId },
+                    data: { image_url: uploadResult.fileUrl }
+                });
+                console.log(`Image uploaded for log ${logId}: ${uploadResult.fileUrl}`);
+            } catch (error) {
+                console.error('Failed to upload parking image:', error);
+            }
+        }
+    };
 
     // 5. Process based on gate type
     if (gate_type === 'MASUK') {
@@ -370,14 +434,15 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         }
 
         // Create entry log and increment capacity
-        await prisma.$transaction([
+        const [newLog] = await prisma.$transaction([
             prisma.logParkir.create({
                 data: {
                     id_kendaraan: kendaraan.id_kendaraan,
                     id_parkiran: parseInt(parkiran_id),
                     id_user: kendaraan.user?.id_user,
                     type: 'MASUK',
-                    confidence: confidence ? parseFloat(confidence) : null
+                    confidence: confidence ? parseFloat(confidence) : null,
+                    image_url: null // Will be updated asynchronously
                 }
             }),
             prisma.$executeRaw`
@@ -385,6 +450,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 WHERE id_parkiran = ${parseInt(parkiran_id)}
             `
         ]);
+
+        // Trigger async upload without awaiting
+        processImageUpload(newLog.id_log_parkir);
 
         const slotTersisa = Number(parkiranData.kapasitas) - Number(parkiranData.live_kapasitas) - 1;
 
@@ -406,7 +474,8 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
                 parkiran: parkiranData.nama_parkiran,
-                slot_tersisa: slotTersisa
+                slot_tersisa: slotTersisa,
+                image_url: imageUrl
             }
         });
 
@@ -426,21 +495,25 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         }
 
         // Create exit log and decrement capacity
-        await prisma.$transaction([
+        const [newLog] = await prisma.$transaction([
             prisma.logParkir.create({
                 data: {
                     id_kendaraan: kendaraan.id_kendaraan,
                     id_parkiran: parseInt(parkiran_id),
                     id_user: kendaraan.user?.id_user,
                     type: 'KELUAR',
-                    confidence: confidence ? parseFloat(confidence) : null
+                    confidence: confidence ? parseFloat(confidence) : null,
+                    image_url: null // Will be updated asynchronously
                 }
             }),
             prisma.$executeRaw`
-                UPDATE parkiran SET live_kapasitas = GREATEST(live_kapasitas - 1, 0), "updatedAt" = NOW()
+                UPDATE parkiran SET live_kapasitas = GREATEST(0, live_kapasitas - 1), "updatedAt" = NOW()
                 WHERE id_parkiran = ${parseInt(parkiran_id)}
             `
         ]);
+
+        // Trigger async upload without awaiting
+        processImageUpload(newLog.id_log_parkir);
 
         // Send push notification
         if (kendaraan.user?.id_user) {
@@ -459,7 +532,8 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             data: {
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
-                parkiran: parkiranData.nama_parkiran
+                parkiran: parkiranData.nama_parkiran,
+                image_url: imageUrl
             }
         });
     }

@@ -154,8 +154,9 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             platNomor: log.kendaraan?.platNomor ?? 'Unknown',
             namaKendaraan: log.kendaraan?.namaKendaraan ?? '',
             lokasi: log.parkiran?.namaParkiran ?? 'Unknown',
-            waktu: _formatDateTime(log.localTimestamp), // Use localTimestamp
+            waktu: _formatDateTime(log.localTimestamp),
             type: log.type,
+            imageUrl: log.imageUrl,
             primaryColor: primaryColor,
           );
         },
@@ -177,6 +178,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
     required String lokasi,
     required String waktu,
     String? type,
+    String? imageUrl,
     required Color primaryColor,
   }) {
     // Colors for entry/exit badges
@@ -255,6 +257,64 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
           ],
           const SizedBox(height: 6),
           
+          // Image Thumbnail (if available)
+          if (imageUrl != null && imageUrl.isNotEmpty) ...[
+             const SizedBox(height: 8),
+             GestureDetector(
+               onTap: () => _showImageDialog(imageUrl),
+               child: ClipRRect(
+                 borderRadius: BorderRadius.circular(8),
+                 child: Stack(
+                   alignment: Alignment.center,
+                   children: [
+                     Image.network(
+                       imageUrl,
+                       height: 120,
+                       width: double.infinity,
+                       fit: BoxFit.cover,
+                       loadingBuilder: (context, child, loadingProgress) {
+                         if (loadingProgress == null) return child;
+                         return Container(
+                           height: 120,
+                           color: Colors.grey.shade100,
+                           child: Center(
+                             child: CircularProgressIndicator(
+                               value: loadingProgress.expectedTotalBytes != null
+                                   ? loadingProgress.cumulativeBytesLoaded / 
+                                     loadingProgress.expectedTotalBytes!
+                                   : null,
+                             ),
+                           ),
+                         );
+                       },
+                       errorBuilder: (context, error, stackTrace) {
+                         return Container(
+                           height: 120,
+                           width: double.infinity,
+                           color: Colors.grey.shade200,
+                           child: const Icon(Icons.broken_image, color: Colors.grey),
+                         );
+                       },
+                     ),
+                     Positioned(
+                       bottom: 8,
+                       right: 8,
+                       child: Container(
+                         padding: const EdgeInsets.all(4),
+                         decoration: BoxDecoration(
+                           color: Colors.black.withOpacity(0.6),
+                           borderRadius: BorderRadius.circular(4),
+                         ),
+                         child: const Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
+             ),
+             const SizedBox(height: 12),
+          ],
+
           // Waktu (Abu-abu)
           Text(
             waktu,
@@ -284,6 +344,45 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showImageDialog(String imageUrl) {
+    Get.dialog(
+      Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: Colors.black.withOpacity(0.9),
+              child: Center(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Get.back(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      barrierDismissible: true,
     );
   }
 }

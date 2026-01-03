@@ -151,6 +151,8 @@ class PlateDetector:
         self.server_url = self.config['server']['url']
         self.server_timeout = self.config['server']['timeout']
         
+        self.logger.info(f"Using Server URL: {self.server_url}")
+        
         # Camera configuration
         self.camera_index = self.config['camera']['index']
         self.camera_width = self.config['camera']['width']
@@ -158,6 +160,34 @@ class PlateDetector:
         
         self.logger.info("PlateDetector initialized successfully")
 
+        # Deduplication state
+        self.last_detection = {
+            'bbox': None,
+            'time': 0,
+            'plate_text': None
+        }
+    
+    def calculate_iou(self, boxA, boxB):
+        """Calculate Intersection over Union (IoU) of two bounding boxes"""
+        # Determine the (x, y)-coordinates of the intersection rectangle
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+
+        # Compute the area of intersection rectangle
+        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+
+        # Compute the area of both the prediction and ground-truth rectangles
+        boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+        boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+
+        # Compute the intersection over union by taking the intersection
+        # area and dividing it by the sum of prediction + ground-truth
+        # areas - the interesection area
+        iou = interArea / float(boxAArea + boxBArea - interArea)
+
+        return iou
     
     def letterbox(self, img, new_shape=(640, 640)):
         """Resize and pad image while maintaining aspect ratio"""
@@ -349,7 +379,7 @@ class PlateDetector:
             }
             
             response = requests.post(
-                f"{self.server_url}/plate/api/parking/process",
+                f"{self.server_url}/api/parking/process",
                 files=files,
                 data=data,
                 timeout=self.server_timeout
@@ -404,7 +434,36 @@ class PlateDetector:
                 cv2.imwrite(str(debug_dir / f"{timestamp}_preprocessed.jpg"), plate_img_preprocessed)
             
             # Send to server for OCR and validation
-            server_result = self.send_to_server(plate_img_preprocessed)
+            current_time = time.time()
+            
+            # Check for duplicates using IoU
+            if self.last_detection['bbox'] is not None:
+                iou = self.calculate_iou(bbox, self.last_detection['bbox'])
+                time_diff = current_time - self.last_detection['time']
+                
+                # If overlap is high and time is short, skip (Duplicate)
+                # IoU > 0.5 and Time < 5 seconds
+                if iou > 0.5 and time_diff < 5.0:
+                    self.logger.info(f"Skipping duplicate detection (IoU: {iou:.2f}, Time: {time_diff:.1f}s)")
+                    # Draw visual indicator for duplicate
+                    if save_dir and self.config.get('debug', {}).get('save_images', False):
+                         # Optional: Save/Log duplicate event
+                         pass
+                    continue
+
+            # Send original color image to server (better for display)
+            # OCR will handle it (YOLO is robust enough)
+            server_start = time.time()
+            server_result = self.send_to_server(plate_img)
+            server_latency = (time.time() - server_start) * 1000
+
+            # Update last detection if successful
+            if server_result and server_result.get('gate_action') != 'DENY':
+                 self.last_detection = {
+                     'bbox': bbox,
+                     'time': current_time,
+                     'plate_text': server_result.get('plate_text', '')
+                 }
             
             if server_result:
                 plate_text = server_result.get('plate_text', '')
@@ -416,6 +475,7 @@ class PlateDetector:
                     f"Detected plate: {plate_text} "
                     f"(det_conf: {conf:.2f}, ocr_conf: {ocr_confidence:.2f})"
                 )
+                print(f"⏱️ Latency: Det={detect_time*1000:.1f}ms | OCR+Server={server_latency:.1f}ms | Total={(time.time()-start_time)*1000:.1f}ms")
                 
                 # Execute gate action
                 self.gate_controller.execute_gate_action(gate_action, message)

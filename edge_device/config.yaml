@@ -9,7 +9,7 @@ model:
 
 # Server Configuration
 server:
-  url: "https://mytelu.farhanlhsn.web.id"  # Replace with your server URL
+  url: "http://213.210.37.132:5001"  # Replace with your server URL
   timeout: 10  # Request timeout in seconds
 
 # Camera Configuration

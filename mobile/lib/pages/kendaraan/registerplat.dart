@@ -1,24 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:get/get.dart';
 import 'package:mobile/app/routes.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: RegisterPlatPage(),
-    );
-  }
-}
 
 // Mengubah StatelessWidget menjadi StatefulWidget
 class RegisterPlatPage extends StatefulWidget {
@@ -32,12 +17,8 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
   // Controllers
   final TextEditingController platController = TextEditingController();
   final TextEditingController namaKendaraanController = TextEditingController();
-  final TextEditingController depanController = TextEditingController();
-  final TextEditingController sampingController = TextEditingController();
-  final TextEditingController belakangController = TextEditingController();
-  final TextEditingController stnkController = TextEditingController();
 
-  // Image paths
+  // Image paths - simplified, no longer need separate controllers
   String? _depanImagePath;
   String? _sampingImagePath;
   String? _belakangImagePath;
@@ -48,11 +29,83 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
 
   final ImagePicker _picker = ImagePicker();
 
+  // Show image source selection bottom sheet
+  Future<void> _showImageSourceSheet(String type) async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Pilih Sumber Foto',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE63946).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Color(0xFFE63946)),
+                  ),
+                  title: const Text('Kamera'),
+                  subtitle: const Text('Ambil foto langsung'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(type, ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE63946).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.photo_library, color: Color(0xFFE63946)),
+                  ),
+                  title: const Text('Galeri'),
+                  subtitle: const Text('Pilih dari galeri'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(type, ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // Pick image from gallery or camera
-  Future<void> _pickImage(TextEditingController controller, String type) async {
+  Future<void> _pickImage(String type, ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 1920,
         maxHeight: 1080,
         imageQuality: 85,
@@ -60,8 +113,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
 
       if (image != null) {
         setState(() {
-          controller.text = image.name;
-          // Store the actual path
           if (type.contains('Depan')) {
             _depanImagePath = image.path;
           } else if (type.contains('Samping')) {
@@ -74,14 +125,12 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
         });
       }
     } catch (e) {
-      print('Error picking image: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error memilih gambar: $e')));
     }
   }
 
-  // ... (Fungsi _showErrorSnackBar Anda tetap sama)
   void _showErrorSnackBar(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -129,7 +178,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
 
     try {
       // Call API untuk register kendaraan
-      // id_user akan diambil dari token di backend
       await KendaraanService.registerKendaraan(
         platNomor: platController.text.trim(),
         namaKendaraan: namaKendaraanController.text.trim(),
@@ -171,10 +219,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
   void dispose() {
     platController.dispose();
     namaKendaraanController.dispose();
-    depanController.dispose();
-    sampingController.dispose();
-    belakangController.dispose();
-    stnkController.dispose();
     super.dispose();
   }
 
@@ -194,7 +238,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
             padding: const EdgeInsets.only(top: 40, left: 10),
             child: Row(
               children: [
-                // --- PERUBAHAN 2: Icon 'kembali' dibuat bisa diklik ---
                 IconButton(
                   icon: const Icon(
                     Icons.arrow_back_ios_new,
@@ -202,7 +245,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                     size: 20.0,
                   ),
                   onPressed: () {
-                    // Cek apakah bisa kembali, jika bisa, 'pop' (kembali)
                     if (Navigator.of(context).canPop()) {
                       Navigator.of(context).pop();
                     }
@@ -246,12 +288,12 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Hello there, create New account',
-                      style: TextStyle(fontSize: 14, color: Colors.black),
+                      'Lengkapi data kendaraan Anda',
+                      style: TextStyle(fontSize: 14, color: Colors.black54),
                     ),
                     const SizedBox(height: 20),
 
-                    // Pastikan path aset ini benar di pubspec.yaml Anda
+                    // Illustration
                     Center(
                       child: Image.asset('assets/images/Illustration.png'),
                     ),
@@ -272,28 +314,30 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                       keyboardType: TextInputType.text,
                     ),
                     const SizedBox(height: 15),
-                    _buildUploadField(
+                    
+                    // Image upload fields with preview
+                    _buildImageUploadField(
                       'Foto Motor (Tampak Depan)',
-                      focusedBorderColor,
-                      depanController,
+                      _depanImagePath,
+                      'Depan',
                     ),
                     const SizedBox(height: 15),
-                    _buildUploadField(
+                    _buildImageUploadField(
                       'Foto Motor (Tampak Samping)',
-                      focusedBorderColor,
-                      sampingController,
+                      _sampingImagePath,
+                      'Samping',
                     ),
                     const SizedBox(height: 15),
-                    _buildUploadField(
+                    _buildImageUploadField(
                       'Foto Motor (Tampak Belakang)',
-                      focusedBorderColor,
-                      belakangController,
+                      _belakangImagePath,
+                      'Belakang',
                     ),
                     const SizedBox(height: 15),
-                    _buildUploadField(
+                    _buildImageUploadField(
                       'Foto STNK',
-                      focusedBorderColor,
-                      stnkController,
+                      _stnkImagePath,
+                      'STNK',
                     ),
                     const SizedBox(height: 40),
 
@@ -335,7 +379,6 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
     );
   }
 
-  // ... (Fungsi _buildTextField Anda tetap sama)
   Widget _buildTextField(
     String hintText,
     Color focusedColor,
@@ -367,50 +410,92 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
     );
   }
 
-  // Build upload field with actual image picker
-  Widget _buildUploadField(
-    String hintText,
-    Color focusedColor,
-    TextEditingController controller,
+  // Build image upload field with preview thumbnail
+  Widget _buildImageUploadField(
+    String label,
+    String? imagePath,
+    String type,
   ) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      onTap: () {
-        _pickImage(controller, hintText);
-      },
-      decoration: InputDecoration(
-        hintText: controller.text.isEmpty ? hintText : controller.text,
-        hintStyle: controller.text.isEmpty
-            ? const TextStyle(color: Colors.grey)
-            : const TextStyle(color: Colors.black),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 15,
-        ),
-        suffixIcon: const Padding(
-          padding: EdgeInsets.only(right: 15.0),
-          child: Icon(Icons.folder_open, color: Colors.grey),
-        ),
-        border: OutlineInputBorder(
+    const Color primaryColor = Color(0xFFE63946);
+    
+    return GestureDetector(
+      onTap: () => _showImageSourceSheet(type),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: imagePath != null ? primaryColor : Colors.grey,
+            width: imagePath != null ? 2 : 1,
+          ),
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.grey, width: 1.0),
+          color: imagePath != null ? primaryColor.withOpacity(0.05) : null,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.grey, width: 1.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: focusedColor, width: 2.0),
+        child: Row(
+          children: [
+            // Thumbnail preview or icon
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.grey[200],
+              ),
+              child: imagePath != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(imagePath),
+                        fit: BoxFit.cover,
+                        width: 60,
+                        height: 60,
+                      ),
+                    )
+                  : Icon(
+                      Icons.add_a_photo,
+                      size: 28,
+                      color: Colors.grey[500],
+                    ),
+            ),
+            const SizedBox(width: 12),
+            // Label and status
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: imagePath != null ? primaryColor : Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    imagePath != null
+                        ? '✓ Foto terpilih'
+                        : 'Tap untuk memilih foto',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: imagePath != null ? Colors.green : Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Action icon
+            Icon(
+              imagePath != null ? Icons.check_circle : Icons.folder_open,
+              color: imagePath != null ? Colors.green : Colors.grey,
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// --- PERUBAHAN 3: KELAS BARU UNTUK HALAMAN SUKSES (di file yang sama) ---
-
+// --- SUCCESS PAGE ---
 class RegisterPlatBerhasilPage extends StatefulWidget {
   const RegisterPlatBerhasilPage({super.key});
 
@@ -429,7 +514,6 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
   }
 
   void _startCountdown() {
-    // Update countdown setiap detik
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted && _countdown > 1) {
         setState(() {
@@ -437,7 +521,6 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
         });
         _startCountdown();
       } else if (mounted && _countdown == 1) {
-        // Redirect ke history pengajuan
         Get.offAllNamed(AppRoutes.home);
         Future.delayed(const Duration(milliseconds: 500), () {
           Get.toNamed(AppRoutes.userHistoriPengajuan);
@@ -448,7 +531,6 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Warna dasar yang kita gunakan (Coral Cerah)
     const Color primaryColor = Color(0xFFFC5F57);
 
     return Scaffold(
@@ -456,15 +538,15 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
         children: <Widget>[
           // --- Bagian Atas Merah (AppBar/Header) ---
           Container(
-            height: 150, // Tinggi header
+            height: 150,
             decoration: const BoxDecoration(color: primaryColor),
             alignment: Alignment.topLeft,
             padding: const EdgeInsets.only(top: 40, left: 10),
             child: Row(
-              children: const [
-                Icon(Icons.arrow_back, color: Colors.white),
-                SizedBox(width: 10),
-                Text(
+              children: [
+                const Icon(Icons.arrow_back, color: Colors.white),
+                const SizedBox(width: 10),
+                const Text(
                   'Register Plat',
                   style: TextStyle(
                     color: Colors.white,
@@ -478,11 +560,9 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
 
           // --- Bagian Konten Utama (putih) ---
           Padding(
-            padding: const EdgeInsets.only(
-              top: 100,
-            ), // Mulai konten putih dari bawah header
+            padding: const EdgeInsets.only(top: 100),
             child: Container(
-              height: double.infinity, // Memenuhi sisa layar
+              height: double.infinity,
               width: double.infinity,
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -570,7 +650,7 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // --- Tombol Manual ke History (opsional) ---
+                    // --- Tombol Manual ke History ---
                     TextButton(
                       onPressed: () {
                         Get.offAllNamed(AppRoutes.home);
