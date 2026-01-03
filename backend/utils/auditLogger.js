@@ -35,6 +35,20 @@ const auditLogger = winston.createLogger({
 });
 
 /**
+ * Biometrik-specific audit actions
+ */
+const BIOMETRIK_ACTIONS = {
+    ADD: 'BIOMETRIK_ADD',
+    EDIT: 'BIOMETRIK_EDIT',
+    DELETE: 'BIOMETRIK_DELETE',
+    VERIFY_SUCCESS: 'BIOMETRIK_VERIFY_SUCCESS',
+    VERIFY_FAILED: 'BIOMETRIK_VERIFY_FAILED',
+    ABSEN_SUCCESS: 'BIOMETRIK_ABSEN_SUCCESS',
+    ABSEN_FAILED: 'BIOMETRIK_ABSEN_FAILED',
+    SCAN_SUCCESS: 'BIOMETRIK_SCAN_SUCCESS',
+};
+
+/**
  * Log an audit event for sensitive actions
  * @param {Object} params - Audit parameters
  * @param {string} params.action - Action performed (e.g., 'ADMIN_RESET_PASSWORD', 'USER_DELETE')
@@ -54,4 +68,4 @@ const logAudit = ({ action, performedBy, targetUserId = null, details = null, ip
     });
 };
 
-module.exports = { logAudit };
+module.exports = { logAudit, BIOMETRIK_ACTIONS };

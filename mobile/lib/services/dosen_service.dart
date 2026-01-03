@@ -103,4 +103,22 @@ class DosenService {
     );
     return response.data;
   }
+
+  /// Download Laporan Sesi - Excel
+  Future<List<int>> downloadLaporanSesiExcel(int idSesi) async {
+    final response = await _dio.get(
+      '/api/akademik/laporan/sesi/$idSesi/excel',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
+
+  /// Download Laporan Kelas (Rekap) - Excel
+  Future<List<int>> downloadLaporanKelasExcel(int idKelas) async {
+    final response = await _dio.get(
+      '/api/akademik/laporan/kelas/$idKelas/excel',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data;
+  }
 }

@@ -49,7 +49,9 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const {
     generateLaporanSesiPdf,
-    generateLaporanKelasPdf
+    generateLaporanKelasPdf,
+    generateLaporanSesiExcel,
+    generateLaporanKelasExcel
 } = require('../controllers/laporanController');
 
 const router = express.Router();
@@ -60,6 +62,12 @@ router.get('/laporan/sesi/:id/pdf', protect, authorize('DOSEN', 'ADMIN'), genera
 
 // PDF Report for Class Recap
 router.get('/laporan/kelas/:id/pdf', protect, authorize('DOSEN', 'ADMIN'), generateLaporanKelasPdf);
+
+// Excel Report for Sessions
+router.get('/laporan/sesi/:id/excel', protect, authorize('DOSEN', 'ADMIN'), generateLaporanSesiExcel);
+
+// Excel Report for Class Recap
+router.get('/laporan/kelas/:id/excel', protect, authorize('DOSEN', 'ADMIN'), generateLaporanKelasExcel);
 
 
 // ==================== MATAKULIAH ROUTES ====================

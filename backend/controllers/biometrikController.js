@@ -2,21 +2,38 @@ const prisma = require('../utils/prisma');
 const asyncHandler = require('express-async-handler');
 const FormData = require('form-data');
 const axios = require('axios');
+const axiosRetry = require('axios-retry').default;
 const fs = require('fs');
 const { uploadFile, deleteFile } = require('../utils/r2FileHandler');
+const embeddingCache = require('../utils/embeddingCache');
+const { logAudit, BIOMETRIK_ACTIONS } = require('../utils/auditLogger');
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5051';
+const PYTHON_SERVICE_TIMEOUT = parseInt(process.env.PYTHON_SERVICE_TIMEOUT || '10000');
 const SIMILARITY_THRESHOLD = parseFloat(process.env.FACE_SIMILARITY_THRESHOLD || '0.6');
 
+// Configure axios retry with exponential backoff
+axiosRetry(axios, {
+    retries: 3,
+    retryDelay: axiosRetry.exponentialDelay,
+    retryCondition: (error) =>
+        axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+        error.code === 'ECONNABORTED',
+    onRetry: (retryCount, error, requestConfig) => {
+        console.log(`[PythonService] Retry attempt ${retryCount} for ${requestConfig.url}: ${error.message}`);
+    }
+});
+
 /**
- * Helper function to call Python service
+ * Helper function to call Python service with retry and timeout
  */
 const callPythonService = async (endpoint, formData) => {
     try {
         const response = await axios.post(`${PYTHON_SERVICE_URL}${endpoint}`, formData, {
             headers: formData.getHeaders ? formData.getHeaders() : { 'Content-Type': 'application/json' },
             maxContentLength: Infinity,
-            maxBodyLength: Infinity
+            maxBodyLength: Infinity,
+            timeout: PYTHON_SERVICE_TIMEOUT
         });
         return response.data;
     } catch (error) {
@@ -115,6 +132,18 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
             }
         });
 
+        // Invalidate cache after adding new biometric
+        embeddingCache.invalidateCache();
+
+        // Audit log
+        logAudit({
+            action: BIOMETRIK_ACTIONS.ADD,
+            performedBy: req.user.id_user,
+            targetUserId: parseInt(id_user),
+            details: `Added biometric data with face_score: ${faceResult.face_score}`,
+            ip: req.ip
+        });
+
         res.status(201).json({
             status: 'success',
             message: 'Biometric data registered successfully',
@@ -159,6 +188,18 @@ exports.deleteBiometrik = asyncHandler(async (req, res) => {
     await prisma.dataBiometrik.update({
         where: { id_user: parseInt(id_user) },
         data: { deletedAt: new Date() }
+    });
+
+    // Invalidate cache after deleting biometric
+    embeddingCache.invalidateCache();
+
+    // Audit log
+    logAudit({
+        action: BIOMETRIK_ACTIONS.DELETE,
+        performedBy: req.user.id_user,
+        targetUserId: parseInt(id_user),
+        details: 'Biometric data soft deleted',
+        ip: req.ip
     });
 
     // Optional: Delete from R2 (uncomment if you want to actually delete)
@@ -242,6 +283,18 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
             }
         });
 
+        // Invalidate cache after editing biometric
+        embeddingCache.invalidateCache();
+
+        // Audit log
+        logAudit({
+            action: BIOMETRIK_ACTIONS.EDIT,
+            performedBy: req.user.id_user,
+            targetUserId: parseInt(id_user),
+            details: `Updated biometric data with face_score: ${faceResult.face_score}`,
+            ip: req.ip
+        });
+
         res.status(200).json({
             status: 'success',
             message: 'Biometric data updated successfully',
@@ -305,19 +358,15 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
         }
 
         // Get biometric data based on role
-        const allBiometrics = await prisma.dataBiometrik.findMany({
-            where: whereClause,
-            include: {
-                user: {
-                    select: {
-                        id_user: true,
-                        nama: true,
-                        username: true,
-                        role: true
-                    }
-                }
-            }
-        });
+        // For ADMIN, use cache; for others, filter from cache or query directly
+        let allBiometrics;
+        if (req.user.role === 'ADMIN') {
+            allBiometrics = await embeddingCache.getAllEmbeddings();
+        } else {
+            // For non-admin, get from cache and filter, or query directly for single user
+            const cachedData = await embeddingCache.getAllEmbeddings();
+            allBiometrics = cachedData.filter(b => b.id_user === req.user.id_user);
+        }
 
         if (allBiometrics.length === 0) {
             const message = req.user.role === 'ADMIN'
@@ -405,22 +454,8 @@ exports.scanWajah = asyncHandler(async (req, res) => {
             });
         }
 
-        // Get all active biometric data
-        const allBiometrics = await prisma.dataBiometrik.findMany({
-            where: {
-                deletedAt: null
-            },
-            include: {
-                user: {
-                    select: {
-                        id_user: true,
-                        nama: true,
-                        username: true,
-                        role: true
-                    }
-                }
-            }
-        });
+        // Get all active biometric data from cache
+        const allBiometrics = await embeddingCache.getAllEmbeddings();
 
         if (allBiometrics.length === 0) {
             return res.status(200).json({
@@ -434,16 +469,26 @@ exports.scanWajah = asyncHandler(async (req, res) => {
             });
         }
 
-        // Match each detected face
-        const identifiedUsers = [];
+        // Match each detected face using parallel processing
         const embeddings_list = allBiometrics.map(b => b.face_embedding);
 
-        for (const face of facesResult.faces) {
-            const matchResult = await callPythonService('/find-match', {
+        // Process all faces in parallel for better performance
+        const matchPromises = facesResult.faces.map(face =>
+            callPythonService('/find-match', {
                 target_embedding: face.embedding,
                 embeddings_list: embeddings_list
-            });
+            }).then(matchResult => ({ matchResult, face }))
+                .catch(err => ({ error: err, face }))
+        );
 
+        const matchResults = await Promise.all(matchPromises);
+
+        const identifiedUsers = [];
+        for (const { matchResult, face, error } of matchResults) {
+            if (error) {
+                console.error('Face match error:', error.message);
+                continue;
+            }
             if (matchResult.is_match) {
                 const matchedBiometrik = allBiometrics[matchResult.best_match_index];
                 identifiedUsers.push({
@@ -658,6 +703,15 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 kelas: { include: { matakuliah: true } },
                 sesiAbsensi: true
             }
+        });
+
+        // Audit log for successful attendance
+        logAudit({
+            action: BIOMETRIK_ACTIONS.ABSEN_SUCCESS,
+            performedBy: id_user,
+            targetUserId: id_user,
+            details: `Biometric attendance: kelas=${activeSesi.kelas.nama_kelas}, similarity=${matchResult.similarity}`,
+            ip: req.ip
         });
 
         res.status(201).json({

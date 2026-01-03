@@ -7,6 +7,7 @@ import 'package:mobile/pages/home/settings_page.dart';
 import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
+import 'package:mobile/pages/home/notification_list_page.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
@@ -432,15 +433,15 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.notifications, color: Colors.white, size: 30),
-                  ],
+              GestureDetector(
+                onTap: () => Get.to(() => const NotificationListPage()),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.2),
+                  ),
+                  child: const Icon(Icons.notifications, color: Colors.white, size: 30),
                 ),
               ),
             ],

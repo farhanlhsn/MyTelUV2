@@ -372,6 +372,43 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           ),
           const SizedBox(height: 16),
 
+          // User Info Section
+          if (widget.pengajuan.userName != null || widget.pengajuan.userUsername != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.person, size: 18, color: Colors.blue.shade600),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Diajukan oleh: ',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                  Flexible(
+                    child: Text(
+                      widget.pengajuan.userName ?? widget.pengajuan.userUsername ?? 'Unknown',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Status Badge
           Container(
             padding: const EdgeInsets.symmetric(

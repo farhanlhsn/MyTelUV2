@@ -6,7 +6,9 @@ import '../models/absensi.dart';
 import 'api_client.dart';
 
 class AkademikService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  AkademikService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   /// Get kelas hari ini (classes scheduled for today based on user role)
   Future<List<KelasHariIniModel>> getKelasHariIni() async {

@@ -9,8 +9,20 @@ import '../models/user.dart';
 
 class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
-  final AuthService _authService = AuthService();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final AuthService _authService;
+  final FlutterSecureStorage _secureStorage;
+  final Future<void> Function() _registerNotificationToken;
+  final Future<void> Function() _unregisterNotificationToken;
+
+  AuthController({
+    AuthService? authService, 
+    FlutterSecureStorage? secureStorage,
+    Future<void> Function()? registerNotificationToken,
+    Future<void> Function()? unregisterNotificationToken,
+  }) : _authService = authService ?? AuthService(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _registerNotificationToken = registerNotificationToken ?? NotificationService.registerToken,
+       _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken;
 
   Future<bool> login(String username, String password) async {
     if (username.isEmpty || password.isEmpty) {
@@ -48,14 +60,14 @@ class AuthController extends GetxController {
       print(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
       );
-      print('🔑 Token preview: ${token.substring(0, 20)}...');
+      print('🔑 Token preview: ${token.length > 20 ? token.substring(0, 20) : token}...');
 
       // Reset Dio instance to ensure new token is used
       ApiClient.reset();
       print('🔄 Reset Dio instance');
 
       // Register FCM token for push notifications
-      await NotificationService.registerToken();
+      await _registerNotificationToken();
 
       return true;
     } on DioException catch (e) {
@@ -113,7 +125,7 @@ class AuthController extends GetxController {
       print('🚪 Logged out and reset Dio instance');
 
       // Unregister FCM token locally
-      await NotificationService.unregisterToken();
+      await _unregisterNotificationToken();
 
       return true;
     } catch (e) {
