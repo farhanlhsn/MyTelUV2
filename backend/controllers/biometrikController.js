@@ -8,7 +8,7 @@ const { uploadFile, deleteFile } = require('../utils/r2FileHandler');
 const embeddingCache = require('../utils/embeddingCache');
 const { logAudit, BIOMETRIK_ACTIONS } = require('../utils/auditLogger');
 
-const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL || 'http://localhost:5051';
+const PYTHON_SERVICE_URL = process.env.FACE_API_URL || 'http://localhost:5051';
 const PYTHON_SERVICE_TIMEOUT = parseInt(process.env.PYTHON_SERVICE_TIMEOUT || '10000');
 const SIMILARITY_THRESHOLD = parseFloat(process.env.FACE_SIMILARITY_THRESHOLD || '0.6');
 
