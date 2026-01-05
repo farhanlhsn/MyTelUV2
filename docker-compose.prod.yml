@@ -14,6 +14,7 @@ services:
       - NODE_ENV=production
       - PORT=5050
       - FACE_API_URL=http://face-recognition:5051
+      - PYTHON_SERVICE_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
     env_file:
       - .env
