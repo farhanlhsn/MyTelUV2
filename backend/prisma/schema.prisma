@@ -128,6 +128,8 @@ model LogParkir {
   type          ParkingType // MASUK atau KELUAR
   confidence    Float?      // OCR confidence score
   image_url     String?     // Captured plate image URL
+  face_image_url String?    // Face capture (cropped face or full frame fallback)
+  face_detected  Boolean    @default(false) // True if face was detected, false = full frame fallback
   timestamp     DateTime    @default(now())
 
   kendaraan Kendaraan @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)

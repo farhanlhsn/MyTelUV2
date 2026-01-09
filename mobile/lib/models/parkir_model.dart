@@ -6,6 +6,8 @@ class LogParkirModel {
   final String? type; // MASUK or KELUAR
   final double? confidence;
   final String? imageUrl;
+  final String? faceImageUrl;    // Face capture (cropped or full frame)
+  final bool faceDetected;       // True if face was detected, false = full frame fallback
   final DateTime timestamp;
   final KendaraanInfo? kendaraan;
   final ParkiranInfo? parkiran;
@@ -18,6 +20,8 @@ class LogParkirModel {
     this.type,
     this.confidence,
     this.imageUrl,
+    this.faceImageUrl,
+    this.faceDetected = false,
     required this.timestamp,
     this.kendaraan,
     this.parkiran,
@@ -43,6 +47,8 @@ class LogParkirModel {
           ? (json['confidence'] as num).toDouble() 
           : null,
       imageUrl: json['image_url'] as String?,
+      faceImageUrl: json['face_image_url'] as String?,
+      faceDetected: json['face_detected'] as bool? ?? false,
       timestamp: DateTime.parse(json['timestamp'] as String),
       kendaraan: json['kendaraan'] != null
           ? KendaraanInfo.fromJson(json['kendaraan'] as Map<String, dynamic>)
