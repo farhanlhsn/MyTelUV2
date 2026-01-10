@@ -14,8 +14,12 @@ const upload = multer({
 const router = express.Router();
 
 // Edge device parking entry/exit (internal API - uses X-Edge-Secret header)
+// Accepts two images: 'image' (plate) and 'face_image' (optional face capture)
 router.post('/edge-entry',
-    upload.single('image'),
+    upload.fields([
+        { name: 'image', maxCount: 1 },
+        { name: 'face_image', maxCount: 1 }
+    ]),
     processEdgeEntry
 );
 

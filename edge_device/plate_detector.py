@@ -160,6 +160,22 @@ class PlateDetector:
         
         self.logger.info("PlateDetector initialized successfully")
 
+        # Face detection configuration (lightweight Haar Cascade)
+        face_config = self.config.get('face_detection', {})
+        self.face_detection_enabled = face_config.get('enabled', True)
+        self.face_min_size = face_config.get('min_face_size', 80)
+        self.face_scale_factor = face_config.get('scale_factor', 1.1)
+        self.face_min_neighbors = face_config.get('min_neighbors', 5)
+        
+        if self.face_detection_enabled:
+            # Load Haar Cascade (built-in OpenCV, very lightweight)
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            self.face_cascade = cv2.CascadeClassifier(cascade_path)
+            self.logger.info("Face detection enabled (Haar Cascade)")
+        else:
+            self.face_cascade = None
+            self.logger.info("Face detection disabled")
+
         # Deduplication state
         self.last_detection = {
             'bbox': None,
@@ -188,6 +204,53 @@ class PlateDetector:
         iou = interArea / float(boxAArea + boxBArea - interArea)
 
         return iou
+    
+    def detect_and_crop_face(self, frame):
+        """
+        Detect face using Haar Cascade (lightweight, built-in OpenCV).
+        
+        Returns: (face_image, face_detected)
+        - face_image: Cropped face if detected, else RAW full frame (no resize)
+        - face_detected: True if face was detected, False = full frame fallback
+        """
+        if not self.face_detection_enabled or self.face_cascade is None:
+            # Face detection disabled, return full frame
+            return frame, False
+        
+        try:
+            # Convert to grayscale for face detection
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Detect faces using Haar Cascade
+            faces = self.face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=self.face_scale_factor,
+                minNeighbors=self.face_min_neighbors,
+                minSize=(self.face_min_size, self.face_min_size)
+            )
+            
+            if len(faces) > 0:
+                # Take largest face (most likely the driver/rider)
+                x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+                
+                # Add padding for better face capture (20%)
+                pad = int(w * 0.2)
+                x1 = max(0, x - pad)
+                y1 = max(0, y - pad)
+                x2 = min(frame.shape[1], x + w + pad)
+                y2 = min(frame.shape[0], y + h + pad)
+                
+                face_img = frame[y1:y2, x1:x2]
+                self.logger.info(f"👤 Face detected: {w}x{h} at ({x}, {y})")
+                return face_img, True
+            else:
+                # No face detected (helmet, etc.) - return RAW full frame
+                self.logger.info("👤 No face detected (helmet?), using full frame")
+                return frame, False
+                
+        except Exception as e:
+            self.logger.error(f"Face detection error: {e}")
+            return frame, False
     
     def letterbox(self, img, new_shape=(640, 640)):
         """Resize and pad image while maintaining aspect ratio"""
@@ -360,22 +423,33 @@ class PlateDetector:
         
         return result
     
-    def send_to_server(self, plate_img):
-        """Send plate image to server for OCR recognition and get gate command"""
+    def send_to_server(self, plate_img, face_img=None, face_detected=False):
+        """Send plate image and face image to server for OCR recognition and get gate command"""
         try:
-            # Encode image as JPEG with high quality
+            # Encode plate image as JPEG with high quality
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 95]
-            _, img_encoded = cv2.imencode('.jpg', plate_img, encode_param)
+            _, plate_encoded = cv2.imencode('.jpg', plate_img, encode_param)
             
             # Get gate config
             gate_type = self.config.get('gate', {}).get('type', 'MASUK')
             parkiran_id = self.config.get('gate', {}).get('parkiran_id', 1)
             
-            # Send to server with gate info
-            files = {'image': ('plate.jpg', img_encoded.tobytes(), 'image/jpeg')}
+            # Prepare files - always include plate image
+            files = {'image': ('plate.jpg', plate_encoded.tobytes(), 'image/jpeg')}
+            
+            # Add face image if available
+            if face_img is not None:
+                # Use lower quality for full frame (larger images)
+                face_quality = 85 if face_detected else 70
+                face_encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), face_quality]
+                _, face_encoded = cv2.imencode('.jpg', face_img, face_encode_param)
+                files['face_image'] = ('face.jpg', face_encoded.tobytes(), 'image/jpeg')
+            
+            # Data payload
             data = {
                 'parkiran_id': parkiran_id,
-                'gate_type': gate_type
+                'gate_type': gate_type,
+                'face_detected': str(face_detected).lower()  # 'true' or 'false'
             }
             
             response = requests.post(
@@ -453,8 +527,12 @@ class PlateDetector:
 
             # Send original color image to server (better for display)
             # OCR will handle it (YOLO is robust enough)
+            
+            # Detect and crop face (or get full frame if not detected)
+            face_img, face_detected = self.detect_and_crop_face(frame)
+            
             server_start = time.time()
-            server_result = self.send_to_server(plate_img)
+            server_result = self.send_to_server(plate_img, face_img, face_detected)
             server_latency = (time.time() - server_start) * 1000
 
             # Update last detection if successful
