@@ -326,8 +326,12 @@ exports.deleteParkiran = asyncHandler(async (req, res) => {
 // POST /api/parkir/edge-entry
 // Supports multipart/form-data for image upload
 exports.processEdgeEntry = asyncHandler(async (req, res) => {
-    const { plate_text, confidence, parkiran_id, gate_type } = req.body;
-    const file = req.file;
+    const { plate_text, confidence, parkiran_id, gate_type, face_detected } = req.body;
+
+    // Handle files from multer.fields() - req.files is an object with field names as keys
+    const plateFile = req.files?.image?.[0];
+    const faceFile = req.files?.face_image?.[0];
+    const isFaceDetected = face_detected === 'true';
 
     // 1. Validate edge device secret
     const edgeSecret = req.headers['x-edge-secret'];
@@ -384,15 +388,15 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     }
 
     const parkiranData = parkiran[0];
-    // Async image upload handling
-    let imageUrl = null;
-    const processImageUpload = async (logId) => {
-        if (file) {
+
+    // Async image upload handling for plate image
+    const processPlateImageUpload = async (logId) => {
+        if (plateFile) {
             try {
                 const uploadResult = await uploadFile(
-                    file.buffer,
-                    file.originalname,
-                    file.mimetype,
+                    plateFile.buffer,
+                    plateFile.originalname,
+                    plateFile.mimetype,
                     'parkir_logs'
                 );
 
@@ -401,9 +405,35 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                     where: { id_log_parkir: logId },
                     data: { image_url: uploadResult.fileUrl }
                 });
-                console.log(`Image uploaded for log ${logId}: ${uploadResult.fileUrl}`);
+                console.log(`Plate image uploaded for log ${logId}: ${uploadResult.fileUrl}`);
             } catch (error) {
-                console.error('Failed to upload parking image:', error);
+                console.error('Failed to upload plate image:', error);
+            }
+        }
+    };
+
+    // Async face image upload handling
+    const processFaceImageUpload = async (logId) => {
+        if (faceFile) {
+            try {
+                const uploadResult = await uploadFile(
+                    faceFile.buffer,
+                    faceFile.originalname,
+                    faceFile.mimetype,
+                    'face_captures'  // Separate folder for face images
+                );
+
+                // Update log with face image URL and face_detected flag
+                await prisma.logParkir.update({
+                    where: { id_log_parkir: logId },
+                    data: {
+                        face_image_url: uploadResult.fileUrl,
+                        face_detected: isFaceDetected
+                    }
+                });
+                console.log(`Face image uploaded for log ${logId}: ${uploadResult.fileUrl} (detected: ${isFaceDetected})`);
+            } catch (error) {
+                console.error('Failed to upload face image:', error);
             }
         }
     };
@@ -451,8 +481,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             `
         ]);
 
-        // Trigger async upload without awaiting
-        processImageUpload(newLog.id_log_parkir);
+        // Trigger async uploads without awaiting (plate + face images)
+        processPlateImageUpload(newLog.id_log_parkir);
+        processFaceImageUpload(newLog.id_log_parkir);
 
         const slotTersisa = Number(parkiranData.kapasitas) - Number(parkiranData.live_kapasitas) - 1;
 
@@ -474,8 +505,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
                 parkiran: parkiranData.nama_parkiran,
-                slot_tersisa: slotTersisa,
-                image_url: imageUrl
+                slot_tersisa: slotTersisa
             }
         });
 
@@ -512,8 +542,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             `
         ]);
 
-        // Trigger async upload without awaiting
-        processImageUpload(newLog.id_log_parkir);
+        // Trigger async uploads without awaiting (plate + face images)
+        processPlateImageUpload(newLog.id_log_parkir);
+        processFaceImageUpload(newLog.id_log_parkir);
 
         // Send push notification
         if (kendaraan.user?.id_user) {
@@ -532,8 +563,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             data: {
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
-                parkiran: parkiranData.nama_parkiran,
-                image_url: imageUrl
+                parkiran: parkiranData.nama_parkiran
             }
         });
     }

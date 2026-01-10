@@ -40,3 +40,11 @@ gate:
 gpio:
   enabled: false  # Set to true when using real GPIO on Raspberry Pi
   relay_pin: 17   # GPIO pin for relay/servo control
+
+# Face Detection Configuration (lightweight Haar Cascade)
+# Used to capture face image at gate entry for display in mobile app
+face_detection:
+  enabled: true                              # Set to false to disable face capture
+  min_face_size: 80                          # Minimum face size in pixels
+  scale_factor: 1.1                          # Detection scale factor
+  min_neighbors: 5                           # Min neighbors for robust detection

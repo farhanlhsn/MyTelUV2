@@ -157,6 +157,8 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             waktu: _formatDateTime(log.localTimestamp),
             type: log.type,
             imageUrl: log.imageUrl,
+            faceImageUrl: log.faceImageUrl,
+            faceDetected: log.faceDetected,
             primaryColor: primaryColor,
           );
         },
@@ -179,6 +181,8 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
     required String waktu,
     String? type,
     String? imageUrl,
+    String? faceImageUrl,
+    bool faceDetected = false,
     required Color primaryColor,
   }) {
     // Colors for entry/exit badges
@@ -257,60 +261,66 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
           ],
           const SizedBox(height: 6),
           
-          // Image Thumbnail (if available)
+          // Images Row: Plate image (left) + Face image (right)
           if (imageUrl != null && imageUrl.isNotEmpty) ...[
              const SizedBox(height: 8),
-             GestureDetector(
-               onTap: () => _showImageDialog(imageUrl),
-               child: ClipRRect(
-                 borderRadius: BorderRadius.circular(8),
-                 child: Stack(
-                   alignment: Alignment.center,
-                   children: [
-                     Image.network(
-                       imageUrl,
-                       height: 120,
-                       width: double.infinity,
-                       fit: BoxFit.cover,
-                       loadingBuilder: (context, child, loadingProgress) {
-                         if (loadingProgress == null) return child;
-                         return Container(
-                           height: 120,
-                           color: Colors.grey.shade100,
-                           child: Center(
-                             child: CircularProgressIndicator(
-                               value: loadingProgress.expectedTotalBytes != null
-                                   ? loadingProgress.cumulativeBytesLoaded / 
-                                     loadingProgress.expectedTotalBytes!
-                                   : null,
+             Row(
+               crossAxisAlignment: CrossAxisAlignment.start,
+               children: [
+                 // Plate image (main, larger)
+                 Expanded(
+                   flex: 3,
+                   child: GestureDetector(
+                     onTap: () => _showImageDialog(imageUrl),
+                     child: ClipRRect(
+                       borderRadius: BorderRadius.circular(8),
+                       child: Stack(
+                         children: [
+                           Image.network(
+                             imageUrl,
+                             height: 100,
+                             width: double.infinity,
+                             fit: BoxFit.cover,
+                             loadingBuilder: (context, child, loadingProgress) {
+                               if (loadingProgress == null) return child;
+                               return Container(
+                                 height: 100,
+                                 color: Colors.grey.shade100,
+                                 child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                               );
+                             },
+                             errorBuilder: (context, error, stackTrace) {
+                               return Container(
+                                 height: 100,
+                                 color: Colors.grey.shade200,
+                                 child: const Icon(Icons.broken_image, color: Colors.grey),
+                               );
+                             },
+                           ),
+                           Positioned(
+                             bottom: 4,
+                             left: 4,
+                             child: Container(
+                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                               decoration: BoxDecoration(
+                                 color: Colors.black.withOpacity(0.6),
+                                 borderRadius: BorderRadius.circular(4),
+                               ),
+                               child: const Text('Plat', style: TextStyle(color: Colors.white, fontSize: 10)),
                              ),
                            ),
-                         );
-                       },
-                       errorBuilder: (context, error, stackTrace) {
-                         return Container(
-                           height: 120,
-                           width: double.infinity,
-                           color: Colors.grey.shade200,
-                           child: const Icon(Icons.broken_image, color: Colors.grey),
-                         );
-                       },
-                     ),
-                     Positioned(
-                       bottom: 8,
-                       right: 8,
-                       child: Container(
-                         padding: const EdgeInsets.all(4),
-                         decoration: BoxDecoration(
-                           color: Colors.black.withOpacity(0.6),
-                           borderRadius: BorderRadius.circular(4),
-                         ),
-                         child: const Icon(Icons.zoom_in, color: Colors.white, size: 16),
+                         ],
                        ),
                      ),
-                   ],
+                   ),
                  ),
-               ),
+                 const SizedBox(width: 8),
+                 // Face image (smaller, square)
+                 Expanded(
+                   flex: 2,
+                   child: _buildFaceImage(faceImageUrl, faceDetected),
+                 ),
+               ],
              ),
              const SizedBox(height: 12),
           ],
@@ -343,6 +353,93 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Builds face image thumbnail with fallback placeholder
+  Widget _buildFaceImage(String? url, bool detected) {
+    // No face image available at all
+    if (url == null || url.isEmpty) {
+      return Container(
+        height: 100,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_off_outlined, color: Colors.grey.shade400, size: 32),
+            const SizedBox(height: 4),
+            Text('Tidak ada\nfoto',
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Face image available (either cropped face or full frame fallback)
+    return GestureDetector(
+      onTap: () => _showImageDialog(url),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          children: [
+            Image.network(
+              url,
+              height: 100,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  height: 100,
+                  color: Colors.grey.shade100,
+                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  height: 100,
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                );
+              },
+            ),
+            // Label: "Wajah" or "Full Frame"
+            Positioned(
+              bottom: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: detected 
+                      ? Colors.green.withOpacity(0.8)
+                      : Colors.orange.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      detected ? Icons.face : Icons.photo_camera,
+                      color: Colors.white,
+                      size: 10,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      detected ? 'Wajah' : 'Full',
+                      style: const TextStyle(color: Colors.white, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
