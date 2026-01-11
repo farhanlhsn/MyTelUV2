@@ -21,23 +21,23 @@ class DosenService {
   /// Open sesi absensi
   Future<Map<String, dynamic>> openAbsensi({
     required int idKelas,
-    required String typeAbsensi,
     required DateTime mulai,
     required DateTime selesai,
     double? latitude,
     double? longitude,
     int? radiusMeter,
+    bool requireFace = false,
   }) async {
     final Response<dynamic> response = await _dio.post<dynamic>(
       '/api/akademik/open-absensi',
       data: {
         'id_kelas': idKelas,
-        'type_absensi': typeAbsensi,
         'mulai': mulai.toUtc().toIso8601String(),
         'selesai': selesai.toUtc().toIso8601String(),
         if (latitude != null) 'latitude': latitude,
         if (longitude != null) 'longitude': longitude,
         if (radiusMeter != null) 'radius_meter': radiusMeter,
+        'require_face': requireFace,
       },
     );
 

@@ -230,10 +230,11 @@ model PesertaKelas {
 model SesiAbsensi {        // Dosen/Admin buat SesiAbsensi, MAHASISWA Absensi
   id_sesi_absensi Int              @id @default(autoincrement())
   id_kelas        Int
-  type_absensi    TypeAbsensi
-  latitude        Float?           // kalau REMOTE & pakai koordinat
+  type_absensi    TypeAbsensi      @default(LOKAL_ABSENSI) // Legacy, deprecated
+  latitude        Float?           // Koordinat geofence
   longitude       Float?
   radius_meter    Int?             // radius validasi lokasi (meter), null = bebas (misal PJJ)
+  require_face    Boolean          @default(false)  // Perlu verifikasi wajah?
   mulai           DateTime
   selesai         DateTime
   status          Boolean          @default(true) //True = masih terbuka

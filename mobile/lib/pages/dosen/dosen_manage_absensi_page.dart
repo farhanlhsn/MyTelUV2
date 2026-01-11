@@ -3,9 +3,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../services/dosen_service.dart';
 import '../../utils/error_helper.dart';
+import '../common/geofence_picker_page.dart';
 import 'dosen_sesi_detail_page.dart';
 
 /// Get Downloads directory path
@@ -103,9 +103,12 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     final matakuliah = kelas['matakuliah'] as Map<String, dynamic>?;
     final namaMk = matakuliah?['nama_matakuliah'] ?? '';
 
-    String typeAbsensi = 'LOKAL_ABSENSI';
     int durasiMenit = 30;
-    int radiusMeter = 100;
+    bool requireFace = false;
+    double? selectedLat;
+    double? selectedLng;
+    int selectedRadius = 100;
+    String? locationName;
 
     showDialog(
       context: context,
@@ -116,17 +119,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DropdownButtonFormField<String>(
-                  value: typeAbsensi,
-                  decoration: const InputDecoration(labelText: 'Tipe Absensi'),
-                  items: const [
-                    DropdownMenuItem(value: 'LOKAL_ABSENSI', child: Text('Lokal (Face Recognition)')),
-                    DropdownMenuItem(value: 'REMOTE_ABSENSI', child: Text('Remote (GPS)')),
-                  ],
-                  onChanged: (v) => setDialogState(() => typeAbsensi = v!),
-                ),
-                const SizedBox(height: 16),
-
+                // Durasi
                 TextFormField(
                   initialValue: durasiMenit.toString(),
                   decoration: const InputDecoration(labelText: 'Durasi (menit)'),
@@ -135,11 +128,57 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 ),
                 const SizedBox(height: 16),
 
-                TextFormField(
-                  initialValue: radiusMeter.toString(),
-                  decoration: const InputDecoration(labelText: 'Radius (meter)'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) => radiusMeter = int.tryParse(v) ?? 100,
+                // Pilih Lokasi Button
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await Get.to<GeofenceData>(
+                      () => GeofencePickerPage(
+                        initialLatitude: selectedLat,
+                        initialLongitude: selectedLng,
+                        initialRadius: selectedRadius,
+                      ),
+                    );
+                    if (result != null) {
+                      setDialogState(() {
+                        selectedLat = result.latitude;
+                        selectedLng = result.longitude;
+                        selectedRadius = result.radiusMeter;
+                        locationName = result.locationName;
+                      });
+                    }
+                  },
+                  icon: Icon(
+                    selectedLat != null ? Icons.check_circle : Icons.map,
+                    color: selectedLat != null ? Colors.green : primaryRed,
+                  ),
+                  label: Text(
+                    selectedLat != null
+                        ? 'Lokasi: ${locationName ?? 'Dipilih'} (${selectedRadius}m)'
+                        : 'Pilih Lokasi Geofence',
+                    style: TextStyle(
+                      color: selectedLat != null ? Colors.green : primaryRed,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: selectedLat != null ? Colors.green : primaryRed,
+                    ),
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Require Face Checkbox
+                CheckboxListTile(
+                  value: requireFace,
+                  onChanged: (v) => setDialogState(() => requireFace = v ?? false),
+                  title: const Text('Perlu Verifikasi Wajah'),
+                  subtitle: const Text(
+                    'Mahasiswa harus selfie untuk absen',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  activeColor: primaryRed,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ],
             ),
@@ -150,8 +189,20 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              onPressed: () => _openAbsensi(idKelas, typeAbsensi, durasiMenit, radiusMeter),
-              style: ElevatedButton.styleFrom(backgroundColor: primaryRed),
+              onPressed: selectedLat == null
+                  ? null
+                  : () => _openAbsensi(
+                        idKelas: idKelas,
+                        durasiMenit: durasiMenit,
+                        latitude: selectedLat!,
+                        longitude: selectedLng!,
+                        radiusMeter: selectedRadius,
+                        requireFace: requireFace,
+                      ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryRed,
+                disabledBackgroundColor: Colors.grey,
+              ),
               child: const Text('Buka Absensi', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -160,13 +211,15 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     );
   }
 
-  Future<void> _openAbsensi(int idKelas, String typeAbsensi, int durasiMenit, int radiusMeter) async {
+  Future<void> _openAbsensi({
+    required int idKelas,
+    required int durasiMenit,
+    required double latitude,
+    required double longitude,
+    required int radiusMeter,
+    required bool requireFace,
+  }) async {
     Navigator.pop(context);
-
-    Position? position;
-    try {
-      position = await Geolocator.getCurrentPosition();
-    } catch (_) {}
 
     final now = DateTime.now();
     final selesai = now.add(Duration(minutes: durasiMenit));
@@ -174,12 +227,12 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     try {
       final result = await _dosenService.openAbsensi(
         idKelas: idKelas,
-        typeAbsensi: typeAbsensi,
         mulai: now,
         selesai: selesai,
-        latitude: position?.latitude ?? -6.970063,
-        longitude: position?.longitude ?? 107.627469,
+        latitude: latitude,
+        longitude: longitude,
         radiusMeter: radiusMeter,
+        requireFace: requireFace,
       );
 
       if (result['status'] == 'success') {

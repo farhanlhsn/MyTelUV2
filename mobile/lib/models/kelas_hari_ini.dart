@@ -9,6 +9,7 @@ class SesiAbsensiModel {
   final double? latitude;
   final double? longitude;
   final int? radiusMeter;
+  final bool requireFace;
   final DateTime mulai;
   final DateTime selesai;
   final bool status;
@@ -20,6 +21,7 @@ class SesiAbsensiModel {
     this.latitude,
     this.longitude,
     this.radiusMeter,
+    this.requireFace = false,
     required this.mulai,
     required this.selesai,
     required this.status,
@@ -33,6 +35,7 @@ class SesiAbsensiModel {
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       radiusMeter: json['radius_meter'] as int?,
+      requireFace: json['require_face'] as bool? ?? false,
       mulai: DateTime.parse(json['mulai'] as String),
       selesai: DateTime.parse(json['selesai'] as String),
       status: json['status'] as bool? ?? false,
@@ -47,6 +50,7 @@ class SesiAbsensiModel {
       'latitude': latitude,
       'longitude': longitude,
       'radius_meter': radiusMeter,
+      'require_face': requireFace,
       'mulai': mulai.toIso8601String(),
       'selesai': selesai.toIso8601String(),
       'status': status,
