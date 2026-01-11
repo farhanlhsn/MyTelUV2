@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminUserManagementPage extends StatefulWidget {
   const AdminUserManagementPage({super.key});
@@ -58,7 +59,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -75,89 +76,155 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   }
 
   void _showRegisterDialog() {
+    final formKey = GlobalKey<FormState>();
     final namaController = TextEditingController();
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
     String selectedRole = 'MAHASISWA';
+    bool isSubmitting = false;
+    bool obscurePassword = true;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Daftar Akun Baru', style: TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: namaController,
-                  decoration: InputDecoration(
-                    labelText: 'Nama Lengkap',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: namaController,
+                    decoration: InputDecoration(
+                      labelText: 'Nama Lengkap *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorMaxLines: 2,
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nama lengkap tidak boleh kosong';
+                      }
+                      if (value.trim().length < 3) {
+                        return 'Nama lengkap minimal 3 karakter';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: usernameController,
-                  decoration: InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: usernameController,
+                    decoration: InputDecoration(
+                      labelText: 'Username *',
+                      hintText: 'Contoh: john.doe',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Username tidak boleh kosong';
+                      }
+                      if (value.trim().length < 3) {
+                        return 'Username minimal 3 karakter';
+                      }
+                      if (value.contains(' ')) {
+                        return 'Username tidak boleh mengandung spasi';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: passwordController,
+                    obscureText: obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Password *',
+                      hintText: 'Minimal 6 karakter',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorMaxLines: 2,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setDialogState(() => obscurePassword = !obscurePassword);
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Password tidak boleh kosong';
+                      }
+                      if (value.length < 6) {
+                        return 'Password minimal 6 karakter';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedRole,
-                  decoration: InputDecoration(
-                    labelText: 'Role',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole,
+                    decoration: InputDecoration(
+                      labelText: 'Role *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'MAHASISWA', child: Text('Mahasiswa')),
+                      DropdownMenuItem(value: 'DOSEN', child: Text('Dosen')),
+                      DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
+                    ],
+                    onChanged: (value) => setDialogState(() => selectedRole = value!),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'MAHASISWA', child: Text('Mahasiswa')),
-                    DropdownMenuItem(value: 'DOSEN', child: Text('Dosen')),
-                    DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
-                  ],
-                  onChanged: (value) => setDialogState(() => selectedRole = value!),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'BATAL',
+                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+              ),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (namaController.text.isEmpty ||
-                    usernameController.text.isEmpty ||
-                    passwordController.text.isEmpty) {
-                  Get.snackbar('Error', 'Semua field harus diisi',
-                      backgroundColor: Colors.red, colorText: Colors.white);
-                  return;
-                }
-                Navigator.pop(context);
-                await _registerUser(
-                  nama: namaController.text,
-                  username: usernameController.text,
-                  password: passwordController.text,
-                  role: selectedRole,
-                );
-              },
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        final success = await _registerUser(
+                          nama: namaController.text.trim(),
+                          username: usernameController.text.trim(),
+                          password: passwordController.text,
+                          role: selectedRole,
+                        );
+                        if (success && context.mounted) {
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                      }
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('DAFTAR', style: TextStyle(color: Colors.white)),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('DAFTAR', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -165,17 +232,12 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
     );
   }
 
-  Future<void> _registerUser({
+  Future<bool> _registerUser({
     required String nama,
     required String username,
     required String password,
     required String role,
   }) async {
-    Get.dialog(
-      const Center(child: CircularProgressIndicator(color: Colors.white)),
-      barrierDismissible: false,
-    );
-
     try {
       final response = await _dio.post<dynamic>(
         '/api/auth/register',
@@ -187,77 +249,119 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
         },
       );
 
-      Get.back();
-
       if (response.data['status'] == 'success') {
-        Get.snackbar('Berhasil', 'Akun $nama berhasil dibuat',
-            backgroundColor: Colors.green, colorText: Colors.white);
+        ErrorHelper.showSuccess('Akun $nama berhasil dibuat');
         _loadUsers();
+        return true;
       } else {
         throw Exception(response.data['message']);
       }
-    } on DioException catch (e) {
-      Get.back();
-      Get.snackbar('Error', e.response?.data['message'] ?? e.message,
-          backgroundColor: Colors.red, colorText: Colors.white);
     } catch (e) {
-      Get.back();
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Membuat Akun');
+      return false;
     }
   }
 
   void _showResetPasswordDialog(Map<String, dynamic> user) {
+    final formKey = GlobalKey<FormState>();
     final passwordController = TextEditingController();
     final idUser = user['id_user'] as int;
     final nama = user['nama'] as String? ?? 'User';
+    bool isSubmitting = false;
+    bool obscurePassword = true;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Reset Password\n$nama', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: TextField(
-          controller: passwordController,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: 'Password Baru',
-            hintText: 'Min. 6 karakter',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text(
+                nama,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.normal),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (passwordController.text.length < 6) {
-                Get.snackbar('Error', 'Password minimal 6 karakter',
-                    backgroundColor: Colors.red, colorText: Colors.white);
-                return;
-              }
-              Navigator.pop(context);
-              await _resetPassword(idUser, passwordController.text, nama);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: passwordController,
+              obscureText: obscurePassword,
+              decoration: InputDecoration(
+                labelText: 'Password Baru *',
+                hintText: 'Minimal 6 karakter',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                errorMaxLines: 2,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    setDialogState(() => obscurePassword = !obscurePassword);
+                  },
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Password tidak boleh kosong';
+                }
+                if (value.length < 6) {
+                  return 'Password minimal 6 karakter';
+                }
+                return null;
+              },
             ),
-            child: const Text('RESET', style: TextStyle(color: Colors.white)),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'BATAL',
+                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        final success = await _resetPassword(idUser, passwordController.text, nama);
+                        if (success && context.mounted) {
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE63946),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('RESET', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _resetPassword(int idUser, String newPassword, String nama) async {
-    Get.dialog(
-      const Center(child: CircularProgressIndicator(color: Colors.white)),
-      barrierDismissible: false,
-    );
-
+  Future<bool> _resetPassword(int idUser, String newPassword, String nama) async {
     try {
       final response = await _dio.put<dynamic>(
         '/api/auth/admin/reset-password',
@@ -267,18 +371,15 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
         },
       );
 
-      Get.back();
-
       if (response.data['status'] == 'success') {
-        Get.snackbar('Berhasil', 'Password $nama berhasil direset',
-            backgroundColor: Colors.green, colorText: Colors.white);
+        ErrorHelper.showSuccess('Password $nama berhasil direset');
+        return true;
       } else {
         throw Exception(response.data['message']);
       }
     } catch (e) {
-      Get.back();
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Reset Password');
+      return false;
     }
   }
 
@@ -412,29 +513,95 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                             )
                           : _error != null
                               ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(_error!, style: const TextStyle(color: Colors.red)),
-                                      const SizedBox(height: 16),
-                                      ElevatedButton(
-                                        onPressed: _loadUsers,
-                                        child: const Text('Coba Lagi'),
-                                      ),
-                                    ],
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            Icons.error_outline,
+                                            size: 48,
+                                            color: Colors.red.shade400,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'Gagal Memuat Data',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          _error!,
+                                          style: TextStyle(color: Colors.grey.shade600),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 20),
+                                        ElevatedButton.icon(
+                                          onPressed: _loadUsers,
+                                          icon: const Icon(Icons.refresh, color: Colors.white),
+                                          label: const Text(
+                                            'Coba Lagi',
+                                            style: TextStyle(color: Colors.white),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFFE63946),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 24,
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 )
-                              : RefreshIndicator(
-                                  onRefresh: _loadUsers,
-                                  child: ListView.separated(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    itemCount: _filteredUsers.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                                    itemBuilder: (context, index) {
-                                      return _buildUserCard(_filteredUsers[index]);
-                                    },
-                                  ),
-                                ),
+                              : _filteredUsers.isEmpty
+                                  ? Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.person_search,
+                                            size: 64,
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            _searchQuery.isNotEmpty
+                                                ? 'User tidak ditemukan'
+                                                : 'Belum ada user',
+                                            style: TextStyle(
+                                              color: Colors.grey.shade500,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : RefreshIndicator(
+                                      onRefresh: _loadUsers,
+                                      child: ListView.separated(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        itemCount: _filteredUsers.length,
+                                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                                        itemBuilder: (context, index) {
+                                          return _buildUserCard(_filteredUsers[index]);
+                                        },
+                                      ),
+                                    ),
                     ),
                   ],
                 ),

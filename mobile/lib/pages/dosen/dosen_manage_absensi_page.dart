@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/dosen_service.dart';
+import '../../utils/error_helper.dart';
 import 'dosen_sesi_detail_page.dart';
 
 /// Get Downloads directory path
@@ -80,13 +81,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
       setState(() {
         _loadingSesi[idKelas] = false;
       });
-      Get.snackbar(
-        'Error',
-        'Gagal memuat sesi: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorHelper.showError('Gagal memuat sesi: $e');
     }
   }
 
@@ -188,32 +183,16 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
       );
 
       if (result['status'] == 'success') {
-        Get.snackbar(
-          'Berhasil',
+        ErrorHelper.showSuccess(
           'Sesi absensi dibuka sampai ${selesai.hour}:${selesai.minute.toString().padLeft(2, '0')}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
         );
         // Refresh sesi list
         _loadSesiForKelas(idKelas);
       } else {
-        Get.snackbar(
-          'Gagal',
-          result['message'] ?? 'Gagal membuka sesi',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+        ErrorHelper.showError(result['message'] ?? 'Gagal membuka sesi');
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorHelper.showError(e, title: 'Gagal Membuka Sesi');
     }
   }
 
@@ -235,13 +214,12 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
       
       final result = await OpenFile.open(file.path);
       if (result.type != ResultType.done) {
-         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
-            backgroundColor: Colors.green, colorText: Colors.white);
+         ErrorHelper.showSuccess('File tersimpan di folder Download');
       }
 
     } catch (e) {
       Get.back();
-      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError('Gagal download: $e');
     }
   }
 
@@ -263,13 +241,12 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
       
       final result = await OpenFile.open(file.path);
       if (result.type != ResultType.done) {
-         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
-            backgroundColor: Colors.green, colorText: Colors.white);
+         ErrorHelper.showSuccess('File tersimpan di folder Download');
       }
 
     } catch (e) {
       Get.back();
-      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError('Gagal download: $e');
     }
   }
 

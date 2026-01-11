@@ -7,6 +7,7 @@ import '../../services/post_service.dart';
 import '../../models/post_model.dart';
 import 'create_post_page.dart';
 import 'comments_page.dart';
+import '../common/image_viewer_page.dart';
 
 class PostPage extends StatefulWidget {
   final VoidCallback? onCloseTapped;
@@ -227,6 +228,18 @@ class _PostPageState extends State<PostPage> {
   void _sharePost(PostModel post) {
     final String content = '${post.user.nama} memposting:\n\n${post.content}${post.locationName != null ? '\n\n📍 ${post.locationName}' : ''}\n\nVia MyTelUV2';
     Share.share(content);
+  }
+
+  void _openImageViewer(List<String> images, int initialIndex) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImageViewerPage(
+          imageUrls: images,
+          initialIndex: initialIndex,
+        ),
+      ),
+    );
   }
 
   String _formatTimeAgo(DateTime dateTime) {
@@ -588,18 +601,21 @@ class _PostPageState extends State<PostPage> {
                 height: 250,
                 width: double.infinity,
                 child: post.media.length == 1
-                    ? CachedNetworkImage(
-                        imageUrl: post.media[0],
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: Colors.grey.shade100,
-                          child: const Center(
-                            child: CircularProgressIndicator(color: primaryColor),
+                    ? GestureDetector(
+                        onTap: () => _openImageViewer(post.media, 0),
+                        child: CachedNetworkImage(
+                          imageUrl: post.media[0],
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: Colors.grey.shade100,
+                            child: const Center(
+                              child: CircularProgressIndicator(color: primaryColor),
+                            ),
                           ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(Icons.broken_image, size: 40),
+                          errorWidget: (context, url, error) => Container(
+                            color: Colors.grey.shade200,
+                            child: const Icon(Icons.broken_image, size: 40),
+                          ),
                         ),
                       )
                     : ListView.builder(
@@ -607,23 +623,26 @@ class _PostPageState extends State<PostPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: post.media.length,
                         itemBuilder: (context, index) {
-                          return Container(
-                            width: 200,
-                            margin: EdgeInsets.only(right: index < post.media.length - 1 ? 8 : 0),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: CachedNetworkImage(
-                                imageUrl: post.media[index],
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Colors.grey.shade100,
-                                  child: const Center(
-                                    child: CircularProgressIndicator(color: primaryColor),
+                          return GestureDetector(
+                            onTap: () => _openImageViewer(post.media, index),
+                            child: Container(
+                              width: 200,
+                              margin: EdgeInsets.only(right: index < post.media.length - 1 ? 8 : 0),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: CachedNetworkImage(
+                                  imageUrl: post.media[index],
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(
+                                    color: Colors.grey.shade100,
+                                    child: const Center(
+                                      child: CircularProgressIndicator(color: primaryColor),
+                                    ),
                                   ),
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: Colors.grey.shade200,
-                                  child: const Icon(Icons.broken_image, size: 40),
+                                  errorWidget: (context, url, error) => Container(
+                                    color: Colors.grey.shade200,
+                                    child: const Icon(Icons.broken_image, size: 40),
+                                  ),
                                 ),
                               ),
                             ),

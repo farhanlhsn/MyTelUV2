@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
+import '../../utils/error_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -35,13 +36,9 @@ class _LoginPageState extends State<LoginPage> {
     );
 
     if (!success) {
-      Get.snackbar(
-        'Login Gagal',
+      ErrorHelper.showError(
         'Username atau password salah',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red.shade900,
-        icon: const Icon(Icons.error_outline, color: Colors.red),
+        title: 'Login Gagal',
       );
       return;
     }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import '../../utils/error_helper.dart';
 
 class NotificationListPage extends StatefulWidget {
   const NotificationListPage({super.key});
@@ -46,7 +47,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
     setState(() {
       _notifications = [];
     });
-    Get.snackbar('Sukses', 'Semua notifikasi dihapus');
+    ErrorHelper.showSuccess('Semua notifikasi dihapus');
   }
 
   String _formatDate(String isoString) {

@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:get/get.dart' hide Response;
 
 /// Environment configuration for API URLs
 /// 
@@ -87,13 +89,22 @@ class ApiClient {
 
             return handler.next(options);
           },
-          onResponse: (response, handler) {
+          onResponse: (response, handler) async {
             print(
               '✅ Response: ${response.statusCode} ${response.statusMessage}',
             );
             if (AppConfig.isDevelopment) {
               print('📥 Data: ${response.data}');
             }
+            
+            // Handle 401 Unauthorized in response (because validateStatus accepts < 500)
+            if (response.statusCode == 401) {
+              print('🚪 Token expired (in response), clearing storage and redirecting to login');
+              await _secureStorage.deleteAll();
+              _dioInstance = null; // Reset Dio instance
+              _redirectToLogin();
+            }
+            
             return handler.next(response);
           },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
@@ -103,10 +114,15 @@ class ApiClient {
               print('❌ DioError Response: ${error.response?.data}');
             }
 
-            // Handle 401 Unauthorized
+            // Handle 401 Unauthorized - Token expired
             if (error.response?.statusCode == 401) {
-              print('🚪 Token expired, clearing storage');
+              print('🚪 Token expired, clearing storage and redirecting to login');
               await _secureStorage.deleteAll();
+              _dioInstance = null; // Reset Dio instance
+              
+              // Redirect to login page using Get
+              // Import is lazy to avoid circular dependencies
+              _redirectToLogin();
             }
 
             return handler.next(error);
@@ -121,5 +137,76 @@ class ApiClient {
   // Method to reset dio instance (useful for logout)
   static void reset() {
     _dioInstance = null;
+  }
+  
+  // Flag to prevent multiple redirects
+  static bool _isRedirecting = false;
+  
+  // Helper method to redirect to login page
+  static void _redirectToLogin() {
+    // Prevent multiple redirects
+    if (_isRedirecting) return;
+    _isRedirecting = true;
+    
+    // Reset flag after short delay to allow future redirects
+    Future.delayed(const Duration(seconds: 2), () {
+      _isRedirecting = false;
+    });
+    
+    // Show session expired dialog
+    if (Get.context != null) {
+      Get.dialog(
+        AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.timer_off, color: Colors.orange.shade400, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Sesi Berakhir',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.',
+            style: TextStyle(height: 1.4),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Get.back(); // Close dialog
+                  Get.offAllNamed('/login'); // Navigate to login and clear stack
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE63946),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text('Login Kembali', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+        barrierDismissible: false,
+      );
+    } else {
+      // Fallback: direct navigation if dialog can't be shown
+      Get.offAllNamed('/login');
+    }
   }
 }

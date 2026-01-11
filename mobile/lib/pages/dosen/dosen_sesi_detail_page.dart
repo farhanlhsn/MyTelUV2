@@ -4,6 +4,7 @@ import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
+import '../../utils/error_helper.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -93,22 +94,10 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
     if (confirm == true) {
       try {
         await _dosenService.closeSesiAbsensi(widget.idSesi);
-        Get.snackbar(
-          'Berhasil',
-          'Sesi absensi berhasil ditutup',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
+        ErrorHelper.showSuccess('Sesi absensi berhasil ditutup');
         _loadSesiDetail();
       } catch (e) {
-        Get.snackbar(
-          'Gagal',
-          e.toString(),
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+        ErrorHelper.showError(e, title: 'Gagal Menutup Sesi');
       }
     }
   }
@@ -131,12 +120,11 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
       
       final result = await OpenFile.open(file.path);
       if (result.type != ResultType.done) {
-         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
-            backgroundColor: Colors.green, colorText: Colors.white);
+         ErrorHelper.showSuccess('File tersimpan di folder Download');
       }
     } catch (e) {
       Get.back();
-      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError('Gagal download: $e');
     }
   }
 
@@ -158,12 +146,11 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
       
       final result = await OpenFile.open(file.path);
       if (result.type != ResultType.done) {
-         Get.snackbar('Berhasil', 'File tersimpan di folder Download', 
-            backgroundColor: Colors.green, colorText: Colors.white);
+         ErrorHelper.showSuccess('File tersimpan di folder Download');
       }
     } catch (e) {
       Get.back();
-      Get.snackbar('Error', 'Gagal download: $e', backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError('Gagal download: $e');
     }
   }
 

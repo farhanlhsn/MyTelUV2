@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mobile/models/kelas.dart';
 import 'package:mobile/services/akademik_service.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminPesertaTab extends StatefulWidget {
   const AdminPesertaTab({super.key});
@@ -80,8 +81,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
 
   void _showAddPesertaDialog() {
     if (_selectedKelas == null) {
-      Get.snackbar('Error', 'Pilih kelas terlebih dahulu',
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError('Pilih kelas terlebih dahulu');
       return;
     }
 
@@ -98,8 +98,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
       ..sort((a, b) => (a['nama'] as String).compareTo(b['nama'] as String));
 
     if (availableMahasiswa.isEmpty) {
-      Get.snackbar('Info', 'Semua mahasiswa sudah terdaftar di kelas ini',
-          backgroundColor: Colors.orange, colorText: Colors.white);
+      ErrorHelper.showInfo('Semua mahasiswa sudah terdaftar di kelas ini');
       return;
     }
 
@@ -195,12 +194,10 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
         idKelas: _selectedKelas!.idKelas,
         idsMahasiswa: ids,
       );
-      Get.snackbar('Berhasil', '${ids.length} Peserta berhasil ditambahkan',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('${ids.length} Peserta berhasil ditambahkan');
       _loadPeserta(_selectedKelas!.idKelas);
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menambah Peserta');
     }
   }
 

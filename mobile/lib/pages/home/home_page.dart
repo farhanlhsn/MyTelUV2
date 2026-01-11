@@ -8,6 +8,7 @@ import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
 import 'package:mobile/pages/home/notification_list_page.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
@@ -216,13 +217,8 @@ class _HomePageState extends State<HomePage> {
                       Navigator.pop(context); // Tutup dialog
                       
                       // LOGIKA ABSENSI FINISH DI SINI
-                      Get.snackbar(
-                        "Berhasil", 
+                      ErrorHelper.showSuccess(
                         "Data Biometrik & Lokasi tercatat!",
-                        backgroundColor: Colors.green,
-                        colorText: Colors.white,
-                        snackPosition: SnackPosition.BOTTOM,
-                        margin: const EdgeInsets.all(10),
                       );
                     },
                     style: ElevatedButton.styleFrom(

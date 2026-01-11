@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../services/akademik_service.dart';
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
+import '../../utils/error_helper.dart';
 
 class JadwalMingguanPage extends StatefulWidget {
   const JadwalMingguanPage({super.key});
@@ -170,11 +171,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                 ? 'Info: ${override['alasan'] ?? 'Ada perubahan jadwal'}'
                 : 'Detail: ${matakuliah?['nama_matakuliah']}';
                 
-            Get.snackbar(
-              'Detail Kelas',
-              message,
-              snackPosition: SnackPosition.BOTTOM,
-            );
+            ErrorHelper.showInfo(message);
           }
         },
         borderRadius: BorderRadius.circular(16),
@@ -385,7 +382,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
               onTap: () {
                 Get.back();
                 // TODO: Navigate to history list if needed
-                Get.snackbar('Info', 'Fitur riwayat belum tersedia');
+                ErrorHelper.showInfo('Fitur riwayat belum tersedia');
               },
             ),
           ],

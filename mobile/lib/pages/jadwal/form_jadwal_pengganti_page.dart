@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/error_helper.dart';
 
 class FormJadwalPenggantiPage extends StatefulWidget {
   const FormJadwalPenggantiPage({super.key});
@@ -63,11 +64,11 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_tanggalAsli == null) {
-      Get.snackbar('Error', 'Pilih tanggal kelas asli', backgroundColor: Colors.red[100]);
+      ErrorHelper.showError('Pilih tanggal kelas asli');
       return;
     }
     if (_status == 'GANTI_JADWAL' && _tanggalGanti == null) {
-      Get.snackbar('Error', 'Pilih tanggal pengganti', backgroundColor: Colors.red[100]);
+      ErrorHelper.showError('Pilih tanggal pengganti');
       return;
     }
 
@@ -87,18 +88,10 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
 
       if (success) {
         Get.back(result: true); // Return result to refresh list
-        Get.snackbar(
-          'Sukses', 
-          'Jadwal pengganti berhasil dibuat',
-          backgroundColor: Colors.green[100],
-        );
+        ErrorHelper.showSuccess('Jadwal pengganti berhasil dibuat');
       }
     } catch (e) {
-      Get.snackbar(
-        'Error', 
-        e.toString().replaceAll('Exception: ', ''),
-        backgroundColor: Colors.red[100],
-      );
+      ErrorHelper.showError(e, title: 'Gagal Membuat Jadwal');
     } finally {
       setState(() => _isLoading = false);
     }
