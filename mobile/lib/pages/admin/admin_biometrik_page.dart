@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/biometrik_service.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminBiometrikPage extends StatefulWidget {
   const AdminBiometrikPage({super.key});
@@ -100,11 +101,8 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       Get.back(); // Close loading
 
       if (result['status'] == 'success') {
-        Get.snackbar(
-          'Berhasil',
+        ErrorHelper.showSuccess(
           hasBiometric ? 'Biometrik $nama berhasil diupdate' : 'Biometrik $nama berhasil ditambahkan',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
         );
         _loadUsers();
       } else {
@@ -112,12 +110,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       }
     } catch (e) {
       Get.back(); // Close loading
-      Get.snackbar(
-        'Error',
-        e.toString().replaceAll('Exception: ', ''),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorHelper.showError(e, title: 'Gagal Menyimpan Biometrik');
     }
   }
 
@@ -148,20 +141,10 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
     try {
       await _biometrikService.deleteBiometrik(idUser);
-      Get.snackbar(
-        'Berhasil',
-        'Biometrik $nama berhasil dihapus',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+      ErrorHelper.showSuccess('Biometrik $nama berhasil dihapus');
       _loadUsers();
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      ErrorHelper.showError(e, title: 'Gagal Menghapus Biometrik');
     }
   }
 

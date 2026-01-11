@@ -2,6 +2,7 @@ import 'package:flutter/material.dart'; // <-- PENTING
 import 'package:get/get.dart';
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
+import '../../utils/error_helper.dart';
 
 class SettingsPage extends StatelessWidget {
   SettingsPage({super.key});
@@ -74,27 +75,11 @@ class SettingsPage extends StatelessWidget {
   Future<void> _handleLogout() async {
     final bool success = await _authController.logout();
     if (!success) {
-      Get.snackbar(
-        'Logout Gagal',
-        'Terjadi kesalahan saat logout',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red.shade900,
-        icon: const Icon(Icons.error_outline, color: Colors.red),
-      );
+      ErrorHelper.showError('Terjadi kesalahan saat logout', title: 'Logout Gagal');
       return;
     }
 
-    Get.snackbar(
-      'Logout Berhasil',
-      'Anda telah keluar dari aplikasi',
-      snackPosition: SnackPosition.TOP,
-      backgroundColor: Colors.green.shade100,
-      colorText: Colors.green.shade900,
-      icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-      duration: const Duration(seconds: 2),
-    );
-
+    ErrorHelper.showSuccess('Anda telah keluar dari aplikasi');
     Get.offAllNamed(AppRoutes.login);
   }
 

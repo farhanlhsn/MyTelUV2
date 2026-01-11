@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/kelas.dart';
 import 'package:mobile/models/matakuliah.dart';
 import 'package:mobile/services/akademik_service.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminKelasTab extends StatefulWidget {
   const AdminKelasTab({super.key});
@@ -79,7 +79,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
       }
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -87,205 +87,299 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
 
   void _showFormDialog({KelasModel? kelas}) {
     final isEdit = kelas != null;
+    final formKey = GlobalKey<FormState>();
     int? selectedMatakuliah = kelas?.matakuliah?.idMatakuliah;
     int? selectedDosen = kelas?.dosen?.idUser;
-    
-    // Convert backend day (1-7) to dropdown value if exists
-    int? selectedHari = kelas?.hari; 
+    int? selectedHari = kelas?.hari;
     
     final namaKelasController = TextEditingController(text: kelas?.namaKelas);
     final ruanganController = TextEditingController(text: kelas?.ruangan);
     
-    // Parse times if editing, else default
-    // Assuming format HH:MM:SS or HH:MM from backend
-    // Backend sends ISO string? No, backend sends Time string usually.
-    // Let's assume the string from model is usable or needs simple parsing.
-    // In createKelas controller we expect HH:MM:SS.
-    
-    // Existing values from model usually come as "08:00:00"
     String initialMul = kelas?.jadwal?.split('-')[0].trim() ?? '08:00:00';
     String initialSel = kelas?.jadwal?.split('-')[1].trim() ?? '10:00:00';
     
-    // If jadwal string parsing failed or empty, use defaults
     if (initialMul.isEmpty) initialMul = '08:00:00';
     if (initialSel.isEmpty) initialSel = '10:00:00';
 
     final jamMulaiController = TextEditingController(text: initialMul);
     final jamBerakhirController = TextEditingController(text: initialSel);
+    
+    bool isSubmitting = false;
+    String? matakuliahError;
+    String? dosenError;
+    String? hariError;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(isEdit ? 'Edit Kelas' : 'Tambah Kelas', style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Matakuliah Dropdown
-                DropdownButtonFormField<int>(
-                  value: selectedMatakuliah,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Matakuliah',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Matakuliah Dropdown with validation
+                  DropdownButtonFormField<int>(
+                    value: selectedMatakuliah,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Matakuliah *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorText: matakuliahError,
+                      errorMaxLines: 2,
+                    ),
+                    items: _matakuliahList.map((mk) {
+                      return DropdownMenuItem(
+                        value: mk.idMatakuliah,
+                        child: SizedBox(
+                          width: 200,
+                          child: Text(
+                            '${mk.kodeMatakuliah} - ${mk.namaMatakuliah}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedMatakuliah = value;
+                        matakuliahError = null;
+                      });
+                    },
                   ),
-                  items: _matakuliahList.map((mk) {
-                    return DropdownMenuItem(
-                      value: mk.idMatakuliah,
-                      child: SizedBox(
-                        width: 200,
+                  const SizedBox(height: 16),
+
+                  // Dosen Dropdown with validation
+                  DropdownButtonFormField<int>(
+                    value: selectedDosen,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Dosen *',
+                      hintText: _dosenList.isEmpty ? 'Tidak ada dosen' : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorText: dosenError,
+                      errorMaxLines: 2,
+                    ),
+                    items: _dosenList.map((dosen) {
+                      return DropdownMenuItem(
+                        value: dosen['id_user'] as int,
                         child: Text(
-                          '${mk.kodeMatakuliah} - ${mk.namaMatakuliah}',
+                          dosen['nama'] as String,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) => setDialogState(() => selectedMatakuliah = value),
-                ),
-                const SizedBox(height: 16),
-
-                // Dosen Dropdown
-                DropdownButtonFormField<int>(
-                  value: selectedDosen,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Dosen',
-                    hintText: _dosenList.isEmpty ? 'Tidak ada dosen' : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      );
+                    }).toList(),
+                    onChanged: _dosenList.isEmpty 
+                        ? null 
+                        : (value) {
+                            setDialogState(() {
+                              selectedDosen = value;
+                              dosenError = null;
+                            });
+                          },
                   ),
-                  items: _dosenList.map((dosen) {
-                    return DropdownMenuItem(
-                      value: dosen['id_user'] as int,
-                      child: Text(
-                        dosen['nama'] as String,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: _dosenList.isEmpty 
-                      ? null 
-                      : (value) => setDialogState(() => selectedDosen = value),
-                ),
-                const SizedBox(height: 16),
-                
-                // Hari Dropdown
-                DropdownButtonFormField<int>(
-                  value: selectedHari,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Hari',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  
+                  // Hari Dropdown with validation
+                  DropdownButtonFormField<int>(
+                    value: selectedHari,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Hari *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorText: hariError,
+                      errorMaxLines: 2,
+                    ),
+                    items: List.generate(7, (index) {
+                       return DropdownMenuItem(
+                         value: index + 1,
+                         child: Text(_days[index]),
+                       );
+                    }),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedHari = value;
+                        hariError = null;
+                      });
+                    },
                   ),
-                  items: List.generate(7, (index) {
-                     return DropdownMenuItem(
-                       value: index + 1,
-                       child: Text(_days[index]),
-                     );
-                  }),
-                  onChanged: (value) => setDialogState(() => selectedHari = value),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Nama Kelas
-                TextField(
-                  controller: namaKelasController,
-                  decoration: InputDecoration(
-                    labelText: 'Nama Kelas',
-                    hintText: 'Contoh: Kelas A',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  // Nama Kelas with validation
+                  TextFormField(
+                    controller: namaKelasController,
+                    decoration: InputDecoration(
+                      labelText: 'Nama Kelas *',
+                      hintText: 'Contoh: Kelas A',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nama kelas tidak boleh kosong';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Ruangan
-                TextField(
-                  controller: ruanganController,
-                  decoration: InputDecoration(
-                    labelText: 'Ruangan',
-                    hintText: 'Contoh: Lab 1',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  // Ruangan with validation
+                  TextFormField(
+                    controller: ruanganController,
+                    decoration: InputDecoration(
+                      labelText: 'Ruangan *',
+                      hintText: 'Contoh: Lab 1',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Ruangan tidak boleh kosong';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // Jadwal Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: jamMulaiController,
-                        decoration: InputDecoration(
-                          labelText: 'Jam Mulai',
-                          hintText: '08:00:00',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  // Jadwal Row with validation
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: jamMulaiController,
+                          decoration: InputDecoration(
+                            labelText: 'Jam Mulai *',
+                            hintText: '08:00:00',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            errorMaxLines: 2,
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Wajib diisi';
+                            }
+                            // Validate time format
+                            final timeRegex = RegExp(r'^\d{2}:\d{2}(:\d{2})?$');
+                            if (!timeRegex.hasMatch(value)) {
+                              return 'Format: HH:MM';
+                            }
+                            return null;
+                          },
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: jamBerakhirController,
-                        decoration: InputDecoration(
-                          labelText: 'Jam Berakhir',
-                          hintText: '10:00:00',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: jamBerakhirController,
+                          decoration: InputDecoration(
+                            labelText: 'Jam Berakhir *',
+                            hintText: '10:00:00',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            errorMaxLines: 2,
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Wajib diisi';
+                            }
+                            final timeRegex = RegExp(r'^\d{2}:\d{2}(:\d{2})?$');
+                            if (!timeRegex.hasMatch(value)) {
+                              return 'Format: HH:MM';
+                            }
+                            return null;
+                          },
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'BATAL',
+                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+              ),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (selectedMatakuliah == null ||
-                    selectedDosen == null ||
-                    namaKelasController.text.isEmpty ||
-                    ruanganController.text.isEmpty) {
-                  Get.snackbar('Error', 'Semua field harus diisi',
-                      backgroundColor: Colors.red, colorText: Colors.white);
-                  return;
-                }
-                Navigator.pop(context);
-                
-                if (isEdit) {
-                  await _updateKelas(
-                    idKelas: kelas.idKelas,
-                    idMatakuliah: selectedMatakuliah!,
-                    idDosen: selectedDosen!,
-                    namaKelas: namaKelasController.text,
-                    ruangan: ruanganController.text,
-                    jamMulai: jamMulaiController.text,
-                    jamBerakhir: jamBerakhirController.text,
-                    hari: selectedHari,
-                  );
-                } else {
-                  await _createKelas(
-                    idMatakuliah: selectedMatakuliah!,
-                    idDosen: selectedDosen!,
-                    namaKelas: namaKelasController.text,
-                    ruangan: ruanganController.text,
-                    jamMulai: jamMulaiController.text,
-                    jamBerakhir: jamBerakhirController.text,
-                    hari: selectedHari,
-                  );
-                }
-              },
+              onPressed: isSubmitting 
+                  ? null
+                  : () async {
+                      // Manual validation for dropdowns
+                      bool hasDropdownError = false;
+                      
+                      if (selectedMatakuliah == null) {
+                        matakuliahError = 'Pilih matakuliah';
+                        hasDropdownError = true;
+                      }
+                      if (selectedDosen == null) {
+                        dosenError = 'Pilih dosen';
+                        hasDropdownError = true;
+                      }
+                      if (selectedHari == null) {
+                        hariError = 'Pilih hari';
+                        hasDropdownError = true;
+                      }
+                      
+                      if (hasDropdownError) {
+                        setDialogState(() {});
+                      }
+
+                      if (formKey.currentState!.validate() && !hasDropdownError) {
+                        setDialogState(() => isSubmitting = true);
+                        
+                        bool success;
+                        if (isEdit) {
+                          success = await _updateKelas(
+                            idKelas: kelas.idKelas,
+                            idMatakuliah: selectedMatakuliah!,
+                            idDosen: selectedDosen!,
+                            namaKelas: namaKelasController.text.trim(),
+                            ruangan: ruanganController.text.trim(),
+                            jamMulai: jamMulaiController.text.trim(),
+                            jamBerakhir: jamBerakhirController.text.trim(),
+                            hari: selectedHari,
+                          );
+                        } else {
+                          success = await _createKelas(
+                            idMatakuliah: selectedMatakuliah!,
+                            idDosen: selectedDosen!,
+                            namaKelas: namaKelasController.text.trim(),
+                            ruangan: ruanganController.text.trim(),
+                            jamMulai: jamMulaiController.text.trim(),
+                            jamBerakhir: jamBerakhirController.text.trim(),
+                            hari: selectedHari,
+                          );
+                        }
+                        
+                        if (success && context.mounted) {
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                      }
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              child: const Text('SIMPAN', style: TextStyle(color: Colors.white)),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('SIMPAN', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -293,7 +387,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     );
   }
 
-  Future<void> _createKelas({
+  Future<bool> _createKelas({
     required int idMatakuliah,
     required int idDosen,
     required String namaKelas,
@@ -312,16 +406,16 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
         jamBerakhir: jamBerakhir,
         hari: hari,
       );
-      Get.snackbar('Berhasil', 'Kelas berhasil ditambahkan',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Kelas berhasil ditambahkan');
       _loadData();
+      return true;
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menambah Kelas');
+      return false;
     }
   }
 
-  Future<void> _updateKelas({
+  Future<bool> _updateKelas({
     required int idKelas,
     required int idMatakuliah,
     required int idDosen,
@@ -342,12 +436,12 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
         jamBerakhir: jamBerakhir,
         hari: hari,
       );
-      Get.snackbar('Berhasil', 'Kelas berhasil diperbarui',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Kelas berhasil diperbarui');
       _loadData();
+      return true;
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Memperbarui Kelas');
+      return false;
     }
   }
 
@@ -355,12 +449,26 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hapus Kelas'),
-        content: Text('Apakah Anda yakin ingin menghapus ${kelas.namaKelas}?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.delete_outline, color: Colors.red.shade400),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Hapus Kelas')),
+          ],
+        ),
+        content: Text('Apakah Anda yakin ingin menghapus "${kelas.namaKelas}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('BATAL'),
+            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -375,12 +483,10 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
 
     try {
       await _akademikService.deleteKelas(kelas.idKelas);
-      Get.snackbar('Berhasil', 'Kelas berhasil dihapus',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Kelas berhasil dihapus');
       _loadData();
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menghapus Kelas');
     }
   }
 
@@ -388,13 +494,28 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hapus SEMUA Kelas'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.warning_amber_rounded, color: Colors.red.shade400),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Hapus SEMUA Kelas')),
+          ],
+        ),
         content: const Text(
-            'Apakah Anda yakin ingin menghapus SEMUA kelas? Tindakan ini tidak dapat dibatalkan.'),
+          'Apakah Anda yakin ingin menghapus SEMUA kelas?\n\nTindakan ini tidak dapat dibatalkan.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('BATAL'),
+            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -409,12 +530,10 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
 
     try {
       await _akademikService.deleteAllKelas();
-      Get.snackbar('Berhasil', 'Semua kelas berhasil dihapus',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Semua kelas berhasil dihapus');
       _loadData();
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menghapus Kelas');
     }
   }
 
@@ -429,21 +548,81 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                 )
               : _error != null
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(_error!, style: const TextStyle(color: Colors.red)),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _loadData,
-                            child: const Text('Coba Lagi'),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.error_outline,
+                                size: 48,
+                                color: Colors.red.shade400,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Gagal Memuat Data',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error!,
+                              style: TextStyle(color: Colors.grey.shade600),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: _loadData,
+                              icon: const Icon(Icons.refresh, color: Colors.white),
+                              label: const Text(
+                                'Coba Lagi',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE63946),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : _kelasList.isEmpty
-                      ? const Center(
-                          child: Text('Belum ada kelas', style: TextStyle(color: Colors.grey)),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.class_outlined,
+                                size: 64,
+                                color: Colors.grey.shade300,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Belum ada kelas',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
                         )
                       : RefreshIndicator(
                           onRefresh: _loadData,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/matakuliah.dart';
 import 'package:mobile/services/akademik_service.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminMatakuliahTab extends StatefulWidget {
   const AdminMatakuliahTab({super.key});
@@ -50,178 +50,271 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
   }
 
   void _showCreateDialog() {
+    final formKey = GlobalKey<FormState>();
     final namaController = TextEditingController();
     final kodeController = TextEditingController();
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Tambah Matakuliah',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: kodeController,
-                decoration: InputDecoration(
-                  labelText: 'Kode Matakuliah',
-                  hintText: 'Contoh: IF101',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: namaController,
-                decoration: InputDecoration(
-                  labelText: 'Nama Matakuliah',
-                  hintText: 'Contoh: Pemrograman Dasar',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Tambah Matakuliah',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (namaController.text.isEmpty || kodeController.text.isEmpty) {
-                Get.snackbar('Error', 'Semua field harus diisi',
-                    backgroundColor: Colors.red, colorText: Colors.white);
-                return;
-              }
-              Navigator.pop(context);
-              await _createMatakuliah(
-                namaController.text,
-                kodeController.text,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: kodeController,
+                    decoration: InputDecoration(
+                      labelText: 'Kode Matakuliah',
+                      hintText: 'Contoh: IF101',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Kode matakuliah tidak boleh kosong';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Kode matakuliah minimal 2 karakter';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: namaController,
+                    decoration: InputDecoration(
+                      labelText: 'Nama Matakuliah',
+                      hintText: 'Contoh: Pemrograman Dasar',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nama matakuliah tidak boleh kosong';
+                      }
+                      if (value.trim().length < 3) {
+                        return 'Nama matakuliah minimal 3 karakter';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
-            child: const Text('SIMPAN', style: TextStyle(color: Colors.white)),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'BATAL',
+                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        final success = await _createMatakuliah(
+                          namaController.text.trim(),
+                          kodeController.text.trim(),
+                        );
+                        if (success && context.mounted) {
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE63946),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('SIMPAN', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _showEditDialog(MatakuliahModel mk) {
+    final formKey = GlobalKey<FormState>();
     final namaController = TextEditingController(text: mk.namaMatakuliah);
     final kodeController = TextEditingController(text: mk.kodeMatakuliah);
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Edit Matakuliah',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: kodeController,
-                decoration: InputDecoration(
-                  labelText: 'Kode Matakuliah',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: namaController,
-                decoration: InputDecoration(
-                  labelText: 'Nama Matakuliah',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Edit Matakuliah',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _updateMatakuliah(
-                mk.idMatakuliah,
-                namaController.text,
-                kodeController.text,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: kodeController,
+                    decoration: InputDecoration(
+                      labelText: 'Kode Matakuliah',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Kode matakuliah tidak boleh kosong';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Kode matakuliah minimal 2 karakter';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: namaController,
+                    decoration: InputDecoration(
+                      labelText: 'Nama Matakuliah',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nama matakuliah tidak boleh kosong';
+                      }
+                      if (value.trim().length < 3) {
+                        return 'Nama matakuliah minimal 3 karakter';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
-            child: const Text('UPDATE', style: TextStyle(color: Colors.white)),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text(
+                'BATAL',
+                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setDialogState(() => isSubmitting = true);
+                        final success = await _updateMatakuliah(
+                          mk.idMatakuliah,
+                          namaController.text.trim(),
+                          kodeController.text.trim(),
+                        );
+                        if (success && context.mounted) {
+                          Navigator.pop(context);
+                        } else {
+                          setDialogState(() => isSubmitting = false);
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE63946),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('UPDATE', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _createMatakuliah(String nama, String kode) async {
+  Future<bool> _createMatakuliah(String nama, String kode) async {
     try {
       await _akademikService.createMatakuliah(
         namaMatakuliah: nama,
         kodeMatakuliah: kode,
       );
-      Get.snackbar('Berhasil', 'Matakuliah berhasil ditambahkan',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Matakuliah berhasil ditambahkan');
       _loadMatakuliah();
+      return true;
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menambah Matakuliah');
+      return false;
     }
   }
 
-  Future<void> _updateMatakuliah(int id, String nama, String kode) async {
+  Future<bool> _updateMatakuliah(int id, String nama, String kode) async {
     try {
       await _akademikService.updateMatakuliah(
         idMatakuliah: id,
         namaMatakuliah: nama,
         kodeMatakuliah: kode,
       );
-      Get.snackbar('Berhasil', 'Matakuliah berhasil diupdate',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Matakuliah berhasil diupdate');
       _loadMatakuliah();
+      return true;
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Mengupdate Matakuliah');
+      return false;
     }
   }
 
@@ -229,12 +322,26 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hapus Matakuliah'),
-        content: Text('Apakah Anda yakin ingin menghapus ${mk.namaMatakuliah}?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.delete_outline, color: Colors.red.shade400),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Hapus Matakuliah')),
+          ],
+        ),
+        content: Text('Apakah Anda yakin ingin menghapus "${mk.namaMatakuliah}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('BATAL'),
+            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -249,12 +356,10 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
 
     try {
       await _akademikService.deleteMatakuliah(mk.idMatakuliah);
-      Get.snackbar('Berhasil', 'Matakuliah berhasil dihapus',
-          backgroundColor: Colors.green, colorText: Colors.white);
+      ErrorHelper.showSuccess('Matakuliah berhasil dihapus');
       _loadMatakuliah();
     } catch (e) {
-      Get.snackbar('Error', e.toString(),
-          backgroundColor: Colors.red, colorText: Colors.white);
+      ErrorHelper.showError(e, title: 'Gagal Menghapus Matakuliah');
     }
   }
 
@@ -302,23 +407,80 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                 )
               : _error != null
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(_error!, style: const TextStyle(color: Colors.red)),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _loadMatakuliah,
-                            child: const Text('Coba Lagi'),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.error_outline,
+                                size: 48,
+                                color: Colors.red.shade400,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Gagal Memuat Data',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _error!,
+                              style: TextStyle(color: Colors.grey.shade600),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: _loadMatakuliah,
+                              icon: const Icon(Icons.refresh, color: Colors.white),
+                              label: const Text(
+                                'Coba Lagi',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE63946),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : _matakuliahList.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Belum ada matakuliah',
-                            style: TextStyle(color: Colors.grey),
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.book_outlined,
+                                size: 64,
+                                color: Colors.grey.shade300,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Belum ada matakuliah',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
                           ),
                         )
                       : RefreshIndicator(

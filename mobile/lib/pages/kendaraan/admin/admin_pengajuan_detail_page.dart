@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminPengajuanDetailPage extends StatefulWidget {
   final PengajuanPlatModel pengajuan;
@@ -48,25 +49,11 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
       );
 
       if (success) {
-        Get.snackbar(
-          'Berhasil',
-          'Kendaraan berhasil disetujui',
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(10),
-        );
+        ErrorHelper.showSuccess('Kendaraan berhasil disetujui');
         Navigator.pop(context, true);
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(10),
-      );
+      ErrorHelper.showError(e, title: 'Gagal Menyetujui');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -86,25 +73,11 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
       );
 
       if (success) {
-        Get.snackbar(
-          'Berhasil',
-          'Pengajuan kendaraan ditolak',
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-          margin: const EdgeInsets.all(10),
-        );
+        ErrorHelper.showSuccess('Pengajuan kendaraan ditolak');
         Navigator.pop(context, true);
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        e.toString(),
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(10),
-      );
+      ErrorHelper.showError(e, title: 'Gagal Menolak');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -205,13 +178,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               if (controller.text.trim().isNotEmpty) {
                 Navigator.pop(context, controller.text.trim());
               } else {
-                Get.snackbar(
-                  'Error',
-                  'Feedback tidak boleh kosong',
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                  snackPosition: SnackPosition.TOP,
-                );
+                ErrorHelper.showError('Feedback tidak boleh kosong');
               }
             },
             style: ElevatedButton.styleFrom(
