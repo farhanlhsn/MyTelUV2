@@ -333,6 +333,11 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     const faceFile = req.files?.face_image?.[0];
     const isFaceDetected = face_detected === 'true';
 
+    // Debug logging for face image reception
+    console.log(`[Edge Entry] Plate: ${plate_text}, Gate: ${gate_type}`);
+    console.log(`[Edge Entry] Plate file: ${plateFile ? `${plateFile.originalname} (${plateFile.size} bytes)` : 'NOT RECEIVED'}`);
+    console.log(`[Edge Entry] Face file: ${faceFile ? `${faceFile.originalname} (${faceFile.size} bytes)` : 'NOT RECEIVED'}, detected: ${isFaceDetected}`);
+
     // 1. Validate edge device secret
     const edgeSecret = req.headers['x-edge-secret'];
     if (edgeSecret !== process.env.EDGE_DEVICE_SECRET) {
@@ -414,8 +419,10 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
     // Async face image upload handling
     const processFaceImageUpload = async (logId) => {
+        console.log(`[Face Upload] Starting for log ${logId}, faceFile exists: ${!!faceFile}`);
         if (faceFile) {
             try {
+                console.log(`[Face Upload] Uploading ${faceFile.originalname} (${faceFile.size} bytes) to face_captures/`);
                 const uploadResult = await uploadFile(
                     faceFile.buffer,
                     faceFile.originalname,
@@ -431,10 +438,13 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                         face_detected: isFaceDetected
                     }
                 });
-                console.log(`Face image uploaded for log ${logId}: ${uploadResult.fileUrl} (detected: ${isFaceDetected})`);
+                console.log(`[Face Upload] SUCCESS for log ${logId}: ${uploadResult.fileUrl} (detected: ${isFaceDetected})`);
             } catch (error) {
-                console.error('Failed to upload face image:', error);
+                console.error(`[Face Upload] FAILED for log ${logId}:`, error.message);
+                console.error(error.stack);
             }
+        } else {
+            console.log(`[Face Upload] SKIPPED for log ${logId} - no faceFile received`);
         }
     };
 

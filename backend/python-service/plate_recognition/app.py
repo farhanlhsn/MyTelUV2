@@ -277,6 +277,8 @@ def process_parking():
         if face_image_file:
             face_img_bytes = face_image_file.read()
             app.logger.info(f"Face image received: {len(face_img_bytes)} bytes, detected: {face_detected}")
+        else:
+            app.logger.warning("No face_image in request from edge device!")
         
         if not parkiran_id:
             return jsonify({'gate_action': 'DENY', 'error': 'parkiran_id required'}), 400
