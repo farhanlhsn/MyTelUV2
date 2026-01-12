@@ -59,6 +59,13 @@ app.use(sanitizeInput); // Sanitize all input
 const authRoutes = require('./routes/authRoutes');
 const kendaraanRoutes = require('./routes/kendaraanRoutes');
 const akademikRoutes = require('./routes/akademikRoutes');
+<<<<<<< Updated upstream
+=======
+const biometrikRoutes = require('./routes/biometrikRoutes');
+const parkirRoutes = require('./routes/parkirRoutes');
+const postRoutes = require('./routes/postRoutes');
+const anomaliRoutes = require('./routes/anomaliRoutes');    
+>>>>>>> Stashed changes
 
 const port = process.env.PORT || 5050;
 app.get('/', (req, res) => {
@@ -68,6 +75,16 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/kendaraan', kendaraanRoutes);
 app.use('/api/akademik', akademikRoutes);
+<<<<<<< Updated upstream
+=======
+app.use('/api/biometrik', biometrikRoutes);
+app.use('/api/parkir', parkirRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/anomali', anomaliRoutes);
+
+// Import and initialize scheduler for background tasks
+const { initScheduler } = require('./utils/scheduler');
+>>>>>>> Stashed changes
 
 app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`);

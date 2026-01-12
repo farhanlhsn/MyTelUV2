@@ -678,6 +678,7 @@ class _HomePageState extends State<HomePage> {
             20.0,
             100.0,
           ), // Padding atas 20, bawah 100
+<<<<<<< Updated upstream
           child: GridView.builder(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -698,6 +699,71 @@ class _HomePageState extends State<HomePage> {
               );
             },
           ),
+=======
+          child: Obx(() {
+            // Filter menu items based on role (hide Biometric for DOSEN)
+            final userRole = _homeController.currentUser.value?.role;
+            final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems.where((item) {
+              if (item['label'] == 'Biometric' && userRole == 'DOSEN') {
+                return false;
+              }
+              return true;
+            }).toList();
+
+            // Add Academic menu for ADMIN
+            if (userRole == 'ADMIN') {
+              filteredMenuItems.add({
+                'icon': Icons.school,
+                'label': 'Academic',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.adminAkademik,
+              });
+              filteredMenuItems.add({
+                'icon': Icons.manage_accounts,
+                'label': 'Users',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.adminUserManagement,
+              });
+              filteredMenuItems.add({
+                'icon': Icons.warning_amber_rounded,
+                'label': 'Anomali',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.anomaliDashboard,
+              });
+            }
+
+            // Add Anomali menu for DOSEN
+            if (userRole == 'DOSEN') {
+              filteredMenuItems.add({
+                'icon': Icons.warning_amber_rounded,
+                'label': 'Anomali',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.anomaliDashboard,
+              });
+            }
+
+            return GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: filteredMenuItems.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemBuilder: (context, index) {
+                final item = filteredMenuItems[index];
+                return _buildGridItem(
+                  item['icon'],
+                  item['label'],
+                  item['color'],
+                  item['route'],
+                );
+              },
+            );
+          }),
+>>>>>>> Stashed changes
         ),
       ),
     );
