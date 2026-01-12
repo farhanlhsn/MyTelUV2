@@ -228,7 +228,7 @@ router.post('/kelas/peserta/add',
 router.post('/open-absensi',
     protect,
     authorize('DOSEN', 'ADMIN'),
-    validateRequired(['id_kelas', 'type_absensi', 'mulai', 'selesai']),
+    validateRequired(['id_kelas', 'mulai', 'selesai']),
     openAbsensi
 );
 

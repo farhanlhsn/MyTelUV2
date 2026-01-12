@@ -1314,7 +1314,7 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
 
 exports.openAbsensi = asyncHandler(async (req, res) => {
     // Dosen/Admin membuka sesi absensi untuk kelas tertentu
-    const { id_kelas, type_absensi, latitude, longitude, radius_meter, mulai, selesai, pjj } = req.body;
+    const { id_kelas, latitude, longitude, radius_meter, mulai, selesai, require_face } = req.body;
     const id_user = req.user.id_user;
 
     if (req.user.role !== 'DOSEN' && req.user.role !== 'ADMIN') {
@@ -1347,27 +1347,23 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
-    // Validate type_absensi enum
-    if (!['REMOTE_ABSENSI', 'LOKAL_ABSENSI'].includes(type_absensi)) {
-        return res.status(400).json({
-            status: "error",
-            message: "Invalid type_absensi. Must be REMOTE_ABSENSI or LOKAL_ABSENSI"
-        });
-    }
-
-    // Validate coordinates
+    // Validate coordinates (required for geofence)
     let lat = parseFloat(latitude);
     let lng = parseFloat(longitude);
     let radius = radius_meter ? parseInt(radius_meter) : null;
 
-    if (type_absensi === 'REMOTE_ABSENSI' && !pjj) {
-        if (
-            isNaN(lat) || isNaN(lng) || isNaN(radius) ||
-            lat < -90 || lat > 90 || lng < -180 || lng > 180 || radius <= 0
-        ) {
+    // Validate geofence coordinates if provided
+    if (!isNaN(lat) && !isNaN(lng)) {
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             return res.status(400).json({
                 status: "error",
-                message: "Invalid coordinates or radius for REMOTE_ABSENSI"
+                message: "Invalid coordinates"
+            });
+        }
+        if (radius !== null && radius <= 0) {
+            return res.status(400).json({
+                status: "error",
+                message: "Radius must be positive"
             });
         }
     }
@@ -1383,14 +1379,18 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
+    // Determine type_absensi for backward compatibility
+    const type_absensi = require_face === true ? 'LOKAL_ABSENSI' : 'REMOTE_ABSENSI';
+
     // Create absensi session
     const sesi = await prisma.sesiAbsensi.create({
         data: {
             id_kelas: parseInt(id_kelas),
             type_absensi,
-            latitude: lat || null,
-            longitude: lng || null,
+            latitude: isNaN(lat) ? null : lat,
+            longitude: isNaN(lng) ? null : lng,
             radius_meter: radius,
+            // require_face: require_face === true, // TODO: Uncomment after running: ALTER TABLE "SesiAbsensi" ADD COLUMN "require_face" BOOLEAN NOT NULL DEFAULT false;
             mulai: mulaiTime,
             selesai: selesaiTime,
             status: true,
@@ -1457,6 +1457,15 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
+    // Check if face verification is required - must use biometrik endpoint
+    if (sesi.require_face === true) {
+        return res.status(400).json({
+            status: "error",
+            message: "Sesi ini membutuhkan verifikasi wajah. Gunakan fitur absen biometrik.",
+            require_face: true
+        });
+    }
+
     const now = new Date();
     if (now < sesi.mulai || now > sesi.selesai) {
         return res.status(400).json({
@@ -1490,7 +1499,8 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
-    if (sesi.type_absensi === 'REMOTE_ABSENSI' && sesi.latitude !== null && sesi.longitude !== null && sesi.radius_meter !== null) {
+    // Always check geofence if coordinates are set on the session
+    if (sesi.latitude !== null && sesi.longitude !== null && sesi.radius_meter !== null) {
         const distance = haversineDistance(
             sesi.latitude,
             sesi.longitude,
@@ -1501,13 +1511,12 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         if (distance > sesi.radius_meter) {
             return res.status(403).json({
                 status: "error",
-                message: "Lokasi di luar area absensi"
+                message: "Lokasi di luar area absensi",
+                distance: Math.round(distance),
+                required_radius: sesi.radius_meter
             });
         }
     }
-
-    // TODO: kalau LOKAL_ABSENSI + face recognition:
-    // terima flag / hasil dari service face-recognition di sini
 
     await prisma.$executeRaw`
     INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, "updatedAt")
