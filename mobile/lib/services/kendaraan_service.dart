@@ -1,11 +1,19 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/api_client.dart';
 
 class KendaraanService {
-  static final Dio _dio = ApiClient.dio;
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static Dio _dio = ApiClient.dio;
+  
+  @visibleForTesting
+  static set dio(Dio dio) => _dio = dio;
+
+  static FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  @visibleForTesting
+  static set secureStorage(FlutterSecureStorage ss) => _secureStorage = ss;
 
   // Get histori pengajuan kendaraan user
   static Future<List<PengajuanPlatModel>> getHistoriPengajuan() async {
@@ -179,6 +187,104 @@ class KendaraanService {
       }
     } catch (e) {
       throw Exception('Unexpected error: $e');
+    }
+  }
+
+  // ========== ADMIN METHODS ==========
+
+  // Get all unverified kendaraan (for Admin)
+  static Future<Map<String, dynamic>> getAllUnverifiedKendaraan({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/api/kendaraan/all-unverified',
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        final List<dynamic> data = response.data['data'] ?? [];
+        final items = data
+            .map((item) => PengajuanPlatModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+        
+        return {
+          'items': items,
+          'totalPages': response.data['totalPages'] ?? 1,
+          'total': response.data['total'] ?? 0,
+          'currentPage': response.data['currentPage'] ?? 1,
+        };
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to fetch unverified kendaraan',
+        );
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error fetching unverified kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
+
+  // Verify kendaraan (for Admin)
+  static Future<bool> verifyKendaraan({
+    required int idKendaraan,
+    required int idUser,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/api/kendaraan/verify',
+        data: {
+          'id_kendaraan': idKendaraan,
+          'id_user': idUser,
+        },
+      );
+
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error verifying kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
+
+  // Reject kendaraan (for Admin)
+  static Future<bool> rejectKendaraan({
+    required int idKendaraan,
+    required int idUser,
+    required String feedback,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/api/kendaraan/reject',
+        data: {
+          'id_kendaraan': idKendaraan,
+          'id_user': idUser,
+          'feedback': feedback,
+        },
+      );
+
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error rejecting kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
     }
   }
 }

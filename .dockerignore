@@ -1,0 +1,80 @@
+# Git
+.git
+.gitignore
+
+# Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+
+# Test files
+test/
+tests/
+*.test.js
+*.test.py
+*.spec.js
+coverage/
+htmlcov/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Documentation
+*.md
+LICENSE
+
+# Mobile (not needed for backend Docker build)
+mobile/
+
+# Edge device
+edge_device/
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Archive
+archive/
+
+# Temporary files
+*.tmp
+*.temp
+*~

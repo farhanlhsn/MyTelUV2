@@ -1,0 +1,50 @@
+# Edge Device Configuration for Raspberry Pi 2
+# License Plate Detection System
+
+# Model Configuration
+model:
+  path: "models/license_plate_detection.onnx"  # Path to detection model
+  img_size: 640  # Input image size
+  confidence_threshold: 0.5  # Minimum confidence for detection
+
+# Server Configuration
+server:
+  url: "http://213.210.37.132:5001"  # Replace with your server URL
+  timeout: 10  # Request timeout in seconds
+
+# Camera Configuration
+camera:
+  index: 1  # Camera device index (0 for default camera)
+  width: 1280  # Camera capture width (increased for better quality)
+  height: 720  # Camera capture height (increased for better quality)
+  process_every_n_frames: 10  # Process every Nth frame (higher quality, less frequent)
+  show_preview: true  # Set to true for debugging (disable on headless Raspberry Pi)
+
+# Debug Configuration
+debug:
+  save_images: false  # Save original and preprocessed plate images for analysis
+  
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_detections: true  # Save detected plate images
+  detections_dir: "detections"  # Directory for saved images
+
+# Gate Configuration
+gate:
+  type: "MASUK"  # MASUK or KELUAR - determines which gate this device controls
+  parkiran_id: 1  # ID of the parkiran this gate belongs to
+  open_duration: 5  # Seconds to keep gate open after successful detection
+
+# GPIO Configuration (for real gate control on Raspberry Pi)
+gpio:
+  enabled: false  # Set to true when using real GPIO on Raspberry Pi
+  relay_pin: 17   # GPIO pin for relay/servo control
+
+# Face Detection Configuration (lightweight Haar Cascade)
+# Used to capture face image at gate entry for display in mobile app
+face_detection:
+  enabled: true                              # Set to false to disable face capture
+  min_face_size: 80                          # Minimum face size in pixels
+  scale_factor: 1.1                          # Detection scale factor
+  min_neighbors: 5                           # Min neighbors for robust detection

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
+import '../../utils/error_helper.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -40,13 +41,9 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _handleRegister() async {
     if (!_isFormValid) {
-      Get.snackbar(
-        'Form Tidak Lengkap',
+      ErrorHelper.showError(
         'Mohon lengkapi semua field dan setujui syarat & ketentuan',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.orange.shade100,
-        colorText: Colors.orange.shade900,
-        icon: const Icon(Icons.warning_amber, color: Colors.orange),
+        title: 'Form Tidak Lengkap',
       );
       return;
     }
@@ -59,13 +56,9 @@ class _RegisterPageState extends State<RegisterPage> {
     );
 
     if (!success) {
-      Get.snackbar(
-        'Registrasi Gagal',
+      ErrorHelper.showError(
         'Username mungkin sudah digunakan atau terjadi kesalahan',
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red.shade900,
-        icon: const Icon(Icons.error_outline, color: Colors.red),
+        title: 'Registrasi Gagal',
       );
       return;
     }
@@ -316,8 +309,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                           recognizer: TapGestureRecognizer()
                                             ..onTap = () {
                                               // TODO: Navigate to terms page
-                                              Get.snackbar(
-                                                'Info',
+                                              ErrorHelper.showInfo(
                                                 'Terms and Conditions page',
                                               );
                                             },

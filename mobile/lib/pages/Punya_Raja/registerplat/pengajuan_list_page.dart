@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import '../../../models/pengajuan_plat_model.dart';
+import '../../../services/kendaraan_service.dart';
 
 class PengajuanListPage extends StatefulWidget {
   const PengajuanListPage({super.key});
@@ -9,78 +11,124 @@ class PengajuanListPage extends StatefulWidget {
 }
 
 class _PengajuanListPageState extends State<PengajuanListPage> {
-  // Dummy data untuk demo - using updated model
-  List<PengajuanPlatModel> pengajuanList = [
-    PengajuanPlatModel(
-      idKendaraan: 1,
-      platNomor: 'DD 0000 KE',
-      namaKendaraan: 'HONDA VARIO',
-      statusPengajuan: 'MENUNGGU',
-      feedback: null,
-      fotoKendaraan: [],
-      fotoSTNK: '',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    PengajuanPlatModel(
-      idKendaraan: 2,
-      platNomor: 'DD 2222 KE',
-      namaKendaraan: 'HONDA BEAT',
-      statusPengajuan: 'DISETUJUI',
-      feedback: null,
-      fotoKendaraan: [],
-      fotoSTNK: '',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    PengajuanPlatModel(
-      idKendaraan: 3,
-      platNomor: 'DD 1111 AB',
-      namaKendaraan: 'YAMAHA NMAX',
-      statusPengajuan: 'DITOLAK',
-      feedback: 'Foto STNK tidak jelas',
-      fotoKendaraan: [],
-      fotoSTNK: '',
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 5)),
-    ),
-  ];
+  List<PengajuanPlatModel> pengajuanList = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  void _updateStatus(int idKendaraan, String newStatus) {
-    setState(() {
-      final index = pengajuanList.indexWhere(
-        (item) => item.idKendaraan == idKendaraan,
-      );
-      if (index != -1) {
-        pengajuanList[index] = PengajuanPlatModel(
-          idKendaraan: pengajuanList[index].idKendaraan,
-          namaKendaraan: pengajuanList[index].namaKendaraan,
-          platNomor: pengajuanList[index].platNomor,
-          statusPengajuan: newStatus,
-          feedback: pengajuanList[index].feedback,
-          fotoKendaraan: pengajuanList[index].fotoKendaraan,
-          fotoSTNK: pengajuanList[index].fotoSTNK,
-          createdAt: pengajuanList[index].createdAt,
-          updatedAt: DateTime.now(),
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final data = await KendaraanService.getAllUnverifiedKendaraan();
+      setState(() {
+        pengajuanList = data['items'] as List<PengajuanPlatModel>;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateStatus(PengajuanPlatModel pengajuan, String action) async {
+    try {
+      bool success = false;
+      
+      if (action == 'DISETUJUI') {
+        success = await KendaraanService.verifyKendaraan(
+          idKendaraan: pengajuan.idKendaraan,
+          idUser: pengajuan.idUser ?? 0,
+        );
+      } else {
+        // Show feedback dialog for rejection
+        final feedback = await _showFeedbackDialog();
+        if (feedback == null || feedback.isEmpty) return;
+        
+        success = await KendaraanService.rejectKendaraan(
+          idKendaraan: pengajuan.idKendaraan,
+          idUser: pengajuan.idUser ?? 0,
+          feedback: feedback,
         );
       }
-    });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          newStatus == 'DISETUJUI'
-              ? 'Pengajuan berhasil disetujui'
-              : 'Pengajuan berhasil ditolak',
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'DISETUJUI'
+                  ? 'Pengajuan berhasil disetujui'
+                  : 'Pengajuan berhasil ditolak',
+            ),
+            backgroundColor: action == 'DISETUJUI' ? Colors.green : Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _loadData(); // Refresh list
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor: newStatus == 'DISETUJUI' ? Colors.green : Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+      );
+    }
+  }
+
+  Future<String?> _showFeedbackDialog() async {
+    final TextEditingController feedbackController = TextEditingController();
+    
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Alasan Penolakan'),
+          content: TextField(
+            controller: feedbackController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Masukkan alasan penolakan...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (feedbackController.text.trim().isNotEmpty) {
+                  Navigator.pop(context, feedbackController.text.trim());
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Tolak'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  void _showConfirmDialog(int idKendaraan, String action) {
+  void _showConfirmDialog(PengajuanPlatModel pengajuan, String action) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -105,12 +153,10 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                _updateStatus(idKendaraan, action);
+                _updateStatus(pengajuan, action);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: action == 'DISETUJUI'
-                    ? Colors.green
-                    : Colors.red,
+                backgroundColor: action == 'DISETUJUI' ? Colors.green : Colors.red,
               ),
               child: Text(action == 'DISETUJUI' ? 'Setujui' : 'Tolak'),
             ),
@@ -142,11 +188,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                     color: Colors.white,
                     size: 20.0,
                   ),
-                  onPressed: () {
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
-                    }
-                  },
+                  onPressed: () => Get.back(),
                 ),
                 const Text(
                   'Pengajuan Register Plat',
@@ -171,15 +213,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                   topRight: Radius.circular(30),
                 ),
               ),
-              child: pengajuanList.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: pengajuanList.length,
-                      itemBuilder: (context, index) {
-                        return _buildPengajuanCard(pengajuanList[index]);
-                      },
-                    ),
+              child: _buildContent(primaryColor),
             ),
           ),
         ],
@@ -187,24 +221,61 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(
-            'Belum ada pengajuan',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-        ],
+  Widget _buildContent(Color primaryColor) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 60, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'Gagal memuat data',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _loadData,
+              child: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (pengajuanList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Belum ada pengajuan',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: pengajuanList.length,
+        itemBuilder: (context, index) {
+          return _buildPengajuanCard(pengajuanList[index], primaryColor);
+        },
       ),
     );
   }
 
-  Widget _buildPengajuanCard(PengajuanPlatModel pengajuan) {
-    const Color primaryColor = Color(0xFFE63946);
+  Widget _buildPengajuanCard(PengajuanPlatModel pengajuan, Color primaryColor) {
     final bool isPending = pengajuan.statusPengajuan == 'MENUNGGU';
 
     return Container(
@@ -222,7 +293,6 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Nama Kendaraan
                 Text(
                   pengajuan.namaKendaraan,
                   style: const TextStyle(
@@ -232,8 +302,6 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-
-                // Nomor Plat
                 Text(
                   pengajuan.platNomor,
                   style: TextStyle(
@@ -243,13 +311,8 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // Status Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
                     color: pengajuan.getStatusColor(),
                     borderRadius: BorderRadius.circular(20),
@@ -269,10 +332,9 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
 
           const SizedBox(width: 16),
 
-          // Kolom Kanan: Tombol TOLAK dan TERIMA (Vertikal)
+          // Kolom Kanan: Tombol TOLAK dan TERIMA
           Column(
             children: [
-              // Tombol TOLAK
               Container(
                 width: 90,
                 height: 36,
@@ -286,8 +348,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                 ),
                 child: TextButton(
                   onPressed: isPending
-                      ? () =>
-                            _showConfirmDialog(pengajuan.idKendaraan, 'DITOLAK')
+                      ? () => _showConfirmDialog(pengajuan, 'DITOLAK')
                       : null,
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
@@ -305,8 +366,6 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Tombol TERIMA
               Container(
                 width: 90,
                 height: 36,
@@ -316,10 +375,7 @@ class _PengajuanListPageState extends State<PengajuanListPage> {
                 ),
                 child: TextButton(
                   onPressed: isPending
-                      ? () => _showConfirmDialog(
-                          pengajuan.idKendaraan,
-                          'DISETUJUI',
-                        )
+                      ? () => _showConfirmDialog(pengajuan, 'DISETUJUI')
                       : null,
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,

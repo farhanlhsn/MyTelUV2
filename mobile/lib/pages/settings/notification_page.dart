@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../utils/error_helper.dart';
 
 class NotificationPage extends StatelessWidget {
   const NotificationPage({super.key});
@@ -68,16 +69,12 @@ class NotificationPage extends StatelessWidget {
                   // Ubah nilai state
                   isNotificationEnabled.value = value;
                   
-                  // Feedback sederhana (SnackBar)
-                  Get.snackbar(
-                    value ? "Notifikasi Aktif" : "Notifikasi Non-Aktif", 
-                    value ? "Anda akan menerima notifikasi" : "Anda tidak akan menerima notifikasi",
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: value ? Colors.green.shade100 : Colors.red.shade100,
-                    colorText: value ? Colors.green.shade900 : Colors.red.shade900,
-                    duration: const Duration(seconds: 1),
-                    margin: const EdgeInsets.all(16),
-                  );
+                  // Feedback sederhana
+                  if (value) {
+                    ErrorHelper.showSuccess('Notifikasi aktif - Anda akan menerima notifikasi');
+                  } else {
+                    ErrorHelper.showInfo('Notifikasi non-aktif - Anda tidak akan menerima notifikasi');
+                  }
                 },
               )),
             ),

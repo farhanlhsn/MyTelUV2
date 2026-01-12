@@ -3,3 +3,16 @@ node_modules
 .env
 
 /generated/prisma
+
+# Temporary uploads
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv

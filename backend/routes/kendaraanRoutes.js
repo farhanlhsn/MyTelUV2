@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerKendaraan, getKendaraan, deleteKendaraan, verifyKendaraan, getAllUnverifiedKendaraan, getAllKendaraan, getHistoriPengajuan, rejectKendaraan, getAllMyKendaraan } = require('../controllers/kendaraanController');
+const { registerKendaraan, getKendaraan, deleteKendaraan, verifyKendaraan, getAllUnverifiedKendaraan, getAllKendaraan, getHistoriPengajuan, rejectKendaraan } = require('../controllers/kendaraanController');
 const { uploadFields, validateFileSize, requireFile } = require('../middlewares/multerMiddleware');
 const { validateRequired } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
@@ -12,9 +12,9 @@ router.post('/register',
     ]),
     protect,
     validateRequired(['plat_nomor', 'nama_kendaraan']), // id_user tidak perlu, ambil dari token
-    validateFileSize,  
-    requireFile,       
-    registerKendaraan  
+    validateFileSize,
+    requireFile,
+    registerKendaraan
 );
 
 router.get('/',
@@ -51,12 +51,7 @@ router.get('/histori-pengajuan',
     getHistoriPengajuan
 );
 
-// Route untuk user melihat semua kendaraan mereka
-router.get('/all-my-kendaraan',
-    protect,
-    getAllMyKendaraan
-);
-
+// Note: Use GET / instead of /all-my-kendaraan - route removed to avoid duplication
 // Route untuk admin menolak pengajuan dengan feedback
 router.post('/reject',
     protect,

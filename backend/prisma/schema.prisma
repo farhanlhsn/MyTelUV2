@@ -27,6 +27,10 @@ enum StatusPengajuan {
   DISETUJUI
   DITOLAK
 }
+enum ParkingType {
+  MASUK
+  KELUAR
+}
 
 // =================== Models ===================
 model User {
@@ -35,6 +39,7 @@ model User {
   username       String           @unique
   password       String
   role           Role
+  fcm_token      String?          // Firebase Cloud Messaging device token
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   deletedAt      DateTime?
@@ -46,6 +51,10 @@ model User {
   logParkir      LogParkir[]
   kelasDiampu    Kelas[]          @relation("DosenKelas")
   pesertaKelas   PesertaKelas[]
+  posts          Post[]
+  postLikes      PostLike[]
+  postComments   PostComment[]
+  jadwalPengganti JadwalPengganti[] @relation("DosenJadwalPengganti")
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
@@ -56,7 +65,8 @@ model User {
 model DataBiometrik {
   id_biometrik   Int       @id @default(autoincrement())
   id_user        Int       @unique
-  face_data_hash String    @db.VarChar(255)
+  face_embedding Float[]   // 512D embedding vector from InsightFace
+  photo_url      String?   // Face image URL from Cloudflare R2 (optional backup)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -111,11 +121,16 @@ model Parkiran {
 }
 
 model LogParkir {
-  id_log_parkir Int       @id @default(autoincrement())
+  id_log_parkir Int         @id @default(autoincrement())
   id_kendaraan  Int
   id_parkiran   Int
   id_user       Int?
-  timestamp     DateTime  @default(now())
+  type          ParkingType // MASUK atau KELUAR
+  confidence    Float?      // OCR confidence score
+  image_url     String?     // Captured plate image URL
+  face_image_url String?    // Face capture (cropped face or full frame fallback)
+  face_detected  Boolean    @default(false) // True if face was detected, false = full frame fallback
+  timestamp     DateTime    @default(now())
 
   kendaraan Kendaraan @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)
   parkiran  Parkiran  @relation(fields: [id_parkiran], references: [id_parkiran], onDelete: Restrict)
@@ -125,6 +140,7 @@ model LogParkir {
   @@index([id_parkiran, timestamp], map: "idx_log_parkiran_ts")
   @@index([id_user, timestamp], map: "idx_log_user_ts")
   @@index([timestamp], map: "idx_log_ts")
+  @@index([type], map: "idx_log_type")
   @@map("log_parkir")
 }
 
@@ -147,6 +163,7 @@ model Kelas {
   id_kelas       Int       @id @default(autoincrement())
   id_matakuliah  Int
   id_dosen       Int
+  hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
   jam_mulai      Unsupported("time")
   jam_berakhir   Unsupported("time")
   nama_kelas     String
@@ -161,12 +178,38 @@ model Kelas {
   absensi    Absensi[]
   laporan    LaporanAnomali[]
   sesiAbsensi  SesiAbsensi[]
+  jadwalPengganti JadwalPengganti[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
   @@index([ruangan], map: "idx_kelas_ruangan")
   @@index([jam_mulai, jam_berakhir], map: "idx_kelas_waktu")
   @@index([deletedAt], map: "idx_kelas_deleted")
+  @@index([hari], map: "idx_kelas_hari")
   @@map("kelas")
+}
+
+// Jadwal pengganti untuk perubahan jadwal sementara (dosen tidak bisa hadir, dll)
+model JadwalPengganti {
+  id_jadwal_pengganti Int       @id @default(autoincrement())
+  id_kelas            Int
+  tanggal_asli        DateTime  // Tanggal kelas yang dijadwalkan aslinya
+  status              String    // LIBUR, GANTI_JADWAL
+  tanggal_ganti       DateTime? // Tanggal baru (null jika LIBUR)
+  jam_mulai_ganti     Unsupported("time")? // Jam baru (opsional)
+  jam_berakhir_ganti  Unsupported("time")? 
+  ruangan_ganti       String?   // Ruangan baru (opsional)
+  alasan              String    // Alasan perubahan
+  createdBy           Int       // ID dosen yang membuat
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  kelas               Kelas     @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  dosen               User      @relation("DosenJadwalPengganti", fields: [createdBy], references: [id_user])
+
+  @@index([id_kelas, tanggal_asli], map: "idx_jadwal_pengganti_kelas_tgl")
+  @@index([tanggal_ganti], map: "idx_jadwal_pengganti_tgl_ganti")
+  @@map("jadwal_pengganti")
 }
 
 model PesertaKelas {
@@ -187,10 +230,11 @@ model PesertaKelas {
 model SesiAbsensi {        // Dosen/Admin buat SesiAbsensi, MAHASISWA Absensi
   id_sesi_absensi Int              @id @default(autoincrement())
   id_kelas        Int
-  type_absensi    TypeAbsensi
-  latitude        Float?           // kalau REMOTE & pakai koordinat
+  type_absensi    TypeAbsensi      @default(LOKAL_ABSENSI) // Legacy, deprecated
+  latitude        Float?           // Koordinat geofence
   longitude       Float?
   radius_meter    Int?             // radius validasi lokasi (meter), null = bebas (misal PJJ)
+  require_face    Boolean          @default(false)  // Perlu verifikasi wajah?
   mulai           DateTime
   selesai         DateTime
   status          Boolean          @default(true) //True = masih terbuka
@@ -243,4 +287,60 @@ model LaporanAnomali {
   @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
   @@index([deletedAt], map: "idx_anomali_deleted")
   @@map("laporan_anomali")
+}
+
+// =================== POST MODELS ===================
+model Post {
+  id_post     Int           @id @default(autoincrement())
+  id_user     Int
+  content     String        @db.Text
+  media       String[]      // Array of media URLs (images, videos, gifs)
+  latitude    Float?
+  longitude   Float?
+  location_name String?     @db.VarChar(255)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+
+  user        User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  likes       PostLike[]
+  comments    PostComment[]
+
+  @@index([id_user, createdAt], map: "idx_post_user_created")
+  @@index([createdAt], map: "idx_post_created")
+  @@index([deletedAt], map: "idx_post_deleted")
+  @@map("posts")
+}
+
+model PostLike {
+  id_like     Int      @id @default(autoincrement())
+  id_post     Int
+  id_user     Int
+  createdAt   DateTime @default(now())
+
+  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@unique([id_post, id_user], map: "uq_post_user_like")
+  @@index([id_post], map: "idx_like_post")
+  @@index([id_user], map: "idx_like_user")
+  @@map("post_likes")
+}
+
+model PostComment {
+  id_comment  Int      @id @default(autoincrement())
+  id_post     Int
+  id_user     Int
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([id_post, createdAt], map: "idx_comment_post_created")
+  @@index([id_user], map: "idx_comment_user")
+  @@index([deletedAt], map: "idx_comment_deleted")
+  @@map("post_comments")
 }

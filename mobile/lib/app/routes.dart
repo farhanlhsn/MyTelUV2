@@ -16,8 +16,6 @@ import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
-<<<<<<< Updated upstream
-=======
 import '../pages/kendaraan/admin/admin_pengajuan_list_page.dart';
 import '../pages/admin/admin_akademik_page.dart';
 import '../pages/admin/admin_biometrik_page.dart';
@@ -29,13 +27,13 @@ import '../pages/jadwal/form_jadwal_pengganti_page.dart';
 import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
 
->>>>>>> Stashed changes
 class AppRoutes {
+  static const String splash = '/';
   static const String login = '/login';
   static const String home = '/home';
   static const String me = '/me';
   static const String register = '/register';
-  static const String registerPlat = '/';
+  static const String registerPlat = '/register-plat';
   static const String registerSuccess = '/success';
   static const String pengajuanList = '/pengajuan-list';
   static const String otpVerification = '/otp-verification';
@@ -46,8 +44,6 @@ class AppRoutes {
   static const String historiParkir = '/histori-parkir';
   static const String account = '/account';
   static const String notification = '/notification';
-<<<<<<< Updated upstream
-=======
   static const String adminPengajuanList = '/admin-pengajuan-list';
   static const String adminAkademik = '/admin-akademik';
   static const String adminBiometrik = '/admin-biometrik';
@@ -58,8 +54,11 @@ class AppRoutes {
   static const String anomaliResult = '/anomali-result';
   static const String anomaliDashboard = '/anomali-dashboard';
   
->>>>>>> Stashed changes
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
+    GetPage<dynamic>(
+      name: splash,
+      page: () => const SplashPage(),
+    ),
     GetPage<dynamic>(
       name: login,
       page: () => const LoginPage(),
@@ -120,9 +119,6 @@ class AppRoutes {
     GetPage<dynamic>(
       name: notification,
       page: () => const NotificationPage(),
-<<<<<<< Updated upstream
-    )
-=======
     ),
     GetPage<dynamic>(
       name: adminPengajuanList,
@@ -160,6 +156,5 @@ class AppRoutes {
       name: anomaliDashboard,
       page: () => const AnomaliDashboardPage(),
     ),
->>>>>>> Stashed changes
   ];
 }

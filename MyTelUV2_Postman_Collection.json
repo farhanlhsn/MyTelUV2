@@ -1,0 +1,1564 @@
+{
+    "info": {
+        "_postman_id": "myteluv2-api-collection",
+        "name": "MyTelUV2 API Collection",
+        "description": "Complete Postman collection for MyTelUV2 backend API - includes Auth, Akademik, Biometrik, and Kendaraan endpoints",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{access_token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:5050",
+            "type": "string"
+        },
+        {
+            "key": "access_token",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Authentication",
+            "item": [
+                {
+                    "name": "Register",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.token) {",
+                                    "        pm.collectionVariables.set('access_token', jsonData.data.token);",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"nama\": \"Test User\",\n    \"username\": \"testuser\",\n    \"password\": \"Test123!\",\n    \"role\": \"MAHASISWA\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "register"
+                            ]
+                        },
+                        "description": "Register a new user. Required fields: nama, username, password. Optional: role (default: MAHASISWA)"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Login",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.token) {",
+                                    "        pm.collectionVariables.set('access_token', jsonData.data.token);",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"testuser\",\n    \"password\": \"Test123!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Login with username and password. Returns JWT token that will be automatically saved."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Me",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "me"
+                            ]
+                        },
+                        "description": "Get current user information. Requires authentication token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All Users (Admin Only)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/users?page=1&limit=10",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "users"
+                            ],
+                            "query": [
+                                {
+                                    "key": "role",
+                                    "value": "MAHASISWA",
+                                    "description": "Filter by role: MAHASISWA, DOSEN, or ADMIN",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "john",
+                                    "description": "Search in nama or username (case-insensitive)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1",
+                                    "description": "Page number for pagination (default: 1)"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10",
+                                    "description": "Items per page, max 100 (default: 10)"
+                                },
+                                {
+                                    "key": "sortBy",
+                                    "value": "createdAt",
+                                    "description": "Sort field: createdAt, updatedAt, nama, username, role (default: createdAt)",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "order",
+                                    "value": "desc",
+                                    "description": "Sort order: asc or desc (default: desc)",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "description": "Get all users with filtering, searching, pagination, and sorting. **Requires ADMIN role**. Returns list of users (password excluded), total count, and pagination metadata. Enable query parameters as needed for filtering."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Authentication endpoints for user registration, login, and profile retrieval"
+        },
+        {
+            "name": "Akademik",
+            "item": [
+                {
+                    "name": "Matakuliah",
+                    "item": [
+                        {
+                            "name": "Create Matakuliah",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"nama_matakuliah\": \"Pemrograman Web\",\n    \"kode_matakuliah\": \"IF101\",\n    \"sks\": 3\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/matakuliah",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "matakuliah"
+                                    ]
+                                },
+                                "description": "Create a new course (matakuliah). Requires ADMIN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get All Matakuliah",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/matakuliah",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "matakuliah"
+                                    ]
+                                },
+                                "description": "Get all courses. Requires authentication."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Matakuliah by ID",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/matakuliah/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "matakuliah",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Get a specific course by ID. Requires authentication."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Update Matakuliah",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"nama_matakuliah\": \"Pemrograman Web Lanjut\",\n    \"kode_matakuliah\": \"IF102\",\n    \"sks\": 4\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/matakuliah/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "matakuliah",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Update a course. Requires ADMIN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Delete Matakuliah",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "DELETE",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/matakuliah/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "matakuliah",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Delete a course. Requires ADMIN role."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "Endpoints for managing courses (matakuliah)"
+                },
+                {
+                    "name": "Kelas",
+                    "item": [
+                        {
+                            "name": "Create Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"id_matakuliah\": 1,\n    \"id_dosen\": 1,\n    \"jam_mulai\": \"08:00\",\n    \"jam_berakhir\": \"10:00\",\n    \"nama_kelas\": \"Kelas A\",\n    \"ruangan\": \"R301\",\n    \"hari\": \"SENIN\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas"
+                                    ]
+                                },
+                                "description": "Create a new class. Requires ADMIN or DOSEN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get All Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas"
+                                    ]
+                                },
+                                "description": "Get all classes. Requires authentication."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Kelas by Dosen",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/dosen",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        "dosen"
+                                    ]
+                                },
+                                "description": "Get all classes taught by the authenticated lecturer. Requires DOSEN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get My Kelas (Mahasiswa)",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/ku",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        "ku"
+                                    ]
+                                },
+                                "description": "Get all classes the student is enrolled in. Requires MAHASISWA role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Kelas by ID",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Get a specific class by ID. Requires authentication."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Update Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"jam_mulai\": \"09:00\",\n    \"jam_berakhir\": \"11:00\",\n    \"ruangan\": \"R302\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Update a class. Requires ADMIN or DOSEN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Delete Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "DELETE",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Delete a class. Requires ADMIN or DOSEN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Peserta Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/:id/peserta",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        ":id",
+                                        "peserta"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Get all students enrolled in a class. Requires DOSEN or ADMIN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Daftar Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"id_kelas\": 1\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/daftar",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        "daftar"
+                                    ]
+                                },
+                                "description": "Register for a class. Requires MAHASISWA role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Drop Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "DELETE",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/kelas/:id/drop",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "kelas",
+                                        ":id",
+                                        "drop"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Drop from a class. Requires MAHASISWA role."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "Endpoints for managing classes and class enrollment"
+                },
+                {
+                    "name": "Absensi",
+                    "item": [
+                        {
+                            "name": "Open Absensi",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"id_kelas\": 1,\n    \"type_absensi\": \"HADIR\",\n    \"mulai\": \"2024-12-21T08:00:00Z\",\n    \"selesai\": \"2024-12-21T10:00:00Z\",\n    \"pertemuan_ke\": 1\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/open-absensi",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "open-absensi"
+                                    ]
+                                },
+                                "description": "Open an attendance session for a class. Requires DOSEN or ADMIN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Create Absensi",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"id_kelas\": 1,\n    \"id_sesi_absensi\": 1,\n    \"latitude\": -6.200000,\n    \"longitude\": 106.816666\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/absensi",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "absensi"
+                                    ]
+                                },
+                                "description": "Record attendance for a student. Requires MAHASISWA role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get My Absensi",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/absensi/ku",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "absensi",
+                                        "ku"
+                                    ]
+                                },
+                                "description": "Get my attendance records. Requires authentication."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Absensi Kelas",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/absensi/kelas/:id",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "absensi",
+                                        "kelas",
+                                        ":id"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Get attendance records for a class. Requires DOSEN or ADMIN role."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Get Absensi Stats",
+                            "request": {
+                                "auth": {
+                                    "type": "bearer",
+                                    "bearer": [
+                                        {
+                                            "key": "token",
+                                            "value": "{{access_token}}",
+                                            "type": "string"
+                                        }
+                                    ]
+                                },
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{base_url}}/api/akademik/absensi/kelas/:id/stats",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "akademik",
+                                        "absensi",
+                                        "kelas",
+                                        ":id",
+                                        "stats"
+                                    ],
+                                    "variable": [
+                                        {
+                                            "key": "id",
+                                            "value": "1"
+                                        }
+                                    ]
+                                },
+                                "description": "Get attendance statistics for a class. Requires DOSEN or ADMIN role."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "Endpoints for managing attendance (absensi)"
+                }
+            ],
+            "description": "Academic endpoints for managing courses, classes, and attendance"
+        },
+        {
+            "name": "Biometrik",
+            "item": [
+                {
+                    "name": "Add Biometrik",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "id_user",
+                                    "value": "1",
+                                    "type": "text",
+                                    "description": "User ID to register face for (Required)"
+                                },
+                                {
+                                    "key": "image",
+                                    "type": "file",
+                                    "src": "/path/to/face/image.jpg",
+                                    "description": "Face image (jpg, jpeg, or png)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/biometrik/add",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "biometrik",
+                                "add"
+                            ]
+                        },
+                        "description": "[ADMIN ONLY] Register face biometric data for a specific user. Campus administrators register biometric data, not students themselves. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Biometrik",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/biometrik/delete/:id_user",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "biometrik",
+                                "delete",
+                                ":id_user"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id_user",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "[ADMIN ONLY] Delete biometric data for a specific user. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Edit Biometrik",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "image",
+                                    "type": "file",
+                                    "src": "/path/to/new/face/image.jpg",
+                                    "description": "New face image (jpg, jpeg, or png)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/biometrik/edit/:id_user",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "biometrik",
+                                "edit",
+                                ":id_user"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id_user",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "[ADMIN ONLY] Update biometric face data for a specific user. Upload a new face image. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Verify Wajah",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "image",
+                                    "type": "file",
+                                    "src": "/path/to/face/image.jpg",
+                                    "description": "Face image to verify (jpg, jpeg, or png)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/biometrik/verify",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "biometrik",
+                                "verify"
+                            ]
+                        },
+                        "description": "Verify a face against registered biometric data. **Role-based behavior**: ADMIN can verify against ALL users (searches entire database), while DOSEN/MAHASISWA can only verify their OWN biometric data (self-verification only to prevent abuse). Returns matched user info if similarity exceeds threshold."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Scan Wajah",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "image",
+                                    "type": "file",
+                                    "src": "/path/to/classroom/image.jpg",
+                                    "description": "Classroom/group image (jpg, jpeg, or png)"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/biometrik/scan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "biometrik",
+                                "scan"
+                            ]
+                        },
+                        "description": "Scan and identify multiple faces in an image. Used for batch attendance (e.g., CCTV or classroom camera). Returns all matched users. Available to all authenticated users."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Biometric face recognition endpoints for adding, updating, verifying, and scanning faces"
+        },
+        {
+            "name": "Kendaraan",
+            "item": [
+                {
+                    "name": "Register Kendaraan",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "plat_nomor",
+                                    "value": "B1234XYZ",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "nama_kendaraan",
+                                    "value": "Honda Beat",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "fotoKendaraan",
+                                    "type": "file",
+                                    "src": "/path/to/vehicle1.jpg"
+                                },
+                                {
+                                    "key": "fotoKendaraan",
+                                    "type": "file",
+                                    "src": "/path/to/vehicle2.jpg"
+                                },
+                                {
+                                    "key": "fotoKendaraan",
+                                    "type": "file",
+                                    "src": "/path/to/vehicle3.jpg"
+                                },
+                                {
+                                    "key": "fotoSTNK",
+                                    "type": "file",
+                                    "src": "/path/to/stnk.jpg"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/register",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "register"
+                            ]
+                        },
+                        "description": "Register a vehicle. Requires 3 vehicle photos and 1 STNK photo. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get My Kendaraan",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan"
+                            ]
+                        },
+                        "description": "Get vehicles registered by the authenticated user. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All My Kendaraan",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/all-my-kendaraan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "all-my-kendaraan"
+                            ]
+                        },
+                        "description": "Get all vehicles registered by the authenticated user. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Histori Pengajuan",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/histori-pengajuan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "histori-pengajuan"
+                            ]
+                        },
+                        "description": "Get vehicle registration history for the authenticated user. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Kendaraan",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/:id_kendaraan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                ":id_kendaraan"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id_kendaraan",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "Delete a vehicle registration. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All Unverified Kendaraan (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/all-unverified",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "all-unverified"
+                            ]
+                        },
+                        "description": "Get all unverified vehicles. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All Kendaraan (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/all-kendaraan",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "all-kendaraan"
+                            ]
+                        },
+                        "description": "Get all vehicles. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Verify Kendaraan (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id_kendaraan\": 1,\n    \"id_user\": 1\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/verify",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "verify"
+                            ]
+                        },
+                        "description": "Verify a vehicle registration. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Reject Kendaraan (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id_kendaraan\": 1,\n    \"id_user\": 1,\n    \"feedback\": \"Foto STNK tidak jelas, silakan upload ulang\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/kendaraan/reject",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "kendaraan",
+                                "reject"
+                            ]
+                        },
+                        "description": "Reject a vehicle registration with feedback. Requires ADMIN role."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Vehicle registration and management endpoints"
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        }
+    ]
+}

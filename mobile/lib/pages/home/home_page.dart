@@ -4,6 +4,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:mobile/pages/home/maps_page.dart';
 import 'package:mobile/pages/home/post_page.dart';
 import 'package:mobile/pages/home/settings_page.dart';
+import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
+import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
+import 'package:mobile/pages/absensi/absensi_page.dart';
+import 'package:mobile/pages/home/notification_list_page.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
@@ -212,13 +217,8 @@ class _HomePageState extends State<HomePage> {
                       Navigator.pop(context); // Tutup dialog
                       
                       // LOGIKA ABSENSI FINISH DI SINI
-                      Get.snackbar(
-                        "Berhasil", 
+                      ErrorHelper.showSuccess(
                         "Data Biometrik & Lokasi tercatat!",
-                        backgroundColor: Colors.green,
-                        colorText: Colors.white,
-                        snackPosition: SnackPosition.BOTTOM,
-                        margin: const EdgeInsets.all(10),
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -429,15 +429,15 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.notifications, color: Colors.white, size: 30),
-                  ],
+              GestureDetector(
+                onTap: () => Get.to(() => const NotificationListPage()),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.2),
+                  ),
+                  child: const Icon(Icons.notifications, color: Colors.white, size: 30),
                 ),
               ),
             ],
@@ -449,44 +449,58 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildCardCarousel() {
     return Obx(() {
-      if (_homeController.isLoadingKelas.value) {
+      // Hide card carousel for ADMIN role
+      final userRole = _homeController.currentUser.value?.role;
+      if (userRole == 'ADMIN') {
+        return const SizedBox.shrink();
+      }
+
+      if (_homeController.isLoadingKelasHariIni.value) {
         return const SizedBox(
           height: 220,
           child: Center(child: CircularProgressIndicator(color: Colors.white)),
         );
       }
 
-      final kelasList = _homeController.kelasList;
+      final kelasHariIni = _homeController.kelasHariIniList;
 
-      if (kelasList.isEmpty) {
+      if (kelasHariIni.isEmpty) {
         return SizedBox(
-          height: 220,
+          height: 180,
           child: Center(
             child: Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: const Padding(
-                padding: EdgeInsets.all(24.0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.class_outlined, size: 48, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text(
-                      'Belum ada kelas',
+                    const Icon(Icons.event_available, size: 40, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Tidak ada kelas hari ini',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.grey,
                       ),
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Daftar kelas untuk melihat jadwal',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                      textAlign: TextAlign.center,
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => Get.toNamed(AppRoutes.jadwalMingguan),
+                      style: TextButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Lihat jadwal mingguan →',
+                        style: TextStyle(fontSize: 12, color: Color(0xFFE63946)),
+                      ),
                     ),
                   ],
                 ),
@@ -496,26 +510,228 @@ class _HomePageState extends State<HomePage> {
         );
       }
 
-      return SizedBox(
-        height: 220,
-        child: PageView.builder(
-          controller: _pageController,
-          itemCount: kelasList.length,
-          itemBuilder: (context, index) {
-            double scale = 1.0;
-            if (_pageController.position.haveDimensions) {
-              double pageOffset = _pageController.page! - index;
-              scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
-            }
+      return Column(
+        children: [
+          SizedBox(
+            height: 200,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: kelasHariIni.length,
+              itemBuilder: (context, index) {
+                double scale = 1.0;
+                if (_pageController.position.haveDimensions) {
+                  double pageOffset = _pageController.page! - index;
+                  scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
+                }
 
-            return Transform.scale(
-              scale: scale,
-              child: _buildInfoCard(kelasList[index]),
-            );
-          },
-        ),
+                return Transform.scale(
+                  scale: scale,
+                  child: _buildKelasHariIniCard(kelasHariIni[index]),
+                );
+              },
+            ),
+          ),
+          // Lihat semua jadwal button
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: TextButton(
+              onPressed: () => Get.toNamed(AppRoutes.jadwalMingguan),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Lihat Jadwal Mingguan',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_forward, color: Colors.white, size: 14),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     });
+  }
+
+  Widget _buildKelasHariIniCard(dynamic kelasData) {
+    final kelas = kelasData;
+    final matakuliah = kelas.matakuliah;
+    final dosen = kelas.dosen;
+    final hasActiveAbsensi = kelas.hasActiveAbsensi;
+    final activeSesi = kelas.activeSesiAbsensi;
+
+    final String title = matakuliah != null
+        ? '${matakuliah.namaMatakuliah}'
+        : 'Kelas';
+    final String jadwal = kelas.jadwal ?? 'Jadwal tidak tersedia';
+    final String location = kelas.ruangan ?? 'Ruangan belum ditentukan';
+
+    // Get require_face from active session
+    final bool requireFace = activeSesi?.requireFace ?? false;
+
+    return GestureDetector(
+      onTap: hasActiveAbsensi ? () {
+        // Navigate based on require_face setting
+        if (requireFace) {
+          // Need face verification
+          Get.to(() => const BiometrikAbsenPage());
+        } else {
+          // GPS only - still use BiometrikAbsenPage for now
+          // (it already has location validation)
+          Get.to(() => const BiometrikAbsenPage());
+        }
+      } : null,
+      child: Card(
+        elevation: 8,
+        shadowColor: Colors.black.withOpacity(0.3),
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            Positioned(
+              bottom: -80,
+              right: -80,
+              child: Container(
+                height: 200,
+                width: 200,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE63946).withOpacity(0.8),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            // Active absensi badge with mode indicator
+            if (hasActiveAbsensi)
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            requireFace ? Icons.face : Icons.location_on,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            requireFace ? 'Absen + Selfie' : 'Absen GPS',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Tap untuk absen →',
+                        style: TextStyle(
+                          color: Color(0xFFE63946),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Positioned(
+              top: 15,
+              right: 15,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.schedule,
+                  color: Color(0xFFE63946),
+                  size: 28,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasActiveAbsensi) const SizedBox(height: 50),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  if (dosen != null)
+                    Text(
+                      'Dosen: ${dosen.nama}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 14, color: Colors.black54),
+                      const SizedBox(width: 4),
+                      Text(
+                        jadwal,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 14, color: Colors.black54),
+                      const SizedBox(width: 4),
+                      Text(
+                        location,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildInfoCard(dynamic pesertaKelas) {
@@ -678,28 +894,6 @@ class _HomePageState extends State<HomePage> {
             20.0,
             100.0,
           ), // Padding atas 20, bawah 100
-<<<<<<< Updated upstream
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.0,
-            ),
-            itemCount: gridMenuItems.length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemBuilder: (context, index) {
-              final item = gridMenuItems[index];
-              return _buildGridItem(
-                item['icon'],
-                item['label'],
-                item['color'],
-                item['route'],
-              );
-            },
-          ),
-=======
           child: Obx(() {
             // Filter menu items based on role (hide Biometric for DOSEN)
             final userRole = _homeController.currentUser.value?.role;
@@ -724,22 +918,6 @@ class _HomePageState extends State<HomePage> {
                 'color': const Color(0xFFE63946),
                 'route': AppRoutes.adminUserManagement,
               });
-              filteredMenuItems.add({
-                'icon': Icons.warning_amber_rounded,
-                'label': 'Anomali',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.anomaliDashboard,
-              });
-            }
-
-            // Add Anomali menu for DOSEN
-            if (userRole == 'DOSEN') {
-              filteredMenuItems.add({
-                'icon': Icons.warning_amber_rounded,
-                'label': 'Anomali',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.anomaliDashboard,
-              });
             }
 
             return GridView.builder(
@@ -763,7 +941,6 @@ class _HomePageState extends State<HomePage> {
               },
             );
           }),
->>>>>>> Stashed changes
         ),
       ),
     );
@@ -778,7 +955,24 @@ class _HomePageState extends State<HomePage> {
     return InkWell(
       onTap: () {
         if (label == 'Biometric'){
-          _showBiometricDialog();
+          // Role-based navigation for Biometric
+          final userRole = _homeController.currentUser.value?.role;
+          if (userRole == 'ADMIN') {
+            Get.toNamed(AppRoutes.adminBiometrik);
+          } else {
+            Get.to(() => const BiometrikAbsenPage());
+          }
+        }
+        else if (label == 'Absence'){
+          // Role-based navigation for Absence
+          final userRole = _homeController.currentUser.value?.role;
+          if (userRole == 'ADMIN') {
+            Get.toNamed(AppRoutes.adminAbsensiMonitoring);
+          } else if (userRole == 'DOSEN') {
+            Get.to(() => const DosenManageAbsensiPage());
+          } else {
+            Get.to(() => const AbsensiPage());
+          }
         }
         else if (label == 'Parking'){
           _showParkingOptions();
@@ -926,6 +1120,9 @@ class _HomePageState extends State<HomePage> {
 
   // Show options for License Plate menu
   void _showLicensePlateOptions() {
+    final userRole = _homeController.currentUser.value?.role;
+    final isAdmin = userRole == 'ADMIN';
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -942,6 +1139,21 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
+
+              // Admin only: Persetujuan Kendaraan
+              if (isAdmin) ...[
+                ListTile(
+                  leading: const Icon(Icons.verified_user, color: Color(0xFFE63946)),
+                  title: const Text('Persetujuan Kendaraan'),
+                  subtitle: const Text('Setujui atau tolak pengajuan'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Get.toNamed(AppRoutes.adminPengajuanList);
+                  },
+                ),
+                const Divider(),
+              ],
+
               ListTile(
                 leading: const Icon(Icons.add_circle, color: Color(0xFFE63946)),
                 title: const Text('Daftar Kendaraan Baru'),
