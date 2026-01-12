@@ -16,7 +16,7 @@ services:
       - FACE_API_URL=http://face-recognition:5051
       - PYTHON_SERVICE_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
-      - ANOMALY_API_URL=http://anomaly-detection:5003
+      - ANOMALY_SERVICE_URL=http://anomaly-detection:5003
     env_file:
       - .env
     volumes:

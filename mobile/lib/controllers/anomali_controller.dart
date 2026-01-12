@@ -1,9 +1,9 @@
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:io';
 import '../models/anomali_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/api_client.dart';
 
 class AnomaliController extends GetxController {
   var isLoading = false.obs;  // Default false
@@ -13,16 +13,8 @@ class AnomaliController extends GetxController {
   // FlutterSecureStorage untuk konsisten dengan API Client
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  // Base URL sesuai platform
-  String get baseUrl {
-    try {
-      return Platform.isAndroid 
-          ? "http://10.0.2.2:5050/api/anomali"
-          : "http://localhost:5050/api/anomali";
-    } catch (_) {
-      return "http://localhost:5050/api/anomali";
-    }
-  }
+  // Base URL menggunakan AppConfig (sama seperti ApiClient)
+  String get baseUrl => '${AppConfig.baseUrl}/api/anomali';
 
   Future<void> analyzeKelas(int idKelas) async {
     isLoading.value = true;
