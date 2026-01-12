@@ -269,6 +269,14 @@ def process_parking():
         
         parkiran_id = request.form.get('parkiran_id')
         gate_type = request.form.get('gate_type', 'MASUK')
+        face_detected = request.form.get('face_detected', 'false')
+        
+        # Get face image if present (from edge device)
+        face_image_file = request.files.get('face_image')
+        face_img_bytes = None
+        if face_image_file:
+            face_img_bytes = face_image_file.read()
+            app.logger.info(f"Face image received: {len(face_img_bytes)} bytes, detected: {face_detected}")
         
         if not parkiran_id:
             return jsonify({'gate_action': 'DENY', 'error': 'parkiran_id required'}), 400
@@ -302,11 +310,17 @@ def process_parking():
             files = {
                 'image': ('plate.jpg', img_bytes, 'image/jpeg')
             }
+            
+            # Add face image if present
+            if face_img_bytes:
+                files['face_image'] = ('face.jpg', face_img_bytes, 'image/jpeg')
+            
             data = {
                 'plate_text': plate_text,
                 'confidence': str(confidence),
                 'parkiran_id': str(parkiran_id),
-                'gate_type': gate_type
+                'gate_type': gate_type,
+                'face_detected': face_detected
             }
 
             print(f"DEBUG: Forwarding to backend: {NODEJS_BACKEND_URL}/api/parkir/edge-entry", flush=True)
