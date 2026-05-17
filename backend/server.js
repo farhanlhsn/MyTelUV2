@@ -1,8 +1,24 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const helmet = require('helmet');
 const cors = require('cors');
+
+// Validate critical environment variables
+const REQUIRED_SECRETS = ['JWT_SECRET', 'EDGE_DEVICE_SECRET'];
+for (const key of REQUIRED_SECRETS) {
+    const val = process.env[key];
+    if (!val || val.includes('your') || val.includes('here') || val.length < 32) {
+        console.error(`[FATAL] ${key} is not set or using a placeholder. Generate a strong secret!`);
+        process.exit(1);
+    }
+}
+
+// Ensure uploads directory exists for multer diskStorage
+if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads', { recursive: true });
+}
 
 //import security middleware
 const { generalLimiter, authLimiter } = require('./middlewares/rateLimiterMiddleware');
@@ -20,11 +36,14 @@ const corsOptions = {
             'http://localhost:3000',
             'http://localhost:5173',
             'http://localhost:8080',
-            // Add your production domain here
-            // 'https://yourdomain.com'
         ];
 
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        // Add frontend URL from env if available
+        if (process.env.FRONTEND_URL) {
+            allowedOrigins.push(process.env.FRONTEND_URL);
+        }
+
+        if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
@@ -87,6 +106,44 @@ app.listen(port, '0.0.0.0', () => {
 
     // Initialize scheduled tasks (auto-close sessions, etc.)
     initScheduler();
+});
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        status: "error",
+        message: `Route ${req.method} ${req.originalUrl} not found`
+    });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`, err.stack);
+
+    // Multer errors (file too large, wrong type, etc.)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+            status: "error",
+            message: "File terlalu besar"
+        });
+    }
+
+    if (err.message?.includes('Not allowed by CORS')) {
+        return res.status(403).json({
+            status: "error",
+            message: "CORS not allowed"
+        });
+    }
+
+    // Hide internal details in production
+    const message = process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : err.message;
+
+    res.status(err.statusCode || 500).json({
+        status: "error",
+        message
+    });
 });
 
 module.exports = app;

@@ -1,6 +1,7 @@
 const express = require('express');
-const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry } = require('../controllers/parkirController');
+const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas } = require('../controllers/parkirController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const { edgeLimiter } = require('../middlewares/rateLimiterMiddleware');
 const multer = require('multer');
 
 // Configure multer for memory storage
@@ -16,6 +17,7 @@ const router = express.Router();
 // Edge device parking entry/exit (internal API - uses X-Edge-Secret header)
 // Accepts two images: 'image' (plate) and 'face_image' (optional face capture)
 router.post('/edge-entry',
+    edgeLimiter,
     upload.fields([
         { name: 'image', maxCount: 1 },
         { name: 'face_image', maxCount: 1 }
@@ -60,6 +62,13 @@ router.delete('/:id',
     protect,
     authorize('ADMIN'),
     deleteParkiran
+);
+
+// Reconcile kapasitas parkiran (Admin only)
+router.post('/:id/reconcile',
+    protect,
+    authorize('ADMIN'),
+    reconcileKapasitas
 );
 
 module.exports = router;

@@ -3,6 +3,9 @@ import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/pages/kendaraan/admin/admin_pengajuan_detail_page.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class AdminPengajuanListPage extends StatefulWidget {
   const AdminPengajuanListPage({super.key});
@@ -67,7 +70,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading pengajuan: $e');
+      debugLog('Error loading pengajuan: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -94,7 +97,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
         _isLoadingMore = false;
       });
     } catch (e) {
-      print('Error loading more pengajuan: $e');
+      debugLog('Error loading more pengajuan: $e');
       setState(() {
         _isLoadingMore = false;
       });

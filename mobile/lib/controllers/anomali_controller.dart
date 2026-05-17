@@ -4,6 +4,9 @@ import 'dart:convert';
 import '../models/anomali_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_client.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class AnomaliController extends GetxController {
   var isLoading = false.obs;  // Default false
@@ -57,7 +60,7 @@ class AnomaliController extends GetxController {
         Get.snackbar("Info", message.value);
       }
     } catch (e) {
-      print("Error Anomali: $e");
+      debugLog("Error Anomali: $e");
       message.value = 'Error: $e';
       Get.snackbar("Error", "Gagal terhubung ke server");
     } finally {

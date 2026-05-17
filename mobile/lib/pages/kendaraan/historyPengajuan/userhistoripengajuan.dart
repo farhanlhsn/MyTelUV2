@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mobile/pages/kendaraan/historyPengajuan/detailuserhistoripengajuan.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class UserHistoriPengajuan extends StatefulWidget {
   const UserHistoriPengajuan({super.key});
@@ -34,7 +37,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading histori pengajuan: $e');
+      debugLog('Error loading histori pengajuan: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../services/parkir_service.dart';
 import '../../../models/parkir_model.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class AnalitikParkirPage extends StatefulWidget {
   const AnalitikParkirPage({super.key});
@@ -32,19 +35,19 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
         _errorMessage = null;
       });
 
-      print('🔄 Loading analitik data...');
+      debugLog('🔄 Loading analitik data...');
       final data = await _parkirService.getAnalitikParkiran();
-      print('✅ Analitik data loaded: $data');
-      print('📊 Parkiran count: ${data?.parkiran.length ?? 0}');
+      debugLog('✅ Analitik data loaded: $data');
+      debugLog('📊 Parkiran count: ${data?.parkiran.length ?? 0}');
       
       setState(() {
         _analitik = data;
         _isLoading = false;
       });
-      print('✅ State updated successfully');
+      debugLog('✅ State updated successfully');
     } catch (e, stackTrace) {
-      print('❌ Error loading analitik: $e');
-      print('📍 Stack trace: $stackTrace');
+      debugLog('❌ Error loading analitik: $e');
+      debugLog('📍 Stack trace: $stackTrace');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;

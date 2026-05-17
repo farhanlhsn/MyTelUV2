@@ -1390,7 +1390,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
             latitude: isNaN(lat) ? null : lat,
             longitude: isNaN(lng) ? null : lng,
             radius_meter: radius,
-            // require_face: require_face === true, // TODO: Uncomment after running: ALTER TABLE "SesiAbsensi" ADD COLUMN "require_face" BOOLEAN NOT NULL DEFAULT false;
+            require_face: require_face === true,
             mulai: mulaiTime,
             selesai: selesaiTime,
             status: true,

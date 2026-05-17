@@ -9,7 +9,6 @@ if (process.env.NODE_ENV === 'production') {
         log: [
           { level: 'warn', emit: 'event' },
           { level: 'error', emit: 'event' },
-          { level: 'query', emit: 'event' },
         ],
       });
 } else {
@@ -24,11 +23,13 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Logging untuk query Prisma
-prisma.$on('query', (e) => {
-    console.log(`Query: ${e.query}`);
-    console.log(`Params: ${e.params}`);
-    console.log(`Duration: ${e.duration}ms`);
-  });
+if (process.env.NODE_ENV !== 'production') {
+    prisma.$on('query', (e) => {
+        console.log(`Query: ${e.query}`);
+        console.log(`Params: ${e.params}`);
+        console.log(`Duration: ${e.duration}ms`);
+    });
+}
   
   prisma.$on('warn', (e) => {
     console.warn(`Prisma Warning: ${e.message}`);

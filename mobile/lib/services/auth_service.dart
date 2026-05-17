@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class AuthService {
   final Dio _dio = ApiClient.dio;
@@ -88,7 +91,7 @@ class AuthService {
       await _dio.post<dynamic>('/api/auth/logout');
     } catch (e) {
       // Ignore errors on logout - we'll clear local data anyway
-      print('⚠️ Logout API call failed: $e');
+      debugLog('⚠️ Logout API call failed: $e');
     }
   }
 }

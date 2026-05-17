@@ -12,9 +12,10 @@ exports.register = asyncHandler(async (req, res) => {
     const allowedRoles = ['MAHASISWA', 'DOSEN'];
     const userRole = allowedRoles.includes(role) ? role : 'MAHASISWA';
 
-    const checkExisted = await prisma.user.findUnique({
+    const checkExisted = await prisma.user.findFirst({
         where: {
-            username: username
+            username: username,
+            deletedAt: null
         }
     });
     if (checkExisted) {
@@ -50,7 +51,7 @@ exports.register = asyncHandler(async (req, res) => {
 exports.login = asyncHandler(async (req, res) => {
     const { username, password } = req.body;
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.user.findFirst({
         where: {
             username: username,
             deletedAt: null // Exclude soft-deleted users

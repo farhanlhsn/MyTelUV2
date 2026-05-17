@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class KendaraanService {
   static Dio _dio = ApiClient.dio;
@@ -18,53 +21,53 @@ class KendaraanService {
   // Get histori pengajuan kendaraan user
   static Future<List<PengajuanPlatModel>> getHistoriPengajuan() async {
     try {
-      print('🔄 Fetching histori pengajuan...');
+      debugLog('🔄 Fetching histori pengajuan...');
 
       // Debug: Print current user info from storage
       final idUser = await _secureStorage.read(key: 'id_user');
       final username = await _secureStorage.read(key: 'username');
       final token = await _secureStorage.read(key: 'token');
-      print('👤 Current user from storage: ID=$idUser, username=$username');
-      print('🔑 Token preview: ${token?.substring(0, 20)}...');
+      debugLog('👤 Current user from storage: ID=$idUser, username=$username');
+      debugLog('🔑 Token preview: ${token?.substring(0, 20)}...');
 
       final response = await _dio.get('/api/kendaraan/histori-pengajuan');
 
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response data: ${response.data}');
+      debugLog('📥 Response status: ${response.statusCode}');
+      debugLog('📥 Response data: ${response.data}');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final dynamic rawData = response.data['data'];
-        print('📦 Raw data type: ${rawData.runtimeType}');
-        print('📦 Raw data: $rawData');
+        debugLog('📦 Raw data type: ${rawData.runtimeType}');
+        debugLog('📦 Raw data: $rawData');
 
         if (rawData == null || rawData is! List) {
-          print('⚠️ Data is not a list, returning empty');
+          debugLog('⚠️ Data is not a list, returning empty');
           return [];
         }
 
         final List<dynamic> data = rawData;
-        print('📊 Number of items: ${data.length}');
+        debugLog('📊 Number of items: ${data.length}');
 
         // Parse each item with error handling
         List<PengajuanPlatModel> result = [];
         for (int i = 0; i < data.length; i++) {
           try {
-            print('🔍 Parsing item $i: ${data[i]}');
+            debugLog('🔍 Parsing item $i: ${data[i]}');
             final item = PengajuanPlatModel.fromJson(
               data[i] as Map<String, dynamic>,
             );
             result.add(item);
-            print('✅ Successfully parsed item $i');
+            debugLog('✅ Successfully parsed item $i');
           } catch (e, stackTrace) {
-            print('❌ Error parsing item $i: $e');
-            print('📋 Stack trace: $stackTrace');
-            print('📄 JSON data: ${data[i]}');
+            debugLog('❌ Error parsing item $i: $e');
+            debugLog('📋 Stack trace: $stackTrace');
+            debugLog('📄 JSON data: ${data[i]}');
             // Skip invalid items
             continue;
           }
         }
 
-        print('✅ Total parsed: ${result.length} items');
+        debugLog('✅ Total parsed: ${result.length} items');
         return result;
       } else {
         throw Exception(
@@ -72,9 +75,9 @@ class KendaraanService {
         );
       }
     } on DioException catch (e) {
-      print('❌ DioException: ${e.message}');
+      debugLog('❌ DioException: ${e.message}');
       if (e.response != null) {
-        print('❌ Response: ${e.response?.data}');
+        debugLog('❌ Response: ${e.response?.data}');
         throw Exception(
           e.response?.data['message'] ?? 'Error fetching histori pengajuan',
         );
@@ -82,8 +85,8 @@ class KendaraanService {
         throw Exception('Network error: ${e.message}');
       }
     } catch (e, stackTrace) {
-      print('❌ Unexpected error: $e');
-      print('📋 Stack trace: $stackTrace');
+      debugLog('❌ Unexpected error: $e');
+      debugLog('📋 Stack trace: $stackTrace');
       throw Exception('Unexpected error: $e');
     }
   }
@@ -100,11 +103,11 @@ class KendaraanService {
       final idUserStorage = await _secureStorage.read(key: 'id_user');
       final username = await _secureStorage.read(key: 'username');
       final token = await _secureStorage.read(key: 'token');
-      print('🚗 Registering kendaraan...');
-      print(
+      debugLog('🚗 Registering kendaraan...');
+      debugLog(
         '👤 Current user from storage: ID=$idUserStorage, username=$username',
       );
-      print('🔑 Token preview: ${token?.substring(0, 20)}...');
+      debugLog('🔑 Token preview: ${token?.substring(0, 20)}...');
 
       // Prepare multipart form data
       // TIDAK mengirim id_user karena backend akan menggunakan id dari token

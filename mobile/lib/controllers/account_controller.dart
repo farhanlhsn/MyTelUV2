@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/auth_service.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class AccountController extends GetxController {
   final AuthService _authService = AuthService();
@@ -36,7 +39,7 @@ class AccountController extends GetxController {
       final nama = await _secureStorage.read(key: 'nama');
       nameController.text = nama ?? '';
     } catch (e) {
-      print('Error loading user data: $e');
+      debugLog('Error loading user data: $e');
     }
   }
 
