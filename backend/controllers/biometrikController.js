@@ -715,12 +715,12 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         // Step 5: Check location (if session has location requirements)
         if (activeSesi.latitude !== null && activeSesi.longitude !== null && activeSesi.radius_meter !== null) {
             const distance = haversineDistance(activeSesi.latitude, activeSesi.longitude, lat, lng);
+            console.log(`[Biometrik Location Check] User coord: [${lat}, ${lng}], Sesi coord: [${activeSesi.latitude}, ${activeSesi.longitude}]. Distance: ${distance.toFixed(2)}m, Required radius: ${activeSesi.radius_meter}m`);
             if (distance > activeSesi.radius_meter) {
+                console.warn(`[Biometrik Location Check] User outside required radius. Distance: ${distance.toFixed(2)}m > Radius: ${activeSesi.radius_meter}m`);
                 return res.status(403).json({
                     status: 'error',
-                    message: 'Lokasi Anda di luar area absensi',
-                    distance: Math.round(distance),
-                    required_radius: activeSesi.radius_meter
+                    message: `Lokasi Anda di luar area absensi. Jarak: ${Math.round(distance)}m, Radius: ${activeSesi.radius_meter}m`
                 });
             }
         }

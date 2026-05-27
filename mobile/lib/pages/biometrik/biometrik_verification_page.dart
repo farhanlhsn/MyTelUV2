@@ -45,6 +45,16 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   String _mapErrorMessage(String? message) {
     if (message == null) return 'Terjadi kesalahan';
 
+    final messageLower = message.toLowerCase();
+
+    // Preserve detailed distance info if present in location errors
+    if (messageLower.contains('lokasi anda di luar area absensi')) {
+      if (messageLower.contains('jarak') || messageLower.contains('radius')) {
+        return message;
+      }
+      return 'Lokasi Anda di luar area absensi. Silakan mendekat ke area kelas.';
+    }
+
     final errorMap = {
       'Face recognition service unavailable':
           'Layanan pengenalan wajah tidak tersedia. Coba lagi nanti.',
@@ -56,11 +66,14 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       'Anda belum terdaftar biometrik':
           'Anda belum terdaftar biometrik. Hubungi admin.',
       'Tidak ada sesi absensi': 'Tidak ada kelas yang sedang berlangsung.',
-      'Lokasi Anda di luar area absensi': 'Anda berada di luar area kampus.',
+      'Sesi absensi yang dipilih tidak valid':
+          'Sesi absensi tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar.',
+      'Anda sudah melakukan absensi':
+          'Anda sudah melakukan absensi pada sesi ini.',
     };
 
     for (final entry in errorMap.entries) {
-      if (message.toLowerCase().contains(entry.key.toLowerCase())) {
+      if (messageLower.contains(entry.key.toLowerCase())) {
         return entry.value;
       }
     }
@@ -138,7 +151,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       Get.to(() => LivenessDetectionScreen(
         cameras: cameras,
         config: LivenessConfig(
-          enableScreenGlareDetection: true,
+          enableScreenGlareDetection: false,
         ),
         captureFinalImage: true,
         onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) {
