@@ -562,12 +562,13 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     const isMock = req.body.is_mock_location === true || req.body.is_mock_location === 'true';
     const isLivenessVerified = req.body.liveness_verified === true || req.body.liveness_verified === 'true';
 
-    if (!id_sesi_absensi) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Parameter id_sesi_absensi wajib disertakan'
-        });
-    }
+    // Allow id_sesi_absensi to be optional for auto-detect
+    // if (!id_sesi_absensi) {
+    //     return res.status(400).json({
+    //         status: 'error',
+    //         message: 'Parameter id_sesi_absensi wajib disertakan'
+    //     });
+    // }
 
     if (!isLivenessVerified) {
         return res.status(400).json({
@@ -664,15 +665,19 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
 
         // Step 3: Find specific attendance session
         const now = new Date();
+        const sesiWhere = {
+            id_kelas: { in: kelasIds },
+            status: true,
+            mulai: { lte: now },
+            selesai: { gte: now },
+            deletedAt: null
+        };
+        if (id_sesi_absensi) {
+            sesiWhere.id_sesi_absensi = parseInt(id_sesi_absensi);
+        }
+
         const activeSesi = await prisma.sesiAbsensi.findFirst({
-            where: {
-                id_sesi_absensi: parseInt(id_sesi_absensi),
-                id_kelas: { in: kelasIds },
-                status: true,
-                mulai: { lte: now },
-                selesai: { gte: now },
-                deletedAt: null
-            },
+            where: sesiWhere,
             include: {
                 kelas: {
                     include: {
