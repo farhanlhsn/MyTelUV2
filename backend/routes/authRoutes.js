@@ -1,12 +1,7 @@
 const express = require('express');
-<<<<<<< Updated upstream
-const { login, logout, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken } = require('../controllers/authController');
-const { validateRequired, validatePassword, validateUsername } = require('../middlewares/validationMiddleware');
-=======
 const { login, logout, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken, refreshToken, deactivateUser, reactivateUser, updatePreferences, uploadProfilePicture, requestPasswordReset, resetPasswordWithToken } = require('../controllers/authController');
-const { validateZod } = require('../middlewares/validationMiddleware');
+const { validateRequired, validatePassword, validateUsername, validateZod } = require('../middlewares/validationMiddleware');
 const { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, adminResetPasswordSchema, fcmTokenSchema, refreshTokenSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middlewares/zodSchemas');
->>>>>>> Stashed changes
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();

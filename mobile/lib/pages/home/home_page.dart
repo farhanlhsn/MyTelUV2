@@ -706,49 +706,7 @@ class _HomePageState extends State<HomePage> {
                   'route': AppRoutes.adminUserManagement,
                 });
               }
-<<<<<<< Updated upstream
-              return true;
-            }).toList();
 
-            // Add Academic menu for ADMIN
-            if (userRole == 'ADMIN') {
-              filteredMenuItems.add({
-                'icon': Icons.school,
-                'label': 'Academic',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.adminAkademik,
-              });
-              filteredMenuItems.add({
-                'icon': Icons.manage_accounts,
-                'label': 'Users',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.adminUserManagement,
-              });
-            }
-
-            return GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: filteredMenuItems.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                final item = filteredMenuItems[index];
-                return _buildGridItem(
-                  item['icon'],
-                  item['label'],
-                  item['color'],
-                  item['route'],
-                );
-              },
-            );
-          }),
-=======
-  
               // Add Anomaly menu for ADMIN and DOSEN
               if (userRole == 'ADMIN' || userRole == 'DOSEN') {
                 filteredMenuItems.add({
@@ -758,7 +716,7 @@ class _HomePageState extends State<HomePage> {
                   'route': AppRoutes.anomaliDashboard,
                 });
               }
-  
+
               return GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -780,8 +738,6 @@ class _HomePageState extends State<HomePage> {
                 },
               );
             }),
-          ),
->>>>>>> Stashed changes
         ),
       ),
     );

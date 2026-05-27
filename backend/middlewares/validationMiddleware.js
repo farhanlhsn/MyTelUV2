@@ -93,3 +93,16 @@ exports.validateUsername = (req, res, next) => {
     }
     next();
 };
+
+// Validate schema using Zod
+exports.validateZod = (schema) => (req, res, next) => {
+    try {
+        schema.parse(req.body);
+        next();
+    } catch (error) {
+        return res.status(400).json({
+            status: "error",
+            message: error.errors ? error.errors.map(e => e.message).join(', ') : error.message
+        });
+    }
+};

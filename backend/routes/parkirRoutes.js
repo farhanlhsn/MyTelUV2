@@ -1,9 +1,5 @@
 const express = require('express');
-<<<<<<< Updated upstream
-const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry } = require('../controllers/parkirController');
-=======
 const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas, exportParkirLogs, manualOverride } = require('../controllers/parkirController');
->>>>>>> Stashed changes
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const multer = require('multer');
 
@@ -66,8 +62,6 @@ router.delete('/:id',
     deleteParkiran
 );
 
-<<<<<<< Updated upstream
-=======
 // Reconcile kapasitas parkiran (Admin only)
 router.post('/:id/reconcile',
     protect,
@@ -90,5 +84,4 @@ router.post('/:id/override',
     manualOverride
 );
 
->>>>>>> Stashed changes
 module.exports = router;

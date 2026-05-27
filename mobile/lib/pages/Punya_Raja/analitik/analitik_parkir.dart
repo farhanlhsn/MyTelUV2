@@ -4,10 +4,7 @@ import '../../../services/parkir_service.dart';
 import '../../../services/parkir_socket_service.dart';
 import '../../../services/api_client.dart';
 import '../../../models/parkir_model.dart';
-<<<<<<< Updated upstream:mobile/lib/pages/Punya_Raja/analitik/analitik_parkir.dart
-=======
 import 'package:mobile/utils/logger.dart';
->>>>>>> Stashed changes:mobile/lib/pages/kendaraan/parkir/analitik_parkir.dart
 
 class AnalitikParkirPage extends StatefulWidget {
   const AnalitikParkirPage({super.key});
@@ -54,23 +51,6 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
 
       print('🔄 Loading analitik data...');
       final data = await _parkirService.getAnalitikParkiran();
-<<<<<<< Updated upstream:mobile/lib/pages/Punya_Raja/analitik/analitik_parkir.dart
-      print('✅ Analitik data loaded: $data');
-      print('📊 Parkiran count: ${data?.parkiran.length ?? 0}');
-      
-      setState(() {
-        _analitik = data;
-        _isLoading = false;
-      });
-      print('✅ State updated successfully');
-    } catch (e, stackTrace) {
-      print('❌ Error loading analitik: $e');
-      print('📍 Stack trace: $stackTrace');
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
-=======
       debugLog('✅ Analitik data loaded: ${data?.parkiran.length ?? 0} parkiran');
 
       if (mounted) {
@@ -87,7 +67,6 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
           _isLoading = false;
         });
       }
->>>>>>> Stashed changes:mobile/lib/pages/kendaraan/parkir/analitik_parkir.dart
     }
   }
 

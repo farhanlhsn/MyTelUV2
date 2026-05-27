@@ -1,10 +1,6 @@
-<<<<<<< Updated upstream
-import 'package:flutter/material.dart';
-=======
 import 'package:json_annotation/json_annotation.dart';
 
 part 'pengajuan_plat_model.g.dart';
->>>>>>> Stashed changes
 
 @JsonSerializable()
 class PengajuanPlatModel {
@@ -59,106 +55,8 @@ class PengajuanPlatModel {
   });
 
   // Factory constructor untuk membuat instance dari JSON
-<<<<<<< Updated upstream
-  factory PengajuanPlatModel.fromJson(Map<String, dynamic> json) {
-    try {
-      print('🔍 Parsing JSON: $json');
-
-      // Helper function untuk parsing int dengan aman
-      int parseId(dynamic value) {
-        print('  - Parsing ID from: $value (${value.runtimeType})');
-        if (value == null) return 0;
-        if (value is int) return value;
-        if (value is String) return int.tryParse(value) ?? 0;
-        if (value is double) return value.toInt();
-        return 0;
-      }
-
-      // Helper function untuk parsing list string dengan aman
-      List<String> parseStringList(dynamic value, String fieldName) {
-        print('  - Parsing $fieldName from: $value (${value.runtimeType})');
-        if (value == null) {
-          print('    -> $fieldName is null, returning empty list');
-          return [];
-        }
-        if (value is List) {
-          print('    -> $fieldName is List with ${value.length} items');
-          try {
-            List<String> result = [];
-            for (var item in value) {
-              result.add(item.toString());
-            }
-            print('    -> Successfully parsed ${result.length} items');
-            return result;
-          } catch (e) {
-            print('    -> Error parsing list items: $e');
-            return [];
-          }
-        }
-        if (value is String) {
-          print('    -> $fieldName is String: $value');
-          return [value];
-        }
-        print('    -> $fieldName is unknown type, returning empty list');
-        return [];
-      }
-
-      final idKendaraan = parseId(json['id_kendaraan']);
-      final idUser = json['id_user'] != null ? parseId(json['id_user']) : null;
-      
-      // Parse user info if available
-      String? userName;
-      String? userUsername;
-      if (json['user'] != null) {
-        userName = json['user']['nama']?.toString();
-        userUsername = json['user']['username']?.toString();
-      }
-      
-      final platNomor = json['plat_nomor']?.toString() ?? '';
-      final namaKendaraan = json['nama_kendaraan']?.toString() ?? '';
-      final statusPengajuan =
-          json['status_pengajuan']?.toString() ?? 'MENUNGGU';
-      final feedback = json['feedback']?.toString();
-      final fotoKendaraan = parseStringList(
-        json['fotoKendaraan'],
-        'fotoKendaraan',
-      );
-      final fotoSTNK = json['fotoSTNK']?.toString() ?? '';
-      final createdAt = DateTime.parse(
-        json['createdAt'] ?? DateTime.now().toIso8601String(),
-      );
-      final updatedAt = DateTime.parse(
-        json['updatedAt'] ?? DateTime.now().toIso8601String(),
-      );
-
-      print(
-        '✅ Successfully parsed: id=$idKendaraan, plat=$platNomor, nama=$namaKendaraan',
-      );
-
-      return PengajuanPlatModel(
-        idKendaraan: idKendaraan,
-        idUser: idUser,
-        userName: userName,
-        userUsername: userUsername,
-        platNomor: platNomor,
-        namaKendaraan: namaKendaraan,
-        statusPengajuan: statusPengajuan,
-        feedback: feedback,
-        fotoKendaraan: fotoKendaraan,
-        fotoSTNK: fotoSTNK,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
-    } catch (e, stackTrace) {
-      print('❌ Error in fromJson: $e');
-      print('📋 Stack trace: $stackTrace');
-      rethrow;
-    }
-  }
-=======
   factory PengajuanPlatModel.fromJson(Map<String, dynamic> json) =>
       _$PengajuanPlatModelFromJson(json);
->>>>>>> Stashed changes
 
   // Konversi ke JSON
   Map<String, dynamic> toJson() => _$PengajuanPlatModelToJson(this);

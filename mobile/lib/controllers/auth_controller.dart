@@ -6,12 +6,9 @@ import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../models/user.dart';
-<<<<<<< Updated upstream
-=======
 import '../utils/error_helper.dart';
 import 'package:mobile/utils/logger.dart';
 import '../app/auth_middleware.dart';
->>>>>>> Stashed changes
 
 class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
@@ -68,12 +65,6 @@ class AuthController extends GetxController {
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
-<<<<<<< Updated upstream
-      print(
-        '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
-      );
-      print('🔑 Token preview: ${token.length > 20 ? token.substring(0, 20) : token}...');
-=======
       AuthMiddleware.cachedToken = token;
       AuthMiddleware.cachedRole = user.role;
       AuthMiddleware.hasLoaded = true;
@@ -81,7 +72,6 @@ class AuthController extends GetxController {
       debugLog(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
       );
->>>>>>> Stashed changes
 
       // Reset Dio instance to ensure new token is used
       ApiClient.reset();
@@ -92,12 +82,8 @@ class AuthController extends GetxController {
 
       return true;
     } on DioException catch (e) {
-<<<<<<< Updated upstream
-      print('❌ Login failed: ${e.message}');
-=======
       debugLog('❌ Login failed: ${e.message}');
       ErrorHelper.showError(e, title: 'Login Gagal');
->>>>>>> Stashed changes
       return false;
     } catch (e) {
       debugLog('❌ Login unexpected error: $e');

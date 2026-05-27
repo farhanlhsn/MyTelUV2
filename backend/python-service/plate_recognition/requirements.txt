@@ -4,13 +4,8 @@ ultralytics>=8.3.0
 torch>=2.2.2
 torchvision>=0.17.2
 onnxruntime>=1.19.2
-<<<<<<< Updated upstream
-opencv-python>=4.9.0,<4.12.0
-numpy>=1.26.0,<2.0.0
-=======
 opencv-python>=4.9.0,<4.11.0
-numpy>=1.26.0
->>>>>>> Stashed changes
+numpy>=1.26.0,<2.0.0
 pillow>=10.2.0
 pyyaml>=6.0.0
 python-dotenv>=1.0.0

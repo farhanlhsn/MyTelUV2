@@ -662,14 +662,6 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
 
         const kelasIds = enrolledClasses.map(p => p.id_kelas);
 
-<<<<<<< Updated upstream
-        // Step 3: Find OPEN attendance session for enrolled classes
-        const now = new Date();
-        const activeSesi = await prisma.sesiAbsensi.findFirst({
-            where: {
-                id_kelas: { in: kelasIds },
-                status: true,  // true = sesi masih terbuka
-=======
         // Step 3: Find specific attendance session
         const now = new Date();
         const activeSesi = await prisma.sesiAbsensi.findFirst({
@@ -677,7 +669,6 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 id_sesi_absensi: parseInt(id_sesi_absensi),
                 id_kelas: { in: kelasIds },
                 status: true,
->>>>>>> Stashed changes
                 mulai: { lte: now },
                 selesai: { gte: now },
                 deletedAt: null
@@ -695,11 +686,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         if (!activeSesi) {
             return res.status(400).json({
                 status: 'error',
-<<<<<<< Updated upstream
-                message: 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
-=======
                 message: 'Sesi absensi yang dipilih tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar di kelas tersebut'
->>>>>>> Stashed changes
             });
         }
 

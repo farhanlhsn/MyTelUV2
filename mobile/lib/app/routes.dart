@@ -9,19 +9,12 @@ import '../pages/auth/forgot_password_page.dart';
 import '../pages/auth/reset_password_page.dart';
 import '../bindings/auth_binding.dart';
 import '../pages/kendaraan/registerplat.dart';
-<<<<<<< Updated upstream
-import '../pages/Punya_Raja/registerplat/pengajuan_list_page.dart';
-import '../pages/Punya_Raja/auth/otp_verification_page.dart';
-import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
-=======
 import '../pages/kendaraan/pengajuan_list_page.dart';
 import '../pages/auth/otp_verification_page.dart';
 import '../pages/kendaraan/resubmit_kendaraan_page.dart';
 import '../pages/kendaraan/parkir/analitik_parkir.dart';
->>>>>>> Stashed changes
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
 import '../pages/absensi/absensi_page.dart';
-import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
@@ -33,13 +26,10 @@ import '../pages/admin/admin_absensi_monitoring_page.dart';
 import '../pages/splash_page.dart';
 import '../pages/jadwal/jadwal_mingguan_page.dart';
 import '../pages/jadwal/form_jadwal_pengganti_page.dart';
-<<<<<<< Updated upstream
-=======
 import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
 import 'auth_middleware.dart';
 import 'role_middleware.dart';
->>>>>>> Stashed changes
 
 class AppRoutes {
   static const String splash = '/';
@@ -68,6 +58,8 @@ class AppRoutes {
   static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
   static const String jadwalMingguan = '/jadwal-mingguan';
   static const String formJadwalPengganti = '/form-jadwal-pengganti';
+  static const String anomaliResult = '/anomali-result';
+  static const String anomaliDashboard = '/anomali-dashboard';
   
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
@@ -199,8 +191,6 @@ class AppRoutes {
       page: () => const FormJadwalPenggantiPage(),
       middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
     ),
-<<<<<<< Updated upstream
-=======
     GetPage<dynamic>(
       name: anomaliResult,
       page: () => const AnomaliResultPage(),
@@ -211,6 +201,5 @@ class AppRoutes {
       page: () => const AnomaliDashboardPage(),
       middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
     ),
->>>>>>> Stashed changes
   ];
 }

@@ -29,7 +29,6 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    loadUserData();
     loadData();
   }
 
@@ -59,21 +58,33 @@ class HomeController extends GetxController {
     isLoading.value = true;
     errorMessage.value = '';
 
-    await Future.wait([
+    // First load user data so we have the role
+    await loadUserData();
+
+    final userRole = currentUser.value?.role;
+    final List<Future<dynamic>> tasks = [
       Future(() => loadKelasHariIni()).catchError((e) {
         debugLog('⚠️ Error loading kelas hari ini: $e');
         return null;
       }),
-      Future(() => loadKelas()).catchError((e) {
-        debugLog('⚠️ Error loading kelas: $e');
-        return null;
-      }),
-      Future(() => loadAbsensi()).catchError((e) {
-        debugLog('⚠️ Error loading absensi: $e');
-        return null;
-      }),
-    ]);
+    ];
 
+    if (userRole == 'MAHASISWA') {
+      tasks.add(
+        Future(() => loadKelas()).catchError((e) {
+          debugLog('⚠️ Error loading kelas: $e');
+          return null;
+        }),
+      );
+      tasks.add(
+        Future(() => loadAbsensi()).catchError((e) {
+          debugLog('⚠️ Error loading absensi: $e');
+          return null;
+        }),
+      );
+    }
+
+    await Future.wait(tasks);
     isLoading.value = false;
   }
 

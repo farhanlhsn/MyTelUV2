@@ -7,6 +7,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart' hide Response;
 
+import 'package:mobile/utils/logger.dart';
+
 /// Environment configuration for API URLs
 /// 
 /// Usage:
@@ -75,13 +77,8 @@ class ApiClient {
             try {
               final String? token = await _secureStorage.read(key: 'token');
               if (AppConfig.isDevelopment) {
-<<<<<<< Updated upstream
-                print(
-                  '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
-=======
                 debugLog(
                   '🔑 Token: ${token != null ? "EXISTS (Length: ${token.length})" : "NULL"}',
->>>>>>> Stashed changes
                 );
               }
 
@@ -103,17 +100,6 @@ class ApiClient {
               print('📥 Data: ${response.data}');
             }
             
-<<<<<<< Updated upstream
-            // Handle 401 Unauthorized in response (because validateStatus accepts < 500)
-            if (response.statusCode == 401) {
-              print('🚪 Token expired (in response), clearing storage and redirecting to login');
-              await _secureStorage.deleteAll();
-              _dioInstance = null; // Reset Dio instance
-              _redirectToLogin();
-            }
-            
-=======
->>>>>>> Stashed changes
             return handler.next(response);
           },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
@@ -125,9 +111,6 @@ class ApiClient {
 
             // Handle 401 Unauthorized - Token expired
             if (error.response?.statusCode == 401) {
-<<<<<<< Updated upstream
-              print('🚪 Token expired, clearing storage and redirecting to login');
-=======
               final bool refreshed = await _attemptTokenRefresh(error.requestOptions);
               if (refreshed) {
                 // Retry the request
@@ -142,7 +125,6 @@ class ApiClient {
               }
               
               debugLog('🚪 Token refresh failed, clearing storage and redirecting to login');
->>>>>>> Stashed changes
               await _secureStorage.deleteAll();
               _dioInstance = null; // Reset Dio instance
               _redirectToLogin();

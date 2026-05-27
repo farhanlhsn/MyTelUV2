@@ -453,25 +453,6 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             });
         }
 
-<<<<<<< Updated upstream
-        // Create entry log and increment capacity
-        const [newLog] = await prisma.$transaction([
-            prisma.logParkir.create({
-                data: {
-                    id_kendaraan: kendaraan.id_kendaraan,
-                    id_parkiran: parseInt(parkiran_id),
-                    id_user: kendaraan.user?.id_user,
-                    type: 'MASUK',
-                    confidence: confidence ? parseFloat(confidence) : null,
-                    image_url: null // Will be updated asynchronously
-                }
-            }),
-            prisma.$executeRaw`
-                UPDATE parkiran SET live_kapasitas = live_kapasitas + 1, "updatedAt" = NOW()
-                WHERE id_parkiran = ${parseInt(parkiran_id)}
-            `
-        ]);
-=======
         // Atomic capacity check + increment (prevents race condition)
         const parsedParkiranId = parseInt(parkiran_id);
         const updateResult = await prisma.$executeRaw`
@@ -500,7 +481,6 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 image_url: null // Will be updated asynchronously
             }
         });
->>>>>>> Stashed changes
 
         // Trigger async uploads without awaiting (plate + face images)
         processPlateImageUpload(newLog.id_log_parkir);
@@ -549,15 +529,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
         if (!lastLog || lastLog.type === 'KELUAR') {
             return res.status(400).json({
-<<<<<<< Updated upstream
-                success: false,
-                gate_action: "DENY",
-                message: `Kendaraan ${plate_text} tidak tercatat masuk parkiran`
-=======
                 status: "error",
                 message: `Kendaraan ${plate_text} tidak tercatat masuk di parkiran ini`,
                 data: { gate_action: "DENY" }
->>>>>>> Stashed changes
             });
         }
 
@@ -622,8 +596,6 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         data: { gate_action: "DENY" }
     });
 });
-<<<<<<< Updated upstream
-=======
 
 // Reconcile live_kapasitas berdasarkan log aktual (Admin only)
 exports.reconcileKapasitas = asyncHandler(async (req, res) => {
@@ -829,4 +801,3 @@ exports.manualOverride = asyncHandler(async (req, res) => {
         }
     });
 });
->>>>>>> Stashed changes

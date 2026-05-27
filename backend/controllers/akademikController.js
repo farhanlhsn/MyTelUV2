@@ -1600,10 +1600,6 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         }
     }
 
-<<<<<<< Updated upstream
-    // TODO: kalau LOKAL_ABSENSI + face recognition:
-    // terima flag / hasil dari service face-recognition di sini
-=======
     // Impossible Travel Heuristic Check
     const prevAbsensi = await prisma.$queryRaw`
         SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
@@ -1636,7 +1632,6 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
             }
         }
     }
->>>>>>> Stashed changes
 
     await prisma.$executeRaw`
         INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")

@@ -223,15 +223,8 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 });
 
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
-<<<<<<< Updated upstream
-    const { page = 1, limit = 10 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    const total = await prisma.kendaraan.count({ where: { statusVerif: false } });
-    const totalPages = Math.ceil(total / parseInt(limit));
-=======
     const { page, limit, skip } = parsePagination(req.query);
     const total = await prisma.kendaraan.count({ where: { statusVerif: false, deletedAt: null } });
->>>>>>> Stashed changes
 
     const unverifiedKendaraan = await prisma.kendaraan.findMany({
         where: { statusVerif: false },
@@ -261,15 +254,6 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
 });
 
 exports.getAllKendaraan = asyncHandler(async (req, res) => {
-<<<<<<< Updated upstream
-    const { page = 1, limit = 10 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-    const total = await prisma.kendaraan.count();
-    const totalPages = Math.ceil(total / parseInt(limit));
-    const kendaraan = await prisma.kendaraan.findMany({
-        skip: offset,
-        take: parseInt(limit),
-=======
     const { page, limit, skip } = parsePagination(req.query);
     const total = await prisma.kendaraan.count({ where: { deletedAt: null } });
 
@@ -277,7 +261,6 @@ exports.getAllKendaraan = asyncHandler(async (req, res) => {
         where: { deletedAt: null },
         skip: skip,
         take: limit,
->>>>>>> Stashed changes
         orderBy: { createdAt: 'desc' }
     });
     res.status(200).json({

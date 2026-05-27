@@ -27,28 +27,14 @@ const corsOptions = {
             // 'https://yourdomain.com'
         ];
 
-<<<<<<< Updated upstream
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-            callback(null, true);
-=======
         if (process.env.FRONTEND_URL) {
             allowedOrigins.push(process.env.FRONTEND_URL);
         }
 
-        if (process.env.NODE_ENV === 'production') {
-            // In production, strictly check FRONTEND_URL
-            if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
-            }
->>>>>>> Stashed changes
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
         } else {
-            if (allowedOrigins.indexOf(origin) !== -1) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
-            }
+            callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
@@ -83,6 +69,7 @@ const akademikRoutes = require('./routes/akademikRoutes');
 const biometrikRoutes = require('./routes/biometrikRoutes');
 const parkirRoutes = require('./routes/parkirRoutes');
 const postRoutes = require('./routes/postRoutes');
+const anomaliRoutes = require('./routes/anomaliRoutes');
 
 // Import Swagger
 let swaggerSpec;
@@ -97,14 +84,6 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
-<<<<<<< Updated upstream
-app.use('/api/auth', authRoutes); // authLimiter now applied individually in authRoutes.js
-app.use('/api/kendaraan', kendaraanRoutes);
-app.use('/api/akademik', akademikRoutes);
-app.use('/api/biometrik', biometrikRoutes);
-app.use('/api/parkir', parkirRoutes);
-app.use('/api/posts', postRoutes);
-=======
 // Health Check Endpoint
 app.get('/health', async (req, res) => {
     const health = {
@@ -151,14 +130,19 @@ if (swaggerSpec) {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 
-app.use('/api/v1/auth', authRoutes); // authLimiter now applied individually in authRoutes.js
-app.use('/api/v1/kendaraan', kendaraanRoutes);
-app.use('/api/v1/akademik', akademikRoutes);
-app.use('/api/v1/biometrik', biometrikRoutes);
-app.use('/api/v1/parkir', parkirRoutes);
-app.use('/api/v1/posts', postRoutes);
-app.use('/api/v1/anomali', anomaliRoutes);
->>>>>>> Stashed changes
+// Support both /api and /api/v1 prefixes
+const registerRoutes = (prefix) => {
+    app.use(`${prefix}/auth`, authRoutes);
+    app.use(`${prefix}/kendaraan`, kendaraanRoutes);
+    app.use(`${prefix}/akademik`, akademikRoutes);
+    app.use(`${prefix}/biometrik`, biometrikRoutes);
+    app.use(`${prefix}/parkir`, parkirRoutes);
+    app.use(`${prefix}/posts`, postRoutes);
+    app.use(`${prefix}/anomali`, anomaliRoutes);
+};
+
+registerRoutes('/api');
+registerRoutes('/api/v1');
 
 // Import and initialize scheduler for background tasks
 const { initScheduler } = require('./utils/scheduler');
@@ -186,9 +170,6 @@ server.listen(port, '0.0.0.0', () => {
         initScheduler();
     }
 });
-
-<<<<<<< Updated upstream
-=======
 // Graceful shutdown
 async function gracefulShutdown(signal) {
     console.log(`\n[${signal}] Shutting down gracefully...`);
@@ -255,5 +236,4 @@ app.use((err, req, res, next) => {
     });
 });
 
->>>>>>> Stashed changes
 module.exports = app;
