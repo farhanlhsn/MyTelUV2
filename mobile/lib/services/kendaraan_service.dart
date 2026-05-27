@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/api_client.dart';
+import '../utils/logger.dart';
 
 class KendaraanService {
   static Dio _dio = ApiClient.dio;
