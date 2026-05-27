@@ -160,20 +160,30 @@ class PlateDetector:
         
         self.logger.info("PlateDetector initialized successfully")
 
-        # Face detection configuration (lightweight Haar Cascade)
+        # Face detection configuration (lightweight YuNet)
         face_config = self.config.get('face_detection', {})
         self.face_detection_enabled = face_config.get('enabled', True)
-        self.face_min_size = face_config.get('min_face_size', 80)
-        self.face_scale_factor = face_config.get('scale_factor', 1.1)
-        self.face_min_neighbors = face_config.get('min_neighbors', 5)
+        self.face_model_path = face_config.get('model_path', 'models/face_detection_yunet_2023mar.onnx')
+        self.face_score_threshold = face_config.get('score_threshold', 0.6)
+        self.face_nms_threshold = face_config.get('nms_threshold', 0.3)
         
         if self.face_detection_enabled:
-            # Load Haar Cascade (built-in OpenCV, very lightweight)
-            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            self.face_cascade = cv2.CascadeClassifier(cascade_path)
-            self.logger.info("Face detection enabled (Haar Cascade)")
+            try:
+                # Load YuNet face detector
+                self.face_detector = cv2.FaceDetectorYN.create(
+                    model=self.face_model_path,
+                    config="",
+                    input_size=(320, 240),
+                    score_threshold=self.face_score_threshold,
+                    nms_threshold=self.face_nms_threshold
+                )
+                self.logger.info(f"Face detection enabled (YuNet: {self.face_model_path})")
+            except Exception as e:
+                self.logger.error(f"Failed to load YuNet model: {e}. Disabling face detection.")
+                self.face_detector = None
+                self.face_detection_enabled = False
         else:
-            self.face_cascade = None
+            self.face_detector = None
             self.logger.info("Face detection disabled")
 
         # Deduplication state
@@ -207,46 +217,53 @@ class PlateDetector:
     
     def detect_and_crop_face(self, frame):
         """
-        Detect face using Haar Cascade (lightweight, built-in OpenCV).
+        Detect face using YuNet (lightweight, deep learning face detector).
         
         Returns: (face_image, face_detected)
         - face_image: Cropped face if detected, else RAW full frame (no resize)
         - face_detected: True if face was detected, False = full frame fallback
         """
-        if not self.face_detection_enabled or self.face_cascade is None:
+        if not self.face_detection_enabled or self.face_detector is None:
             # Face detection disabled, return full frame
             return frame, False
         
         try:
-            # Convert to grayscale for face detection
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            h, w = frame.shape[:2]
+            # Update input size dynamically for YuNet
+            self.face_detector.setInputSize((w, h))
             
-            # Detect faces using Haar Cascade
-            faces = self.face_cascade.detectMultiScale(
-                gray,
-                scaleFactor=self.face_scale_factor,
-                minNeighbors=self.face_min_neighbors,
-                minSize=(self.face_min_size, self.face_min_size)
-            )
+            # Run face detection
+            _, faces = self.face_detector.detect(frame)
             
-            if len(faces) > 0:
-                # Take largest face (most likely the driver/rider)
-                x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            if faces is not None and len(faces) > 0:
+                # Take largest face by bounding box area (w * h)
+                best_face = None
+                max_area = 0
+                for face in faces:
+                    x, y, face_w, face_h = face[0:4].astype(int)
+                    area = face_w * face_h
+                    if area > max_area:
+                        max_area = area
+                        best_face = face
                 
-                # Add padding for better face capture (20%)
-                pad = int(w * 0.2)
-                x1 = max(0, x - pad)
-                y1 = max(0, y - pad)
-                x2 = min(frame.shape[1], x + w + pad)
-                y2 = min(frame.shape[0], y + h + pad)
-                
-                face_img = frame[y1:y2, x1:x2]
-                self.logger.info(f"👤 Face detected: {w}x{h} at ({x}, {y})")
-                return face_img, True
-            else:
-                # No face detected (helmet, etc.) - return RAW full frame
-                self.logger.info("👤 No face detected (helmet?), using full frame")
-                return frame, False
+                if best_face is not None:
+                    x, y, face_w, face_h = best_face[0:4].astype(int)
+                    conf = float(best_face[14])
+                    
+                    # Add padding for better face capture (20%)
+                    pad = int(face_w * 0.2)
+                    x1 = max(0, x - pad)
+                    y1 = max(0, y - pad)
+                    x2 = min(w, x + face_w + pad)
+                    y2 = min(h, y + face_h + pad)
+                    
+                    face_img = frame[y1:y2, x1:x2]
+                    self.logger.info(f"👤 Face detected: {face_w}x{face_h} at ({x}, {y}) (conf: {conf:.2f})")
+                    return face_img, True
+            
+            # No face detected (helmet, etc.) - return RAW full frame
+            self.logger.info("👤 No face detected (helmet?), using full frame")
+            return frame, False
                 
         except Exception as e:
             self.logger.error(f"Face detection error: {e}")

@@ -1,17 +1,46 @@
+<<<<<<< Updated upstream
 import 'package:flutter/material.dart';
+=======
+import 'package:json_annotation/json_annotation.dart';
 
+part 'pengajuan_plat_model.g.dart';
+>>>>>>> Stashed changes
+
+@JsonSerializable()
 class PengajuanPlatModel {
+  @JsonKey(name: 'id_kendaraan', fromJson: _parseId)
   final int idKendaraan;
+
+  @JsonKey(name: 'id_user', fromJson: _parseIdNullable)
   final int? idUser;
+
+  @JsonKey(readValue: _readUserName)
   final String? userName; // Nama user yang mengajukan
+
+  @JsonKey(readValue: _readUserUsername)
   final String? userUsername; // Username user yang mengajukan
+
+  @JsonKey(name: 'plat_nomor', defaultValue: '')
   final String platNomor;
+
+  @JsonKey(name: 'nama_kendaraan', defaultValue: '')
   final String namaKendaraan;
+
+  @JsonKey(name: 'status_pengajuan', defaultValue: 'MENUNGGU')
   final String statusPengajuan; // 'MENUNGGU', 'DISETUJUI', 'DITOLAK'
+
   final String? feedback;
+
+  @JsonKey(name: 'fotoKendaraan', fromJson: _parseStringList)
   final List<String> fotoKendaraan;
+
+  @JsonKey(name: 'fotoSTNK', defaultValue: '')
   final String fotoSTNK;
+
+  @JsonKey(name: 'createdAt', fromJson: _parseDateTime, toJson: _dateTimeToJson)
   final DateTime createdAt;
+
+  @JsonKey(name: 'updatedAt', fromJson: _parseDateTime, toJson: _dateTimeToJson)
   final DateTime updatedAt;
 
   PengajuanPlatModel({
@@ -30,6 +59,7 @@ class PengajuanPlatModel {
   });
 
   // Factory constructor untuk membuat instance dari JSON
+<<<<<<< Updated upstream
   factory PengajuanPlatModel.fromJson(Map<String, dynamic> json) {
     try {
       print('🔍 Parsing JSON: $json');
@@ -125,50 +155,67 @@ class PengajuanPlatModel {
       rethrow;
     }
   }
+=======
+  factory PengajuanPlatModel.fromJson(Map<String, dynamic> json) =>
+      _$PengajuanPlatModelFromJson(json);
+>>>>>>> Stashed changes
 
   // Konversi ke JSON
-  Map<String, dynamic> toJson() {
-    return {
-      'id_kendaraan': idKendaraan,
-      'plat_nomor': platNomor,
-      'nama_kendaraan': namaKendaraan,
-      'status_pengajuan': statusPengajuan,
-      'feedback': feedback,
-      'fotoKendaraan': fotoKendaraan,
-      'fotoSTNK': fotoSTNK,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-    };
-  }
-
-  // Helper untuk mendapatkan warna status
-  Color getStatusColor() {
-    switch (statusPengajuan) {
-      case 'DISETUJUI':
-        return const Color(0xFF00C853); // Hijau
-      case 'DITOLAK':
-        return const Color(0xFFF85E55); // Merah
-      case 'MENUNGGU':
-      default:
-        return const Color(0xFFFC5F57); // Orange (Menunggu)
-    }
-  }
-
-  // Helper untuk mendapatkan text status
-  String getStatusText() {
-    switch (statusPengajuan) {
-      case 'DISETUJUI':
-        return 'Selesai';
-      case 'DITOLAK':
-        return 'Ditolak';
-      case 'MENUNGGU':
-      default:
-        return 'Menunggu Persetujuan';
-    }
-  }
-
-  // Helper untuk cek apakah bisa di-klik (hanya ditolak yang bisa di-klik)
-  bool canShowDetails() {
-    return statusPengajuan == 'DITOLAK';
-  }
+  Map<String, dynamic> toJson() => _$PengajuanPlatModelToJson(this);
 }
+
+// Static helper functions for json_serializable
+int _parseId(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value) ?? 0;
+  if (value is double) return value.toInt();
+  return 0;
+}
+
+int? _parseIdNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is String) return int.tryParse(value);
+  if (value is double) return value.toInt();
+  return null;
+}
+
+Object? _readUserName(Map json, String key) {
+  if (json['user'] != null && json['user'] is Map) {
+    return json['user']['nama']?.toString();
+  }
+  return null;
+}
+
+Object? _readUserUsername(Map json, String key) {
+  if (json['user'] != null && json['user'] is Map) {
+    return json['user']['username']?.toString();
+  }
+  return null;
+}
+
+List<String> _parseStringList(dynamic value) {
+  if (value == null) {
+    return [];
+  }
+  if (value is List) {
+    return value.map((item) => item.toString()).toList();
+  }
+  if (value is String) {
+    return [value];
+  }
+  return [];
+}
+
+DateTime _parseDateTime(dynamic value) {
+  if (value == null) {
+    return DateTime.now();
+  }
+  if (value is String) {
+    return DateTime.tryParse(value) ?? DateTime.now();
+  }
+  return DateTime.now();
+}
+
+String _dateTimeToJson(DateTime dateTime) => dateTime.toIso8601String();

@@ -8,6 +8,11 @@ class ErrorHelper {
   static void showError(dynamic error, {String title = 'Terjadi Kesalahan'}) {
     String message = parseError(error);
 
+    if (Get.context == null) {
+      debugPrint('Error dialog (no context): $title - $message');
+      return;
+    }
+
     Get.dialog(
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

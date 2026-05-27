@@ -1,5 +1,9 @@
 const express = require('express');
+<<<<<<< Updated upstream
 const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry } = require('../controllers/parkirController');
+=======
+const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas, exportParkirLogs, manualOverride } = require('../controllers/parkirController');
+>>>>>>> Stashed changes
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const multer = require('multer');
 
@@ -62,4 +66,29 @@ router.delete('/:id',
     deleteParkiran
 );
 
+<<<<<<< Updated upstream
+=======
+// Reconcile kapasitas parkiran (Admin only)
+router.post('/:id/reconcile',
+    protect,
+    authorize('ADMIN'),
+    reconcileKapasitas
+);
+
+// Export log parkir sebagai CSV (Admin only)
+// Query: ?parkiran_id=&from=2024-01-01&to=2024-12-31
+router.get('/export',
+    protect,
+    authorize('ADMIN'),
+    exportParkirLogs
+);
+
+// Manual gate override (Admin only) — force entry/exit for a vehicle
+router.post('/:id/override',
+    protect,
+    authorize('ADMIN'),
+    manualOverride
+);
+
+>>>>>>> Stashed changes
 module.exports = router;

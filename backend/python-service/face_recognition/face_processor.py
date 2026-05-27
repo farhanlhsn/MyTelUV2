@@ -5,24 +5,25 @@ Handles face detection, embedding extraction, and comparison
 
 import numpy as np
 import cv2
-from insightface.app import FaceAnalysis
-from insightface.utils import face_align
 import os
+import threading
 
 class FaceProcessor:
     def __init__(self):
         """Initialize InsightFace model"""
+        from insightface.app import FaceAnalysis
         self.app = FaceAnalysis(
             name='buffalo_l',  # Use buffalo_l model (accurate & fast)
             providers=['CPUExecutionProvider']  # Use CPU (can change to CUDA if GPU available)
         )
         self.app.prepare(ctx_id=0, det_size=(640, 640))
+        self.lock = threading.Lock()
         
     def detect_single_face(self, image_path):
         """
         Detect and extract embedding from a single face
         Args:
-            image_path: Path to image file
+            image_path: Path to image file or numpy array (BGR image)
         Returns:
             dict: {
                 'success': bool,
@@ -33,15 +34,20 @@ class FaceProcessor:
         """
         try:
             # Read image
-            img = cv2.imread(image_path)
+            if isinstance(image_path, np.ndarray):
+                img = image_path
+            else:
+                img = cv2.imread(image_path)
+                
             if img is None:
                 return {
                     'success': False,
                     'error': 'Failed to read image'
                 }
             
-            # Detect faces
-            faces = self.app.get(img)
+            # Detect faces with thread lock protection
+            with self.lock:
+                faces = self.app.get(img)
             
             if len(faces) == 0:
                 return {
@@ -77,7 +83,7 @@ class FaceProcessor:
         """
         Detect and extract embeddings from multiple faces (for CCTV)
         Args:
-            image_path: Path to image file
+            image_path: Path to image file or numpy array (BGR image)
         Returns:
             dict: {
                 'success': bool,
@@ -92,15 +98,20 @@ class FaceProcessor:
         """
         try:
             # Read image
-            img = cv2.imread(image_path)
+            if isinstance(image_path, np.ndarray):
+                img = image_path
+            else:
+                img = cv2.imread(image_path)
+                
             if img is None:
                 return {
                     'success': False,
                     'error': 'Failed to read image'
                 }
             
-            # Detect faces
-            faces = self.app.get(img)
+            # Detect faces with thread lock protection
+            with self.lock:
+                faces = self.app.get(img)
             
             if len(faces) == 0:
                 return {

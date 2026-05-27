@@ -203,12 +203,6 @@ router.put('/kelas/:id',
     updateKelas
 );
 
-router.delete('/kelas/:id',
-    protect,
-    authorize('ADMIN', 'DOSEN'),
-    deleteKelas
-);
-
 router.get('/kelas/:id/peserta',
     protect,
     authorize('DOSEN', 'ADMIN'),

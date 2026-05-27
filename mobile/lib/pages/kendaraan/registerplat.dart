@@ -205,11 +205,18 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
         _isLoading = false;
       });
 
+      String errorMessage = e.toString();
+      if (errorMessage.toLowerCase().contains('limit') || errorMessage.toLowerCase().contains('maximum')) {
+        errorMessage = 'Maaf, Anda telah mencapai batas pendaftaran maksimal 3 kendaraan.';
+      } else {
+        errorMessage = 'Gagal mendaftarkan kendaraan: $e';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mendaftarkan kendaraan: $e'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 4),
         ),
       );
     }

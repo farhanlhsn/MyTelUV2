@@ -14,7 +14,7 @@ class AkademikService {
   Future<List<KelasHariIniModel>> getKelasHariIni() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/kelas/hari-ini',
+        '/api/v1/akademik/kelas/hari-ini',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -38,7 +38,7 @@ class AkademikService {
   Future<Map<String, List<dynamic>>> getJadwalMingguan() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/kelas/jadwal-mingguan',
+        '/api/v1/akademik/kelas/jadwal-mingguan',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -76,7 +76,7 @@ class AkademikService {
       };
 
       final Response<dynamic> response = await _dio.post(
-        '/api/akademik/kelas/$idKelas/jadwal-pengganti',
+        '/api/v1/akademik/kelas/$idKelas/jadwal-pengganti',
         data: data,
       );
 
@@ -90,7 +90,7 @@ class AkademikService {
   Future<bool> deleteJadwalPengganti(int idJadwalPengganti) async {
     try {
       final Response<dynamic> response = await _dio.delete(
-        '/api/akademik/jadwal-pengganti/$idJadwalPengganti',
+        '/api/v1/akademik/jadwal-pengganti/$idJadwalPengganti',
       );
 
       return response.statusCode == 200;
@@ -103,7 +103,7 @@ class AkademikService {
   Future<List<PesertaKelasModel>> getKelasKu() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/kelas/ku',
+        '/api/v1/akademik/kelas/ku',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -127,7 +127,7 @@ class AkademikService {
   Future<List<AbsensiModel>> getAbsensiKu() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/absensi/ku',
+        '/api/v1/akademik/absensi/ku',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -188,7 +188,7 @@ class AkademikService {
   Future<bool> daftarKelas(int idKelas) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/akademik/kelas/daftar',
+        '/api/v1/akademik/kelas/daftar',
         data: {'id_kelas': idKelas},
       );
 
@@ -202,7 +202,7 @@ class AkademikService {
   Future<bool> dropKelas(int idKelas) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/akademik/kelas/$idKelas/drop',
+        '/api/v1/akademik/kelas/$idKelas/drop',
       );
 
       return response.statusCode == 200;
@@ -229,7 +229,7 @@ class AkademikService {
       }
 
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/kelas',
+        '/api/v1/akademik/kelas',
         queryParameters: queryParams,
       );
 
@@ -259,7 +259,7 @@ class AkademikService {
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/akademik/absensi',
+        '/api/v1/akademik/absensi',
         data: {
           'id_kelas': idKelas,
           'id_sesi_absensi': idSesiAbsensi,
@@ -283,7 +283,7 @@ class AkademikService {
       }
 
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/absensi/ku/history',
+        '/api/v1/akademik/absensi/ku/history',
         queryParameters: queryParams,
       );
 
@@ -316,7 +316,7 @@ class AkademikService {
       }
 
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/matakuliah',
+        '/api/v1/akademik/matakuliah',
         queryParameters: queryParams,
       );
 
@@ -336,7 +336,7 @@ class AkademikService {
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/akademik/matakuliah',
+        '/api/v1/akademik/matakuliah',
         data: {
           'nama_matakuliah': namaMatakuliah,
           'kode_matakuliah': kodeMatakuliah,
@@ -368,7 +368,7 @@ class AkademikService {
       if (kodeMatakuliah != null) data['kode_matakuliah'] = kodeMatakuliah;
 
       final Response<dynamic> response = await _dio.put<dynamic>(
-        '/api/akademik/matakuliah/$idMatakuliah',
+        '/api/v1/akademik/matakuliah/$idMatakuliah',
         data: data,
       );
 
@@ -389,7 +389,7 @@ class AkademikService {
   Future<bool> deleteMatakuliah(int idMatakuliah) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/akademik/matakuliah/$idMatakuliah',
+        '/api/v1/akademik/matakuliah/$idMatakuliah',
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -404,7 +404,7 @@ class AkademikService {
   Future<bool> deleteAllKelas() async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/akademik/kelas/delete-all',
+        '/api/v1/akademik/kelas/delete-all',
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -424,7 +424,7 @@ class AkademikService {
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/akademik/kelas',
+        '/api/v1/akademik/kelas',
         data: {
           'id_matakuliah': idMatakuliah,
           'id_dosen': idDosen,
@@ -474,7 +474,7 @@ class AkademikService {
       if (ruangan != null) data['ruangan'] = ruangan;
 
       final Response<dynamic> response = await _dio.put<dynamic>(
-        '/api/akademik/kelas/$idKelas',
+        '/api/v1/akademik/kelas/$idKelas',
         data: data,
       );
 
@@ -492,7 +492,7 @@ class AkademikService {
   Future<bool> deleteKelas(int idKelas) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/akademik/kelas/$idKelas',
+        '/api/v1/akademik/kelas/$idKelas',
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -504,7 +504,7 @@ class AkademikService {
   Future<List<Map<String, dynamic>>> getPesertaKelas(int idKelas) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/akademik/kelas/$idKelas/peserta',
+        '/api/v1/akademik/kelas/$idKelas/peserta',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -524,7 +524,7 @@ class AkademikService {
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/akademik/kelas/peserta/add',
+        '/api/v1/akademik/kelas/peserta/add',
         data: {
           'id_kelas': idKelas,
           'id_mahasiswa': idsMahasiswa,
@@ -543,7 +543,7 @@ class AkademikService {
   Future<List<Map<String, dynamic>>> getAllMahasiswa() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/auth/users',
+        '/api/v1/auth/users',
         queryParameters: {'role': 'MAHASISWA', 'limit': 100},
       );
 
@@ -565,7 +565,7 @@ class AkademikService {
     try {
       // Using auth endpoint to get users with DOSEN role
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/auth/users',
+        '/api/v1/auth/users',
         queryParameters: {'role': 'DOSEN', 'limit': 100},
       );
 
@@ -605,7 +605,7 @@ class AkademikService {
   Future<List<int>> downloadLaporanSesi(int idSesi) async {
     try {
       final response = await _dio.get(
-        '/api/akademik/laporan/sesi/$idSesi/pdf',
+        '/api/v1/akademik/laporan/sesi/$idSesi/pdf',
         options: Options(
           responseType: ResponseType.bytes,
         ),
@@ -620,7 +620,7 @@ class AkademikService {
   Future<List<int>> downloadLaporanKelas(int idKelas) async {
     try {
       final response = await _dio.get(
-        '/api/akademik/laporan/kelas/$idKelas/pdf',
+        '/api/v1/akademik/laporan/kelas/$idKelas/pdf',
         options: Options(
           responseType: ResponseType.bytes,
         ),

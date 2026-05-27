@@ -10,6 +10,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'auth_controller_test.mocks.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AuthController authController;
   late MockAuthService mockAuthService;
   late MockFlutterSecureStorage mockSecureStorage;

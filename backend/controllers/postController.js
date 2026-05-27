@@ -1,20 +1,22 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
+const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
+const { moderateContent } = require('../utils/contentModerator');
+const { sendSocialNotification } = require('../utils/firebase');
 
 // ==================== POST CRUD ====================
 
 // Get all posts (feed) with pagination
 exports.getAllPosts = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query);
     const userId = req.user.id_user;
 
     const [posts, total] = await prisma.$transaction([
         prisma.post.findMany({
             where: { deletedAt: null },
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -56,12 +58,7 @@ exports.getAllPosts = asyncHandler(async (req, res) => {
     res.status(200).json({
         status: "success",
         data: postsWithLikeStatus,
-        pagination: {
-            total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
-        }
+        pagination: buildPaginationMeta(total, page, limit)
     });
 });
 
@@ -141,6 +138,15 @@ exports.createPost = asyncHandler(async (req, res) => {
         });
     }
 
+    // OpenAI Moderation check
+    const moderationResult = await moderateContent(content);
+    if (moderationResult.flagged) {
+        return res.status(400).json({
+            status: "error",
+            message: "Postingan melanggar panduan komunitas."
+        });
+    }
+
     // Handle media uploads
     let mediaUrls = [];
     if (req.files && req.files.media) {
@@ -200,7 +206,7 @@ exports.createPost = asyncHandler(async (req, res) => {
 // Update post
 exports.updatePost = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { content, latitude, longitude, location_name } = req.body;
+    const { content, latitude, longitude, location_name, remove_media } = req.body;
     const userId = req.user.id_user;
 
     const post = await prisma.post.findFirst({
@@ -224,13 +230,82 @@ exports.updatePost = asyncHandler(async (req, res) => {
         });
     }
 
+    // OpenAI Moderation check if content is provided
+    if (content && content.trim() !== '') {
+        const moderationResult = await moderateContent(content);
+        if (moderationResult.flagged) {
+            return res.status(400).json({
+                status: "error",
+                message: "Postingan melanggar panduan komunitas."
+            });
+        }
+    }
+
+    // Handle media updates (removal of selected files)
+    let finalMedia = [...post.media];
+    let shouldUpdateMedia = false;
+
+    if (remove_media) {
+        shouldUpdateMedia = true;
+        let filesToRemove = [];
+        if (Array.isArray(remove_media)) {
+            filesToRemove = remove_media;
+        } else {
+            try {
+                filesToRemove = JSON.parse(remove_media);
+                if (!Array.isArray(filesToRemove)) {
+                    filesToRemove = [filesToRemove];
+                }
+            } catch (e) {
+                filesToRemove = [remove_media];
+            }
+        }
+
+        for (const url of filesToRemove) {
+            if (post.media.includes(url)) {
+                try {
+                    if (await fileExists(url)) {
+                        await deleteFile(url);
+                    }
+                } catch (err) {
+                    console.error(`Failed to delete file from R2: ${url}`, err.message);
+                }
+            }
+        }
+        finalMedia = finalMedia.filter(url => !filesToRemove.includes(url));
+    }
+
+    // Handle media updates (upload new files)
+    if (req.files && req.files.media) {
+        shouldUpdateMedia = true;
+        const mediaFiles = Array.isArray(req.files.media) ? req.files.media : [req.files.media];
+
+        for (const file of mediaFiles) {
+            try {
+                const result = await uploadFile(
+                    file.buffer,
+                    file.originalname,
+                    file.mimetype,
+                    'posts'
+                );
+                finalMedia.push(result.fileUrl);
+            } catch (error) {
+                return res.status(500).json({
+                    status: "error",
+                    message: `Failed to upload media: ${error.message}`
+                });
+            }
+        }
+    }
+
     const updatedPost = await prisma.post.update({
         where: { id_post: parseInt(id) },
         data: {
             content: content ? content.trim() : undefined,
             latitude: latitude !== undefined ? parseFloat(latitude) : undefined,
             longitude: longitude !== undefined ? parseFloat(longitude) : undefined,
-            location_name: location_name !== undefined ? location_name : undefined
+            location_name: location_name !== undefined ? location_name : undefined,
+            media: shouldUpdateMedia ? finalMedia : undefined
         },
         include: {
             user: {
@@ -346,6 +421,19 @@ exports.toggleLike = asyncHandler(async (req, res) => {
             }
         });
         isLiked = true;
+
+        // Trigger notification
+        if (post.id_user !== userId) {
+            // Get current user's name
+            prisma.user.findUnique({ where: { id_user: userId }, select: { nama: true } })
+                .then(user => {
+                    if (user) {
+                        sendSocialNotification(post.id_user, 'LIKE', user.nama, post.content)
+                            .catch(err => console.error('Error triggering like notification:', err.message));
+                    }
+                })
+                .catch(err => console.error('Error fetching user for like notification:', err.message));
+        }
     }
 
     // Get updated like count
@@ -437,6 +525,15 @@ exports.addComment = asyncHandler(async (req, res) => {
         });
     }
 
+    // OpenAI Moderation check
+    const moderationResult = await moderateContent(content);
+    if (moderationResult.flagged) {
+        return res.status(400).json({
+            status: "error",
+            message: "Postingan melanggar panduan komunitas."
+        });
+    }
+
     const post = await prisma.post.findFirst({
         where: {
             id_post: parseInt(id),
@@ -467,6 +564,12 @@ exports.addComment = asyncHandler(async (req, res) => {
             }
         }
     });
+
+    // Trigger notification
+    if (post.id_user !== userId) {
+        sendSocialNotification(post.id_user, 'COMMENT', comment.user.nama, post.content)
+            .catch(err => console.error('Error triggering comment notification:', err.message));
+    }
 
     res.status(201).json({
         status: "success",

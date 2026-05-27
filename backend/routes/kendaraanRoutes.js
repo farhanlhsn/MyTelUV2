@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerKendaraan, getKendaraan, deleteKendaraan, verifyKendaraan, getAllUnverifiedKendaraan, getAllKendaraan, getHistoriPengajuan, rejectKendaraan } = require('../controllers/kendaraanController');
+const { registerKendaraan, getKendaraan, deleteKendaraan, verifyKendaraan, getAllUnverifiedKendaraan, getAllKendaraan, getHistoriPengajuan, rejectKendaraan, resubmitKendaraan } = require('../controllers/kendaraanController');
 const { uploadFields, validateFileSize, requireFile } = require('../middlewares/multerMiddleware');
 const { validateRequired } = require('../middlewares/validationMiddleware');
 const { protect, authorize } = require('../middlewares/authMiddleware');
@@ -58,6 +58,16 @@ router.post('/reject',
     authorize('ADMIN'),
     validateRequired(['id_kendaraan', 'id_user', 'feedback']),
     rejectKendaraan
+);
+
+router.put('/:id_kendaraan/resubmit',
+    protect,
+    uploadFields([
+        { name: 'fotoKendaraan', maxCount: 3 },
+        { name: 'fotoSTNK', maxCount: 1 }
+    ]),
+    validateFileSize,
+    resubmitKendaraan
 );
 
 module.exports = router;

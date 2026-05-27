@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  db-test:
+    image: postgres:15-alpine
+    container_name: myteluv2-postgres-test
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: myteluv2_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-test:/var/lib/postgresql/data
+    networks:
+      - myteluv2-test-network
+
+networks:
+  myteluv2-test-network:
+    driver: bridge
+
+volumes:
+  pgdata-test:

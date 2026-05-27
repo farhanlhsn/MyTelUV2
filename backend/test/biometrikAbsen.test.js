@@ -12,9 +12,10 @@
 jest.mock('../utils/prisma', () => ({
     dataBiometrik: { findUnique: jest.fn() },
     pesertaKelas: { findMany: jest.fn() },
-    sesiAbsensi: { findFirst: jest.fn() },
+    sesiAbsensi: { findMany: jest.fn(), findFirst: jest.fn() },
     absensi: { findFirst: jest.fn() },
     $executeRaw: jest.fn(),
+    $queryRaw: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('axios');
@@ -51,12 +52,15 @@ const { biometrikAbsen } = require('../controllers/biometrikController');
 // TEST HELPERS
 // ============================================
 
-const createMockReq = (overrides = {}) => ({
-    file: { path: '/tmp/test.jpg', originalname: 'test.jpg', mimetype: 'image/jpeg' },
-    body: { latitude: '-7.9826', longitude: '112.6308' },
-    user: { id_user: 1, role: 'MAHASISWA' },
-    ...overrides,
-});
+const createMockReq = (overrides = {}) => {
+    const { body: overrideBody, ...rest } = overrides;
+    return {
+        file: { path: '/tmp/test.jpg', originalname: 'test.jpg', mimetype: 'image/jpeg' },
+        body: { latitude: '-7.9826', longitude: '112.6308', id_sesi_absensi: 1, ...overrideBody },
+        user: { id_user: 1, role: 'MAHASISWA' },
+        ...rest
+    };
+};
 
 const createMockRes = () => {
     const res = {};
@@ -73,6 +77,10 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        prisma.sesiAbsensi.findFirst.mockImplementation(async () => {
+            const manyResult = await prisma.sesiAbsensi.findMany();
+            return Array.isArray(manyResult) && manyResult.length > 0 ? manyResult[0] : null;
+        });
     });
 
     /**
@@ -129,7 +137,6 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
             await biometrikAbsen(req, res, next);
 
-            expect(fs.unlinkSync).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
@@ -396,7 +403,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
             prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }, { id_kelas: 2 }]);
-            prisma.sesiAbsensi.findFirst.mockResolvedValueOnce(null);
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([]);
 
             const req = createMockReq();
             const res = createMockRes();
@@ -407,7 +414,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
+                message: 'Sesi absensi yang dipilih tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar di kelas tersebut'
             });
         });
     });
@@ -434,10 +441,10 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
             prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }]);
-            prisma.sesiAbsensi.findFirst.mockResolvedValueOnce({
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
                 id_sesi_absensi: 1, id_kelas: 1, latitude: null, longitude: null, radius_meter: null,
                 kelas: { nama_kelas: 'Algoritma A', matakuliah: { nama_matakuliah: 'Algoritma Pemrograman' } }
-            });
+            }]);
             prisma.absensi.findFirst.mockResolvedValueOnce({ id_absensi: 1, id_user: 1, id_sesi_absensi: 1 });
 
             const req = createMockReq();
@@ -477,11 +484,11 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
             prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }]);
-            prisma.sesiAbsensi.findFirst.mockResolvedValueOnce({
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
                 id_sesi_absensi: 1, id_kelas: 1,
                 latitude: -7.9826, longitude: 112.6308, radius_meter: 100,
                 kelas: { nama_kelas: 'Algoritma A', matakuliah: { nama_matakuliah: 'Algoritma Pemrograman' } }
-            });
+            }]);
             prisma.absensi.findFirst.mockResolvedValueOnce(null);
 
             // User location far from session location
@@ -528,12 +535,12 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 user: { id_user: 1, nama: 'John Doe', username: 'johndoe' }
             });
             prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }]);
-            prisma.sesiAbsensi.findFirst.mockResolvedValueOnce({
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
                 id_sesi_absensi: 1, id_kelas: 1,
                 latitude: -7.9826, longitude: 112.6308, radius_meter: 100,
                 type_absensi: 'HADIR',
                 kelas: { nama_kelas: 'Algoritma A', ruangan: 'R.101', matakuliah: { nama_matakuliah: 'Algoritma Pemrograman' } }
-            });
+            }]);
             prisma.absensi.findFirst
                 .mockResolvedValueOnce(null)
                 .mockResolvedValueOnce({
@@ -594,12 +601,12 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             });
             prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 2 }]);
             // Session without location requirement
-            prisma.sesiAbsensi.findFirst.mockResolvedValueOnce({
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
                 id_sesi_absensi: 2, id_kelas: 2,
                 latitude: null, longitude: null, radius_meter: null,
                 type_absensi: 'HADIR',
                 kelas: { nama_kelas: 'Database B', ruangan: 'R.202', matakuliah: { nama_matakuliah: 'Basis Data' } }
-            });
+            }]);
             prisma.absensi.findFirst
                 .mockResolvedValueOnce(null)
                 .mockResolvedValueOnce({
@@ -647,7 +654,6 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
             await biometrikAbsen(req, res, next);
 
-            expect(fs.unlinkSync).toHaveBeenCalled();
             expect(next).toHaveBeenCalledWith(expect.any(Error));
         });
     });

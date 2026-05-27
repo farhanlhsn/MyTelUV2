@@ -5,6 +5,7 @@ import '../models/kelas_hari_ini.dart';
 import '../models/absensi.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
+import '../utils/logger.dart';
 
 class HomeController extends GetxController {
   final AkademikService _akademikService = AkademikService();
@@ -58,13 +59,22 @@ class HomeController extends GetxController {
     isLoading.value = true;
     errorMessage.value = '';
 
-    try {
-      await Future.wait([loadKelasHariIni(), loadKelas(), loadAbsensi()]);
-    } catch (e) {
-      errorMessage.value = 'Failed to load data: ${e.toString()}';
-    } finally {
-      isLoading.value = false;
-    }
+    await Future.wait([
+      Future(() => loadKelasHariIni()).catchError((e) {
+        debugLog('⚠️ Error loading kelas hari ini: $e');
+        return null;
+      }),
+      Future(() => loadKelas()).catchError((e) {
+        debugLog('⚠️ Error loading kelas: $e');
+        return null;
+      }),
+      Future(() => loadAbsensi()).catchError((e) {
+        debugLog('⚠️ Error loading absensi: $e');
+        return null;
+      }),
+    ]);
+
+    isLoading.value = false;
   }
 
   // Load kelas hari ini (classes for today)

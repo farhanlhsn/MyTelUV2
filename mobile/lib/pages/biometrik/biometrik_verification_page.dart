@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import '../../services/biometrik_service.dart';
 
 class BiometrikAbsenPage extends StatefulWidget {
@@ -18,11 +19,6 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     with WidgetsBindingObserver {
   final BiometrikService _biometrikService = BiometrikService();
 
-  CameraController? _cameraController;
-  bool _isCameraInitialized = false;
-  bool _isCameraError = false;
-  String? _cameraErrorMessage;
-
   File? _capturedImage;
   bool _isLoading = false;
   bool _isSuccess = false;
@@ -30,75 +26,19 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   Map<String, dynamic>? _result;
   Position? _currentPosition;
   bool _isGettingLocation = false;
+  bool _isLivenessVerified = false;
 
   final Color primaryRed = const Color(0xFFE63946);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
     _getCurrentLocation();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
-      _cameraController?.dispose();
-    } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
-    }
-  }
-
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        setState(() {
-          _isCameraError = true;
-          _cameraErrorMessage = 'Tidak ada kamera tersedia';
-        });
-        return;
-      }
-
-      // Find front camera
-      final frontCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
-
-      _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
-      );
-
-      await _cameraController!.initialize();
-
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = true;
-          _isCameraError = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isCameraError = true;
-        _cameraErrorMessage = 'Gagal membuka kamera: ${e.toString()}';
-      });
-    }
   }
 
   /// Map API error messages to user-friendly Indonesian text
@@ -179,22 +119,41 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     }
   }
 
-  Future<void> _capturePhoto() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
+  Future<void> _startLivenessCheck() async {
+    setState(() {
+      _errorMessage = null;
+      _isSuccess = false;
+      _result = null;
+    });
 
     try {
-      final XFile photo = await _cameraController!.takePicture();
-      setState(() {
-        _capturedImage = File(photo.path);
-        _errorMessage = null;
-        _isSuccess = false;
-        _result = null;
-      });
+      final List<CameraDescription> cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() {
+          _errorMessage = 'Tidak ada kamera tersedia untuk Liveness Check';
+        });
+        return;
+      }
+
+      Get.to(() => LivenessDetectionScreen(
+        cameras: cameras,
+        config: LivenessConfig(
+          enableScreenGlareDetection: true,
+        ),
+        captureFinalImage: true,
+        onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) {
+          final resultPath = imageFile.path;
+          setState(() {
+            _capturedImage = File(resultPath);
+            _isLivenessVerified = true;
+            _errorMessage = null;
+          });
+          Get.back(); // Return to BiometrikAbsenPage
+        },
+      ));
     } catch (e) {
       setState(() {
-        _errorMessage = 'Gagal mengambil foto: ${e.toString()}';
+        _errorMessage = 'Gagal memuat Liveness Check: ${e.toString()}';
       });
     }
   }
@@ -205,12 +164,13 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       _errorMessage = null;
       _isSuccess = false;
       _result = null;
+      _isLivenessVerified = false;
     });
   }
 
   Future<void> _submitAbsen() async {
     if (_capturedImage == null) {
-      setState(() => _errorMessage = 'Silakan ambil foto wajah terlebih dahulu');
+      setState(() => _errorMessage = 'Silakan ambil foto wajah dengan Liveness Check terlebih dahulu');
       return;
     }
 
@@ -232,6 +192,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         imageFile: _capturedImage!,
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
+        isLivenessVerified: _isLivenessVerified,
+        isMockLocation: _currentPosition!.isMocked,
       );
 
       setState(() {
@@ -512,98 +474,42 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       );
     }
 
-    // Camera error
-    if (_isCameraError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.videocam_off, size: 48, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              _cameraErrorMessage ?? 'Kamera tidak tersedia',
+    // Default placeholder before liveness verification
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.face, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'Silakan lakukan Liveness Check untuk mengambil foto wajah Anda secara langsung.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Camera loading
-    if (!_isCameraInitialized) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 12),
-            Text(
-              'Memuat kamera...',
-              style: TextStyle(color: Colors.white, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Live camera preview with face guide
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Camera preview
-        Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()..scale(-1.0, 1.0), // Mirror for selfie
-          child: CameraPreview(_cameraController!),
-        ),
-        // Face oval guide overlay
-        CustomPaint(
-          size: const Size(180, 240),
-          painter: FaceOvalPainter(
-            color: Colors.white.withOpacity(0.7),
-          ),
-        ),
-        // Instructions
-        Positioned(
-          bottom: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Posisikan wajah dalam bingkai',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildCaptureButton() {
     if (_capturedImage == null) {
-      // Capture button
-      return GestureDetector(
-        onTap: _isCameraInitialized ? _capturePhoto : null,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: primaryRed, width: 4),
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _startLivenessCheck,
+          icon: const Icon(Icons.face_retouching_natural, color: Colors.white),
+          label: const Text(
+            'Mulai Liveness Check',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          child: Center(
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isCameraInitialized ? primaryRed : Colors.grey,
-              ),
-              child: const Icon(Icons.camera_alt, color: Colors.white, size: 28),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryRed,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
           ),
         ),

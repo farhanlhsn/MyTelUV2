@@ -3,6 +3,9 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const helmet = require('helmet');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
+const swaggerUi = require('swagger-ui-express');
 
 //import security middleware
 const { generalLimiter, authLimiter } = require('./middlewares/rateLimiterMiddleware');
@@ -24,10 +27,28 @@ const corsOptions = {
             // 'https://yourdomain.com'
         ];
 
+<<<<<<< Updated upstream
         if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
             callback(null, true);
+=======
+        if (process.env.FRONTEND_URL) {
+            allowedOrigins.push(process.env.FRONTEND_URL);
+        }
+
+        if (process.env.NODE_ENV === 'production') {
+            // In production, strictly check FRONTEND_URL
+            if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+>>>>>>> Stashed changes
         } else {
-            callback(new Error('Not allowed by CORS'));
+            if (allowedOrigins.indexOf(origin) !== -1) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
         }
     },
     credentials: true,
@@ -63,28 +84,176 @@ const biometrikRoutes = require('./routes/biometrikRoutes');
 const parkirRoutes = require('./routes/parkirRoutes');
 const postRoutes = require('./routes/postRoutes');
 
+// Import Swagger
+let swaggerSpec;
+try {
+    swaggerSpec = require('./utils/swagger');
+} catch (e) {
+    console.warn('[Warning] Swagger setup failed or swagger.js not found yet');
+}
+
 const port = process.env.PORT || 5050;
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
+<<<<<<< Updated upstream
 app.use('/api/auth', authRoutes); // authLimiter now applied individually in authRoutes.js
 app.use('/api/kendaraan', kendaraanRoutes);
 app.use('/api/akademik', akademikRoutes);
 app.use('/api/biometrik', biometrikRoutes);
 app.use('/api/parkir', parkirRoutes);
 app.use('/api/posts', postRoutes);
+=======
+// Health Check Endpoint
+app.get('/health', async (req, res) => {
+    const health = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        services: {}
+    };
+
+    // Check Database
+    const { PrismaClient } = require('./generated/prisma');
+    const prismaHealth = new PrismaClient();
+    try {
+        await prismaHealth.$queryRaw`SELECT 1`;
+        health.services.database = { status: 'ok' };
+    } catch (e) {
+        health.services.database = { status: 'error', message: e.message };
+        health.status = 'degraded';
+    } finally {
+        await prismaHealth.$disconnect();
+    }
+
+    // Check Python Face Service (Port 5051)
+    try {
+        const resp = await fetch('http://localhost:5051/health', { signal: AbortSignal.timeout(3000) });
+        health.services.face_recognition = { status: resp.ok ? 'ok' : 'error' };
+    } catch {
+        health.services.face_recognition = { status: 'unreachable' };
+    }
+
+    // Check Python Plate Service (Port 5001)
+    try {
+        const resp = await fetch('http://localhost:5001/health', { signal: AbortSignal.timeout(3000) });
+        health.services.plate_recognition = { status: resp.ok ? 'ok' : 'error' };
+    } catch {
+        health.services.plate_recognition = { status: 'unreachable' };
+    }
+
+    const statusCode = health.status === 'ok' ? 200 : 503;
+    res.status(statusCode).json(health);
+});
+
+if (swaggerSpec) {
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
+
+app.use('/api/v1/auth', authRoutes); // authLimiter now applied individually in authRoutes.js
+app.use('/api/v1/kendaraan', kendaraanRoutes);
+app.use('/api/v1/akademik', akademikRoutes);
+app.use('/api/v1/biometrik', biometrikRoutes);
+app.use('/api/v1/parkir', parkirRoutes);
+app.use('/api/v1/posts', postRoutes);
+app.use('/api/v1/anomali', anomaliRoutes);
+>>>>>>> Stashed changes
 
 // Import and initialize scheduler for background tasks
 const { initScheduler } = require('./utils/scheduler');
 
-app.listen(port, '0.0.0.0', () => {
+const server = http.createServer(app);
+const io = new Server(server, { cors: corsOptions });
+
+// Make io accessible in controllers
+app.set('io', io);
+
+io.on('connection', (socket) => {
+    console.log(`[WebSocket] Client connected: ${socket.id}`);
+    socket.on('disconnect', () => {
+        console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+    });
+});
+
+server.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`);
     console.log(`Local: http://localhost:${port}`);
     console.log(`Network: http://10.0.2.2:${port} (Android Emulator)`);
 
     // Initialize scheduled tasks (auto-close sessions, etc.)
-    initScheduler();
+    if (process.env.NODE_ENV !== 'test') {
+        initScheduler();
+    }
 });
 
+<<<<<<< Updated upstream
+=======
+// Graceful shutdown
+async function gracefulShutdown(signal) {
+    console.log(`\n[${signal}] Shutting down gracefully...`);
+    
+    server.close(async () => {
+        console.log('[Shutdown] HTTP server closed');
+        
+        try {
+            const prisma = require('./utils/prisma');
+            await prisma.$disconnect();
+            console.log('[Shutdown] Database disconnected');
+        } catch (e) {
+            console.error('[Shutdown] Error disconnecting database:', e);
+        }
+        
+        process.exit(0);
+    });
+
+    // Force shutdown after 10s if graceful fails
+    setTimeout(() => {
+        console.error('[Shutdown] Forced exit after 10s timeout');
+        process.exit(1);
+    }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        status: "error",
+        message: `Route ${req.method} ${req.originalUrl} not found`
+    });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`, err.stack);
+
+    // Multer errors (file too large, wrong type, etc.)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+            status: "error",
+            message: "File terlalu besar"
+        });
+    }
+
+    if (err.message?.includes('Not allowed by CORS')) {
+        return res.status(403).json({
+            status: "error",
+            message: "CORS not allowed"
+        });
+    }
+
+    // Hide internal details in production
+    const message = process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : err.message;
+
+    res.status(err.statusCode || 500).json({
+        status: "error",
+        message
+    });
+});
+
+>>>>>>> Stashed changes
 module.exports = app;

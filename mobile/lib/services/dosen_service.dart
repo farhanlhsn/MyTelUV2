@@ -7,7 +7,7 @@ class DosenService {
   /// Get kelas yang diampu oleh dosen
   Future<List<Map<String, dynamic>>> getKelasDiampu() async {
     final Response<dynamic> response = await _dio.get<dynamic>(
-      '/api/akademik/kelas/dosen',
+      '/api/v1/akademik/kelas/dosen',
     );
 
     if (response.data is Map<String, dynamic>) {
@@ -29,7 +29,7 @@ class DosenService {
     int? radiusMeter,
   }) async {
     final Response<dynamic> response = await _dio.post<dynamic>(
-      '/api/akademik/open-absensi',
+      '/api/v1/akademik/open-absensi',
       data: {
         'id_kelas': idKelas,
         'type_absensi': typeAbsensi,
@@ -50,7 +50,7 @@ class DosenService {
   /// Get all sesi absensi for a kelas
   Future<List<Map<String, dynamic>>> getSesiAbsensi(int idKelas) async {
     final Response<dynamic> response = await _dio.get<dynamic>(
-      '/api/akademik/kelas/$idKelas/sesi',
+      '/api/v1/akademik/kelas/$idKelas/sesi',
     );
 
     if (response.data is Map<String, dynamic>) {
@@ -64,7 +64,7 @@ class DosenService {
   /// Get detail attendance for a sesi
   Future<Map<String, dynamic>> getSesiDetail(int idSesi) async {
     final Response<dynamic> response = await _dio.get<dynamic>(
-      '/api/akademik/absensi/sesi/$idSesi',
+      '/api/v1/akademik/absensi/sesi/$idSesi',
     );
 
     if (response.data is Map<String, dynamic>) {
@@ -77,7 +77,7 @@ class DosenService {
   /// Close sesi absensi
   Future<Map<String, dynamic>> closeSesiAbsensi(int idSesiAbsensi) async {
     final Response<dynamic> response = await _dio.put<dynamic>(
-      '/api/akademik/absensi/sesi/$idSesiAbsensi/close',
+      '/api/v1/akademik/absensi/sesi/$idSesiAbsensi/close',
     );
 
     if (response.data is Map<String, dynamic>) {
@@ -89,7 +89,7 @@ class DosenService {
   /// Download Laporan Sesi
   Future<List<int>> downloadLaporanSesi(int idSesi) async {
     final response = await _dio.get(
-      '/api/akademik/laporan/sesi/$idSesi/pdf',
+      '/api/v1/akademik/laporan/sesi/$idSesi/pdf',
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data;
@@ -98,7 +98,7 @@ class DosenService {
   /// Download Laporan Kelas (Rekap)
   Future<List<int>> downloadLaporanKelas(int idKelas) async {
     final response = await _dio.get(
-      '/api/akademik/laporan/kelas/$idKelas/pdf',
+      '/api/v1/akademik/laporan/kelas/$idKelas/pdf',
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data;
@@ -107,7 +107,7 @@ class DosenService {
   /// Download Laporan Sesi - Excel
   Future<List<int>> downloadLaporanSesiExcel(int idSesi) async {
     final response = await _dio.get(
-      '/api/akademik/laporan/sesi/$idSesi/excel',
+      '/api/v1/akademik/laporan/sesi/$idSesi/excel',
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data;
@@ -116,7 +116,7 @@ class DosenService {
   /// Download Laporan Kelas (Rekap) - Excel
   Future<List<int>> downloadLaporanKelasExcel(int idKelas) async {
     final response = await _dio.get(
-      '/api/akademik/laporan/kelas/$idKelas/excel',
+      '/api/v1/akademik/laporan/kelas/$idKelas/excel',
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data;

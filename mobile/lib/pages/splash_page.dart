@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../app/routes.dart';
+import '../app/auth_middleware.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -25,9 +26,9 @@ class _SplashPageState extends State<SplashPage> {
     await Future.delayed(const Duration(milliseconds: 1000));
 
     try {
-      final String? token = await _secureStorage.read(key: 'token');
+      await AuthMiddleware.loadCredentials();
       
-      if (token != null && token.isNotEmpty) {
+      if (AuthMiddleware.cachedToken != null && AuthMiddleware.cachedToken!.isNotEmpty) {
         // Token exists, go to home
         Get.offAllNamed(AppRoutes.home);
       } else {

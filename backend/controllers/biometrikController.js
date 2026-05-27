@@ -8,6 +8,8 @@ const { uploadFile, deleteFile } = require('../utils/r2FileHandler');
 const embeddingCache = require('../utils/embeddingCache');
 const { logAudit, BIOMETRIK_ACTIONS } = require('../utils/auditLogger');
 
+
+
 const PYTHON_SERVICE_URL = process.env.FACE_API_URL || 'http://localhost:5051';
 const PYTHON_SERVICE_TIMEOUT = parseInt(process.env.PYTHON_SERVICE_TIMEOUT || '10000');
 const SIMILARITY_THRESHOLD = parseFloat(process.env.FACE_SIMILARITY_THRESHOLD || '0.6');
@@ -41,6 +43,23 @@ const callPythonService = async (endpoint, formData) => {
         throw new Error(error.response?.data?.error || 'Face recognition service unavailable');
     }
 };
+
+/**
+ * Cosine similarity helper for face embeddings
+ */
+function cosineSimilarity(vecA, vecB) {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+    let dotProduct = 0.0;
+    let normA = 0.0;
+    let normB = 0.0;
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+        normA += vecA[i] * vecA[i];
+        normB += vecB[i] * vecB[i];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
 /**
  * @desc    Add biometric data (register face)
@@ -469,36 +488,30 @@ exports.scanWajah = asyncHandler(async (req, res) => {
             });
         }
 
-        // Match each detected face using parallel processing
-        const embeddings_list = allBiometrics.map(b => b.face_embedding);
-
-        // Process all faces in parallel for better performance
-        const matchPromises = facesResult.faces.map(face =>
-            callPythonService('/find-match', {
-                target_embedding: face.embedding,
-                embeddings_list: embeddings_list
-            }).then(matchResult => ({ matchResult, face }))
-                .catch(err => ({ error: err, face }))
-        );
-
-        const matchResults = await Promise.all(matchPromises);
-
+        // Match each detected face using in-memory cosine similarity to avoid DoS on Python service
         const identifiedUsers = [];
-        for (const { matchResult, face, error } of matchResults) {
-            if (error) {
-                console.error('Face match error:', error.message);
-                continue;
+        for (const face of facesResult.faces) {
+            let bestSimilarity = -1;
+            let bestMatchIndex = -1;
+
+            for (let idx = 0; idx < allBiometrics.length; idx++) {
+                const similarity = cosineSimilarity(face.embedding, allBiometrics[idx].face_embedding);
+                if (similarity > bestSimilarity) {
+                    bestSimilarity = similarity;
+                    bestMatchIndex = idx;
+                }
             }
-            if (matchResult.is_match) {
-                const matchedBiometrik = allBiometrics[matchResult.best_match_index];
+
+            if (bestSimilarity >= SIMILARITY_THRESHOLD) {
+                const matchedBiometrik = allBiometrics[bestMatchIndex];
                 identifiedUsers.push({
                     id_user: matchedBiometrik.user.id_user,
                     nama: matchedBiometrik.user.nama,
                     username: matchedBiometrik.user.username,
                     role: matchedBiometrik.user.role,
-                    similarity: matchResult.similarity,
+                    similarity: bestSimilarity,
                     bbox: face.bbox,
-                    confidence: matchResult.similarity > 0.8 ? 'high' : matchResult.similarity > 0.7 ? 'medium' : 'low'
+                    confidence: bestSimilarity > 0.8 ? 'high' : bestSimilarity > 0.7 ? 'medium' : 'low'
                 });
             }
         }
@@ -544,8 +557,31 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  * @access  Protected (MAHASISWA)
  */
 exports.biometrikAbsen = asyncHandler(async (req, res) => {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, id_sesi_absensi } = req.body;
     const id_user = req.user.id_user;
+    const isMock = req.body.is_mock_location === true || req.body.is_mock_location === 'true';
+    const isLivenessVerified = req.body.liveness_verified === true || req.body.liveness_verified === 'true';
+
+    if (!id_sesi_absensi) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Parameter id_sesi_absensi wajib disertakan'
+        });
+    }
+
+    if (!isLivenessVerified) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Liveness verification diperlukan. Silakan lakukan verifikasi wajah melalui aplikasi.'
+        });
+    }
+
+    if (isMock) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Mock location / GPS spoofing terdeteksi. Absensi ditolak.'
+        });
+    }
 
     if (!req.file) {
         return res.status(400).json({
@@ -626,12 +662,22 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
 
         const kelasIds = enrolledClasses.map(p => p.id_kelas);
 
+<<<<<<< Updated upstream
         // Step 3: Find OPEN attendance session for enrolled classes
         const now = new Date();
         const activeSesi = await prisma.sesiAbsensi.findFirst({
             where: {
                 id_kelas: { in: kelasIds },
                 status: true,  // true = sesi masih terbuka
+=======
+        // Step 3: Find specific attendance session
+        const now = new Date();
+        const activeSesi = await prisma.sesiAbsensi.findFirst({
+            where: {
+                id_sesi_absensi: parseInt(id_sesi_absensi),
+                id_kelas: { in: kelasIds },
+                status: true,
+>>>>>>> Stashed changes
                 mulai: { lte: now },
                 selesai: { gte: now },
                 deletedAt: null
@@ -649,7 +695,11 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         if (!activeSesi) {
             return res.status(400).json({
                 status: 'error',
+<<<<<<< Updated upstream
                 message: 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
+=======
+                message: 'Sesi absensi yang dipilih tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar di kelas tersebut'
+>>>>>>> Stashed changes
             });
         }
 
@@ -683,15 +733,49 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
             }
         }
 
-        // Step 6: Create attendance record
+        // Step 6: Impossible Travel Heuristic Check
+        const prevAbsensi = await prisma.$queryRaw`
+            SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
+            FROM absensi 
+            WHERE id_user = ${id_user} 
+            AND "deletedAt" IS NULL 
+            ORDER BY "createdAt" DESC 
+            LIMIT 1
+        `;
+
+        if (prevAbsensi && prevAbsensi.length > 0) {
+            const prevLat = parseFloat(prevAbsensi[0].lat);
+            const prevLng = parseFloat(prevAbsensi[0].lng);
+            const prevTime = new Date(prevAbsensi[0].createdAt);
+            
+            const timeDiffSeconds = Math.abs(now.getTime() - prevTime.getTime()) / 1000;
+            
+            if (timeDiffSeconds > 0) {
+                const distMeters = haversineDistance(prevLat, prevLng, lat, lng);
+                const speedMps = distMeters / timeDiffSeconds;
+                
+                // If speed > 55.6 m/s (200 km/h) and distance > 500 meters, flag as impossible travel!
+                if (speedMps > 55.6 && distMeters > 500) {
+                    return res.status(400).json({
+                        status: "error",
+                        message: "Impossible travel detected. Lokasi absensi Anda mencurigakan.",
+                        speed_kmh: Math.round(speedMps * 3.6),
+                        distance_meters: Math.round(distMeters)
+                    });
+                }
+            }
+        }
+
+        // Step 7: Create attendance record
         await prisma.$executeRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, "updatedAt")
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
             VALUES (
                 ${id_user},
                 ${activeSesi.id_kelas},
                 ${activeSesi.id_sesi_absensi},
                 ${activeSesi.type_absensi}::"TypeAbsensi",
                 POINT(${lng}, ${lat}),
+                ${isMock},
                 NOW()
             )
         `;

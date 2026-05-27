@@ -148,7 +148,7 @@ class NotificationService {
   static Future<void> _registerTokenWithBackend(String token) async {
     try {
       await ApiClient.dio.post<dynamic>(
-        '/api/auth/fcm-token',
+        '/api/v1/auth/fcm-token',
         data: <String, String>{'fcm_token': token},
       );
       debugPrint('✅ FCM token registered with backend');
@@ -175,7 +175,7 @@ class NotificationService {
     try {
       // Clear token on backend by sending empty/null
       await ApiClient.dio.post<dynamic>(
-        '/api/auth/fcm-token',
+        '/api/v1/auth/fcm-token',
         data: <String, String?>{'fcm_token': null},
       );
       debugPrint('✅ FCM token unregistered');

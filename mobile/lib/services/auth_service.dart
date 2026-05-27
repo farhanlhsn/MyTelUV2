@@ -10,18 +10,23 @@ class AuthService {
     required String password,
   }) async {
     final Response<dynamic> response = await _dio.post<dynamic>(
-      '/api/auth/login',
+      '/api/v1/auth/login',
       data: <String, dynamic>{'username': username, 'password': password},
     );
 
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
     }
-    return <String, dynamic>{};
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
   }
 
   Future<Map<String, dynamic>> getMe() async {
-    final Response<dynamic> response = await _dio.get<dynamic>('/api/auth/me');
+    final Response<dynamic> response = await _dio.get<dynamic>('/api/v1/auth/me');
 
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
@@ -30,6 +35,7 @@ class AuthService {
         requestOptions: response.requestOptions,
         response: response,
         type: DioExceptionType.badResponse,
+        message: 'Invalid response format from server',
       );
     }
   }
@@ -39,30 +45,51 @@ class AuthService {
     required String password,
     required String nama,
     required String role,
+    String? nimNip,
   }) async {
+    final Map<String, dynamic> data = {
+      'username': username,
+      'password': password,
+      'nama': nama,
+      'role': role,
+    };
+    if (nimNip != null && nimNip.isNotEmpty) {
+      data['nim_nip'] = nimNip;
+    }
+
     final Response<dynamic> response = await _dio.post<dynamic>(
-      '/api/auth/register',
-      data: <String, dynamic>{'username': username, 'password': password, 'nama': nama, 'role': role},
+      '/api/v1/auth/register',
+      data: data,
     );
 
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
     }
-    return <String, dynamic>{};
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
   }
 
   Future<Map<String, dynamic>> updateProfile({
     required String nama,
   }) async {
     final Response<dynamic> response = await _dio.put<dynamic>(
-      '/api/auth/profile',
+      '/api/v1/auth/profile',
       data: <String, dynamic>{'nama': nama},
     );
 
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
     }
-    return <String, dynamic>{};
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
   }
 
   Future<Map<String, dynamic>> changePassword({
@@ -70,7 +97,7 @@ class AuthService {
     required String newPassword,
   }) async {
     final Response<dynamic> response = await _dio.put<dynamic>(
-      '/api/auth/password',
+      '/api/v1/auth/password',
       data: <String, dynamic>{
         'oldPassword': oldPassword,
         'newPassword': newPassword,
@@ -80,15 +107,58 @@ class AuthService {
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
     }
-    return <String, dynamic>{};
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
   }
 
-  Future<void> logout() async {
+  Future<void> logout({String? refreshToken}) async {
     try {
-      await _dio.post<dynamic>('/api/auth/logout');
+      final data = refreshToken != null ? {'refresh_token': refreshToken} : null;
+      await _dio.post<dynamic>('/api/v1/auth/logout', data: data);
     } catch (e) {
       // Ignore errors on logout - we'll clear local data anyway
       print('⚠️ Logout API call failed: $e');
     }
+  }
+
+  Future<Map<String, dynamic>> forgotPassword(String username) async {
+    final Response<dynamic> response = await _dio.post<dynamic>(
+      '/api/v1/auth/forgot-password',
+      data: <String, dynamic>{'username': username},
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final Response<dynamic> response = await _dio.post<dynamic>(
+      '/api/v1/auth/reset-password',
+      data: <String, dynamic>{'token': token, 'newPassword': newPassword},
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
   }
 }

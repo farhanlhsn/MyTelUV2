@@ -21,6 +21,12 @@ enum TypeAbsensi {
 enum TypeAnomali { 
   KEHADIRAN_GANDA 
   TIDAK_HADIR_BERULANG 
+  POLA_WAKTU_TIDAK_WAJAR
+}
+enum StatusAnomali {
+  OPEN
+  REVIEWED
+  RESOLVED
 }
 enum StatusPengajuan {
   MENUNGGU
@@ -39,12 +45,18 @@ model User {
   username       String           @unique
   password       String
   role           Role
+  nim_nip        String?          @unique @db.VarChar(20)
+  email          String?          @unique
   fcm_token      String?          // Firebase Cloud Messaging device token
+  push_notifications_enabled Boolean @default(true)
+  profile_picture String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   deletedAt      DateTime?
 
   dataBiometrik  DataBiometrik?
+  refreshTokens  RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   kendaraan      Kendaraan[]
   absensi        Absensi[]
   laporanAnomali LaporanAnomali[]
@@ -60,6 +72,36 @@ model User {
   @@index([createdAt], map: "idx_user_created")
   @@index([deletedAt], map: "idx_user_deleted")
   @@map("users")
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  id_user     Int
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  
+  @@index([token], map: "idx_refresh_token")
+  @@index([id_user], map: "idx_refresh_user")
+  @@index([expiresAt], map: "idx_refresh_expires")
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  id_user     Int
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([token], map: "idx_reset_token")
+  @@index([id_user], map: "idx_reset_user")
+  @@map("password_reset_tokens")
 }
 
 model DataBiometrik {
@@ -159,21 +201,40 @@ model Matakuliah {
   @@map("matakuliah")
 }
 
+model Semester {
+  id_semester   Int       @id @default(autoincrement())
+  nama_semester String
+  tanggal_mulai DateTime
+  tanggal_selesai DateTime
+  drop_deadline DateTime
+  is_active     Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  kelas         Kelas[]
+
+  @@map("semesters")
+}
+
 model Kelas {
   id_kelas       Int       @id @default(autoincrement())
   id_matakuliah  Int
   id_dosen       Int
+  id_semester    Int?      // Nullable first to allow smooth transition, or mapped to active semester
   hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
   jam_mulai      Unsupported("time")
   jam_berakhir   Unsupported("time")
   nama_kelas     String
   ruangan        String
+  kapasitas      Int       @default(50)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
   matakuliah Matakuliah @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
   dosen      User       @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
+  semester   Semester?  @relation(fields: [id_semester], references: [id_semester], onDelete: SetNull)
   peserta    PesertaKelas[]
   absensi    Absensi[]
   laporan    LaporanAnomali[]
@@ -185,6 +246,7 @@ model Kelas {
   @@index([jam_mulai, jam_berakhir], map: "idx_kelas_waktu")
   @@index([deletedAt], map: "idx_kelas_deleted")
   @@index([hari], map: "idx_kelas_hari")
+  @@index([id_semester], map: "idx_kelas_semester")
   @@map("kelas")
 }
 
@@ -253,6 +315,7 @@ model Absensi {
   id_kelas     Int
   id_sesi_absensi Int
   type_absensi TypeAbsensi
+  is_mock_location Boolean @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
@@ -271,12 +334,17 @@ model Absensi {
 }
 
 model LaporanAnomali {
-  id_anomali   Int         @id @default(autoincrement())
+  id_anomali   Int           @id @default(autoincrement())
   id_user      Int
   id_kelas     Int?
   type_anomali TypeAnomali
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  status       StatusAnomali @default(OPEN)
+  catatan_dosen String?      @db.Text
+  resolved_at  DateTime?
+  deskripsi    String?       @db.Text
+  confidence   Float?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   deletedAt    DateTime?
 
   user  User   @relation(fields: [id_user], references: [id_user], onDelete: Cascade)

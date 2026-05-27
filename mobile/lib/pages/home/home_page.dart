@@ -77,177 +77,6 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-  void _showBiometricDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // User tidak bisa tap di luar untuk menutup (opsional)
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent, // Transparan agar rounded corner terlihat rapi
-          insetPadding: const EdgeInsets.all(20), // Jarak dari tepi layar
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE63946), // Merah gelap sesuai gambar background
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Agar tinggi menyesuaikan konten
-              children: [
-                const Text(
-                  "Apa Benar Anda sudah berada pada Lokasi?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Tombol TIDAK
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context); // Tutup dialog
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFFE63946), // Warna Teks Merah
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "TIDAK",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 16
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Jarak antar tombol
-                    // Tombol BETUL
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _showSelfieDialog();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF5252), // Merah muda
-                          foregroundColor: Colors.white, // Warna Teks Putih
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "BETUL",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 16
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-  void _showSelfieDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
-          child: Container(
-            // Background Merah Besar
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE63946), // Warna merah background utama
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // --- KOTAK KAMERA (Placeholder Gambar) ---
-                Container(
-                  height: 250, 
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.black12,
-                    borderRadius: BorderRadius.circular(20),
-                    image: const DecorationImage(
-                      // Menggunakan gambar placeholder orang selfie
-                      image: NetworkImage('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80'),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  // Jika internet mati, tampilkan icon kamera
-                  child: const Align(
-                    alignment: Alignment.topRight,
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.camera_alt, color: Colors.white54),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-
-                // --- TOMBOL AMBIL ---
-                SizedBox(
-                  width: 200, // Lebar tombol agak panjang
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context); // Tutup dialog
-                      
-                      // LOGIKA ABSENSI FINISH DI SINI
-                      ErrorHelper.showSuccess(
-                        "Data Biometrik & Lokasi tercatat!",
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF5252), // Warna Salmon/Merah Muda
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      "Ambil",
-                      style: TextStyle(
-                        fontSize: 18, 
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
   @override
   void initState() {
     super.initState();
@@ -322,20 +151,17 @@ class _HomePageState extends State<HomePage> {
           });
         }
 
-        return RefreshIndicator(
-          onRefresh: _homeController.refreshData,
-          child: Stack(
-            children: [
-              // Konten Halaman Utama
-              IndexedStack(index: _selectedIndex, children: _pages),
+        return Stack(
+          children: [
+            // Konten Halaman Utama
+            IndexedStack(index: _selectedIndex, children: _pages),
 
-              // Navigasi di bagian bawah
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: _buildBottomNav(),
-              ),
-            ],
-          ),
+            // Navigasi di bagian bawah
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: _buildBottomNav(),
+            ),
+          ],
         );
       }),
     );
@@ -844,21 +670,43 @@ class _HomePageState extends State<HomePage> {
           topRight: Radius.circular(30),
         ),
       ),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            20.0,
-            20.0,
-            20.0,
-            100.0,
-          ), // Padding atas 20, bawah 100
-          child: Obx(() {
-            // Filter menu items based on role (hide Biometric for DOSEN)
-            final userRole = _homeController.currentUser.value?.role;
-            final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems.where((item) {
-              if (item['label'] == 'Biometric' && userRole == 'DOSEN') {
-                return false;
+      child: RefreshIndicator(
+        onRefresh: _homeController.refreshData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              20.0,
+              20.0,
+              20.0,
+              100.0,
+            ), // Padding atas 20, bawah 100
+            child: Obx(() {
+              // Filter menu items based on role (hide Biometric for DOSEN)
+              final userRole = _homeController.currentUser.value?.role;
+              final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems.where((item) {
+                if (item['label'] == 'Biometric' && userRole == 'DOSEN') {
+                  return false;
+                }
+                return true;
+              }).toList();
+  
+              // Add Academic menu for ADMIN
+              if (userRole == 'ADMIN') {
+                filteredMenuItems.add({
+                  'icon': Icons.school,
+                  'label': 'Academic',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.adminAkademik,
+                });
+                filteredMenuItems.add({
+                  'icon': Icons.manage_accounts,
+                  'label': 'Users',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.adminUserManagement,
+                });
               }
+<<<<<<< Updated upstream
               return true;
             }).toList();
 
@@ -899,6 +747,41 @@ class _HomePageState extends State<HomePage> {
               },
             );
           }),
+=======
+  
+              // Add Anomaly menu for ADMIN and DOSEN
+              if (userRole == 'ADMIN' || userRole == 'DOSEN') {
+                filteredMenuItems.add({
+                  'icon': Icons.warning_amber_rounded,
+                  'label': 'Anomaly',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.anomaliDashboard,
+                });
+              }
+  
+              return GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: filteredMenuItems.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final item = filteredMenuItems[index];
+                  return _buildGridItem(
+                    item['icon'],
+                    item['label'],
+                    item['color'],
+                    item['route'],
+                  );
+                },
+              );
+            }),
+          ),
+>>>>>>> Stashed changes
         ),
       ),
     );

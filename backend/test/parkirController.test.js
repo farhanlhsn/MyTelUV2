@@ -37,7 +37,10 @@ const createMockReq = (body = {}, headers = {}, file = null) => ({
     file,
     user: { id_user: 1 }, // Default user for other endpoints
     query: {},
-    params: {}
+    params: {},
+    app: {
+        get: jest.fn().mockReturnValue(null) // Mock Socket.io getter
+    }
 });
 
 const createMockRes = () => {
@@ -101,8 +104,11 @@ describe('Parkir Controller - processEdgeEntry', () => {
             // Mock Last Log (not inside)
             prisma.logParkir.findFirst.mockResolvedValue(null);
 
-            // Mock Transaction (Create Log + Update Live Capacity)
-            prisma.$transaction.mockResolvedValue([{ id_log_parkir: 100 }, 1]);
+            // Mock atomic capacity update
+            prisma.$executeRaw.mockResolvedValue(1);
+
+            // Mock Log Creation
+            prisma.logParkir.create.mockResolvedValue({ id_log_parkir: 100 });
 
             // Mock Upload
             uploadFile.mockResolvedValue({ fileUrl: 'http://img.com' });
@@ -112,12 +118,15 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             await parkirController.processEdgeEntry(req, res);
 
-            expect(prisma.$transaction).toHaveBeenCalled();
+            expect(prisma.$executeRaw).toHaveBeenCalled();
+            expect(prisma.logParkir.create).toHaveBeenCalled();
             expect(sendParkingNotification).toHaveBeenCalledWith(1, 'MASUK', expect.anything(), 'Gedung A');
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'OPEN',
-                success: true
+                status: 'success',
+                data: expect.objectContaining({
+                    gate_action: 'OPEN'
+                })
             }));
         });
 
@@ -130,6 +139,9 @@ describe('Parkir Controller - processEdgeEntry', () => {
                 live_kapasitas: 100 // FULL
             }]);
 
+            // Mock atomic capacity update returns 0 because full
+            prisma.$executeRaw.mockResolvedValue(0);
+
             const req = createMockReq(validBody, validHeaders);
             const res = createMockRes();
 
@@ -137,7 +149,10 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'DENY',
+                status: 'error',
+                data: expect.objectContaining({
+                    gate_action: 'DENY'
+                }),
                 message: expect.stringContaining('penuh')
             }));
         });
@@ -158,7 +173,10 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'DENY',
+                status: 'error',
+                data: expect.objectContaining({
+                    gate_action: 'DENY'
+                }),
                 message: expect.stringContaining('sudah berada di dalam')
             }));
         });
@@ -171,7 +189,10 @@ describe('Parkir Controller - processEdgeEntry', () => {
             await parkirController.processEdgeEntry(req, res);
             expect(res.status).toHaveBeenCalledWith(404);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'DENY',
+                status: 'error',
+                data: expect.objectContaining({
+                    gate_action: 'DENY'
+                }),
                 message: expect.stringContaining('tidak terdaftar')
             }));
         });
@@ -190,7 +211,7 @@ describe('Parkir Controller - processEdgeEntry', () => {
                 user: { id_user: 1, nama: 'User' }
             });
             prisma.$queryRaw.mockResolvedValueOnce([{
-                id_parkiran: 1, nama_parkiran: 'Gedung A'
+                id_parkiran: 1, nama_parkiran: 'Gedung A', live_kapasitas: 10
             }]);
 
             // Last log was MASUK -> car is inside
@@ -207,7 +228,10 @@ describe('Parkir Controller - processEdgeEntry', () => {
             expect(sendParkingNotification).toHaveBeenCalledWith(1, 'KELUAR', expect.anything(), 'Gedung A');
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'OPEN'
+                status: 'success',
+                data: expect.objectContaining({
+                    gate_action: 'OPEN'
+                })
             }));
         });
 
@@ -223,10 +247,190 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             await parkirController.processEdgeEntry(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                gate_action: 'DENY'
+                status: 'error',
+                data: expect.objectContaining({
+                    gate_action: 'DENY'
+                })
             }));
         });
     });
 });
+
+describe('Parkir Controller - exportParkirLogs & manualOverride', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    describe('exportParkirLogs', () => {
+        test('should export CSV successfully if logs exist', async () => {
+            const mockLogs = [
+                {
+                    id_log_parkir: 1,
+                    timestamp: new Date('2026-05-18T10:00:00Z'),
+                    type: 'MASUK',
+                    confidence: 0.95,
+                    image_url: 'http://img.com/1.jpg',
+                    face_image_url: 'http://img.com/face1.jpg',
+                    kendaraan: { plat_nomor: 'D1234ABC', nama_kendaraan: 'Mobil Honda' },
+                    user: { nama: 'Farhan', username: 'farhan' },
+                    parkiran: { nama_parkiran: 'Gedung A' }
+                }
+            ];
+
+            prisma.logParkir.findMany.mockResolvedValue(mockLogs);
+
+            const req = createMockReq();
+            req.query = { parkiran_id: '1', from: '2026-05-01', to: '2026-05-31' };
+            
+            const res = {
+                status: jest.fn().mockReturnThis(),
+                setHeader: jest.fn(),
+                send: jest.fn()
+            };
+
+            await parkirController.exportParkirLogs(req, res);
+
+            expect(prisma.logParkir.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({
+                    id_parkiran: 1,
+                    timestamp: expect.objectContaining({
+                        gte: expect.any(Date),
+                        lte: expect.any(Date)
+                    })
+                })
+            }));
+            expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv; charset=utf-8');
+            expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', expect.stringContaining('attachment; filename='));
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.send).toHaveBeenCalledWith(expect.stringContaining('"ID Log","Timestamp","Tipe","Plat Nomor","Kendaraan","User","Username","Parkiran"'));
+        });
+
+        test('should return 404 if no logs found', async () => {
+            prisma.logParkir.findMany.mockResolvedValue([]);
+
+            const req = createMockReq();
+            const res = createMockRes();
+
+            await parkirController.exportParkirLogs(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                status: 'error',
+                message: expect.stringContaining('Tidak ada data')
+            }));
+        });
+    });
+
+    describe('manualOverride', () => {
+        test('should allow manual override entry successfully', async () => {
+            prisma.$queryRaw.mockResolvedValue([{
+                id_parkiran: 1,
+                nama_parkiran: 'Gedung A',
+                kapasitas: 10,
+                live_kapasitas: 5
+            }]);
+
+            prisma.kendaraan.findFirst.mockResolvedValue({
+                id_kendaraan: 2,
+                plat_nomor: 'D9999XYZ',
+                user: { id_user: 5, nama: 'Budi' }
+            });
+
+            prisma.$executeRaw.mockResolvedValue(1); // successfully incremented capacity
+            prisma.logParkir.create.mockResolvedValue({ id_log_parkir: 150 });
+
+            // Mock Socket.io
+            const mockIo = { emit: jest.fn() };
+            const req = createMockReq({ plat_nomor: 'D 9999 XYZ', gate_type: 'MASUK' });
+            req.params = { id: '1' };
+            req.app.get.mockReturnValue(mockIo);
+
+            // Re-mock prisma queryRaw for socket capacity check
+            prisma.$queryRaw.mockResolvedValueOnce([{
+                id_parkiran: 1,
+                nama_parkiran: 'Gedung A',
+                kapasitas: 10,
+                live_kapasitas: 5
+            }]).mockResolvedValueOnce([{
+                live_kapasitas: 6
+            }]);
+
+            const res = createMockRes();
+
+            await parkirController.manualOverride(req, res);
+
+            expect(prisma.$executeRaw).toHaveBeenCalled();
+            expect(prisma.logParkir.create).toHaveBeenCalled();
+            expect(mockIo.emit).toHaveBeenCalledWith('parking_update', expect.objectContaining({
+                id_parkiran: 1,
+                live_kapasitas: 6,
+                kapasitas: 10
+            }));
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                status: 'success',
+                message: expect.stringContaining('Override berhasil')
+            }));
+        });
+
+        test('should allow manual override exit successfully', async () => {
+            prisma.$queryRaw.mockResolvedValueOnce([{
+                id_parkiran: 1,
+                nama_parkiran: 'Gedung A',
+                kapasitas: 10,
+                live_kapasitas: 5
+            }]);
+
+            prisma.kendaraan.findFirst.mockResolvedValue({
+                id_kendaraan: 2,
+                plat_nomor: 'D9999XYZ',
+                user: { id_user: 5 }
+            });
+
+            prisma.logParkir.create.mockResolvedValue({ id_log_parkir: 151 });
+
+            const mockIo = { emit: jest.fn() };
+            const req = createMockReq({ plat_nomor: 'D9999XYZ', gate_type: 'KELUAR' });
+            req.params = { id: '1' };
+            req.app.get.mockReturnValue(mockIo);
+
+            prisma.$queryRaw.mockResolvedValueOnce([{
+                live_kapasitas: 4
+            }]);
+
+            const res = createMockRes();
+
+            await parkirController.manualOverride(req, res);
+
+            expect(prisma.$executeRaw).toHaveBeenCalled(); // decrements capacity
+            expect(mockIo.emit).toHaveBeenCalledWith('parking_update', expect.objectContaining({
+                id_parkiran: 1,
+                live_kapasitas: 4
+            }));
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('should fail if required fields are missing', async () => {
+            const req = createMockReq({});
+            const res = createMockRes();
+
+            await parkirController.manualOverride(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        test('should fail if vehicle not found', async () => {
+            prisma.$queryRaw.mockResolvedValue([{ id_parkiran: 1, kapasitas: 10 }]);
+            prisma.kendaraan.findFirst.mockResolvedValue(null);
+
+            const req = createMockReq({ plat_nomor: 'UNKNOWN', gate_type: 'MASUK' });
+            const res = createMockRes();
+
+            await parkirController.manualOverride(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+    });
+});
+

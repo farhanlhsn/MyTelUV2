@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/pages/kendaraan/historyPengajuan/detailuserhistoripengajuan.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
+import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 
 class UserHistoriPengajuan extends StatefulWidget {
@@ -144,6 +145,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                                         MaterialPageRoute(
                                           builder: (context) =>
                                               DetailPengajuanPlat(
+                                                idKendaraan: pengajuan.idKendaraan,
                                                 licensePlate:
                                                     pengajuan.platNomor,
                                                 status: pengajuan

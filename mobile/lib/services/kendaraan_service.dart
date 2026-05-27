@@ -27,7 +27,7 @@ class KendaraanService {
       print('👤 Current user from storage: ID=$idUser, username=$username');
       print('🔑 Token preview: ${token?.substring(0, 20)}...');
 
-      final response = await _dio.get('/api/kendaraan/histori-pengajuan');
+      final response = await _dio.get('/api/v1/kendaraan/histori-pengajuan');
 
       print('📥 Response status: ${response.statusCode}');
       print('📥 Response data: ${response.data}');
@@ -135,7 +135,7 @@ class KendaraanService {
       );
 
       final response = await _dio.post(
-        '/api/kendaraan/register',
+        '/api/v1/kendaraan/register',
         data: formData,
         options: Options(headers: {'Content-Type': 'multipart/form-data'}),
       );
@@ -160,10 +160,72 @@ class KendaraanService {
     }
   }
 
+  // Resubmit kendaraan yang ditolak
+  static Future<PengajuanPlatModel> resubmitKendaraan({
+    required int idKendaraan,
+    List<String>? fotoKendaraanPaths,
+    String? fotoSTNKPath,
+  }) async {
+    try {
+      debugLog('🚗 Resubmitting kendaraan ID: $idKendaraan...');
+      FormData formData = FormData.fromMap({});
+
+      if (fotoKendaraanPaths != null && fotoKendaraanPaths.isNotEmpty) {
+        if (fotoKendaraanPaths.length != 3) {
+          throw Exception('Pilih tepat 3 foto kendaraan untuk diubah.');
+        }
+        for (int i = 0; i < fotoKendaraanPaths.length; i++) {
+          formData.files.add(
+            MapEntry(
+              'fotoKendaraan',
+              await MultipartFile.fromFile(
+                fotoKendaraanPaths[i],
+                filename: 'foto_kendaraan_$i.jpg',
+              ),
+            ),
+          );
+        }
+      }
+
+      if (fotoSTNKPath != null && fotoSTNKPath.isNotEmpty) {
+        formData.files.add(
+          MapEntry(
+            'fotoSTNK',
+            await MultipartFile.fromFile(fotoSTNKPath, filename: 'foto_stnk.jpg'),
+          ),
+        );
+      }
+
+      final response = await _dio.put(
+        '/api/v1/kendaraan/$idKendaraan/resubmit',
+        data: formData,
+        options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+      );
+
+      if (response.statusCode == 200 && response.data['status'] == 'success') {
+        return PengajuanPlatModel.fromJson(response.data['data']);
+      } else {
+        throw Exception(
+          response.data['message'] ?? 'Failed to resubmit kendaraan',
+        );
+      }
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error resubmitting kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
   // Get detail kendaraan by ID
   static Future<PengajuanPlatModel> getKendaraanById(int idKendaraan) async {
     try {
-      final response = await _dio.get('/api/kendaraan/');
+      final response = await _dio.get('/api/v1/kendaraan/');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final List<dynamic> data = response.data['data'];
@@ -199,7 +261,7 @@ class KendaraanService {
   }) async {
     try {
       final response = await _dio.get(
-        '/api/kendaraan/all-unverified',
+        '/api/v1/kendaraan/all-unverified',
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -241,7 +303,7 @@ class KendaraanService {
   }) async {
     try {
       final response = await _dio.post(
-        '/api/kendaraan/verify',
+        '/api/v1/kendaraan/verify',
         data: {
           'id_kendaraan': idKendaraan,
           'id_user': idUser,
@@ -268,7 +330,7 @@ class KendaraanService {
   }) async {
     try {
       final response = await _dio.post(
-        '/api/kendaraan/reject',
+        '/api/v1/kendaraan/reject',
         data: {
           'id_kendaraan': idKendaraan,
           'id_user': idUser,

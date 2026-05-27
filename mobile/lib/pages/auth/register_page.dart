@@ -19,6 +19,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _nimNipController = TextEditingController();
 
   bool _isPasswordObscured = true;
   String? _selectedRole;
@@ -30,6 +31,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _namaController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _nimNipController.dispose();
     super.dispose();
   }
 
@@ -53,15 +55,10 @@ class _RegisterPageState extends State<RegisterPage> {
       _passwordController.text,
       _namaController.text.trim(),
       _selectedRole!,
+      nimNip: _nimNipController.text.trim(),
     );
 
-    if (!success) {
-      ErrorHelper.showError(
-        'Username mungkin sudah digunakan atau terjadi kesalahan',
-        title: 'Registrasi Gagal',
-      );
-      return;
-    }
+    if (!success) return;
 
     // Berhasil register - navigate ke success page
     Get.offAllNamed(AppRoutes.registerSuccess);
@@ -271,6 +268,34 @@ class _RegisterPageState extends State<RegisterPage> {
                               if (value == null) {
                                 return 'Role wajib dipilih';
                               }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // NIM/NIP Field
+                          TextFormField(
+                            controller: _nimNipController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              labelText: 'NIM/NIP',
+                              hintText: 'Masukkan 11-12 digit angka',
+                              labelStyle: const TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              prefixIcon: const Icon(Icons.numbers_outlined),
+                            ),
+                            validator: (String? value) {
+                              if (value != null && value.isNotEmpty) {
+                                if (!RegExp(r'^\d{11,12}$').hasMatch(value)) {
+                                  return 'NIM/NIP harus 11 atau 12 digit angka';
+                                }
+                              }
+                              // Biarkan null (valid) jika kosong, opsional
                               return null;
                             },
                           ),

@@ -9,7 +9,7 @@ class ParkirService {
   Future<List<LogParkirModel>> getHistoriParkir() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/parkir/histori',
+        '/api/v1/parkir/histori',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -31,7 +31,7 @@ class ParkirService {
   Future<List<ParkiranModel>> getAllParkiran() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/parkir/all',
+        '/api/v1/parkir/all',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -53,7 +53,7 @@ class ParkirService {
   Future<ParkirAnalitikModel?> getAnalitikParkiran() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/parkir/analitik',
+        '/api/v1/parkir/analitik',
       );
 
       if (response.data is Map<String, dynamic>) {

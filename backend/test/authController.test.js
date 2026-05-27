@@ -9,8 +9,15 @@
 jest.mock('../utils/prisma', () => ({
     user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+    },
+    refreshToken: {
+        create: jest.fn(),
+        deleteMany: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
     }
 }));
 
@@ -23,8 +30,18 @@ jest.mock('jsonwebtoken', () => ({
     sign: jest.fn(),
 }));
 
+jest.mock('uuid', () => ({
+    v4: () => 'mocked-uuid-token',
+}));
+
 jest.mock('../utils/auditLogger', () => ({
     logAudit: jest.fn(),
+}));
+
+jest.mock('../utils/r2FileHandler', () => ({
+    uploadFile: jest.fn(),
+    deleteFile: jest.fn(),
+    fileExists: jest.fn(),
 }));
 
 // Import mocked modules
@@ -67,7 +84,7 @@ describe('Auth Controller Tests', () => {
         };
 
         test('should register a new user successfully', async () => {
-            prisma.user.findUnique.mockResolvedValue(null); // Username valid (not taken)
+            prisma.user.findFirst.mockResolvedValue(null); // Username valid (not taken)
             bcrypt.hash.mockResolvedValue('hashed_password');
             prisma.user.create.mockResolvedValue({
                 id_user: 1,
@@ -80,7 +97,7 @@ describe('Auth Controller Tests', () => {
 
             await authController.register(req, res);
 
-            expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { username: 'testu' } });
+            expect(prisma.user.findFirst).toHaveBeenCalledWith({ where: { username: 'testu', deletedAt: null } });
             expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
             expect(prisma.user.create).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(201);
@@ -91,7 +108,7 @@ describe('Auth Controller Tests', () => {
         });
 
         test('should fail if username already exists', async () => {
-            prisma.user.findUnique.mockResolvedValue({ id_user: 1 }); // User exists
+            prisma.user.findFirst.mockResolvedValue({ id_user: 1 }); // User exists
 
             const req = createMockReq(mockUserData);
             const res = createMockRes();
@@ -126,7 +143,7 @@ describe('Auth Controller Tests', () => {
 
         test('should login successfully with correct credentials', async () => {
             process.env.JWT_SECRET = 'test_secret';
-            prisma.user.findUnique.mockResolvedValue(mockUser);
+            prisma.user.findFirst.mockResolvedValue(mockUser);
             bcrypt.compare.mockResolvedValue(true);
             jwt.sign.mockReturnValue('mock_token');
 
@@ -135,7 +152,7 @@ describe('Auth Controller Tests', () => {
 
             await authController.login(req, res);
 
-            expect(prisma.user.findUnique).toHaveBeenCalled();
+            expect(prisma.user.findFirst).toHaveBeenCalled();
             expect(bcrypt.compare).toHaveBeenCalledWith('password123', 'hashed_password');
             expect(jwt.sign).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
@@ -149,7 +166,7 @@ describe('Auth Controller Tests', () => {
         });
 
         test('should return 401 if user not found', async () => {
-            prisma.user.findUnique.mockResolvedValue(null);
+            prisma.user.findFirst.mockResolvedValue(null);
 
             const req = createMockReq(mockCredentials);
             const res = createMockRes();
@@ -164,7 +181,7 @@ describe('Auth Controller Tests', () => {
         });
 
         test('should return 401 if password incorrect', async () => {
-            prisma.user.findUnique.mockResolvedValue(mockUser);
+            prisma.user.findFirst.mockResolvedValue(mockUser);
             bcrypt.compare.mockResolvedValue(false);
 
             const req = createMockReq(mockCredentials);

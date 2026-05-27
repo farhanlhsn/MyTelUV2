@@ -1,22 +1,45 @@
 const admin = require('firebase-admin');
 const prisma = require('./prisma');
 const path = require('path');
+const fs = require('fs');
 
 // Initialize Firebase Admin SDK
 let firebaseInitialized = false;
 
 const initializeFirebase = () => {
     if (firebaseInitialized) return;
-    
+
     try {
-        // Look for service account key file in config directory
-        const serviceAccountPath = path.join(__dirname, '../config/myteluv2-firebase-adminsdk-fbsvc-c0a5189c6d.json');
-        const serviceAccount = require(serviceAccountPath);
-        
+        const configDir = path.join(__dirname, '../config');
+
+        // Try exact file name first, then any adminsdk JSON in config dir
+        const exactPath = path.join(configDir, 'myteluv2-firebase-adminsdk-fbsvc-c0a5189c6d.json');
+        let serviceAccountPath = null;
+
+        if (fs.existsSync(exactPath)) {
+            serviceAccountPath = exactPath;
+        } else {
+            // Auto-discover any firebase adminsdk key file
+            const files = fs.readdirSync(configDir).filter(f =>
+                f.endsWith('.json') && f.includes('adminsdk')
+            );
+            if (files.length > 0) {
+                serviceAccountPath = path.join(configDir, files[0]);
+                console.log(`[Firebase] Using discovered key: ${files[0]}`);
+            }
+        }
+
+        if (!serviceAccountPath) {
+            console.warn('⚠️  Firebase service account key not found in backend/config/. Push notifications disabled.');
+            return;
+        }
+
+        const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
-        
+
         firebaseInitialized = true;
         console.log('✅ Firebase Admin SDK initialized successfully');
     } catch (error) {
@@ -134,8 +157,52 @@ const sendParkingNotification = async (userId, parkingType, vehicleInfo, parkira
     }
 };
 
+/**
+ * Send push notification for social interactions (like, comment)
+ * @param {number} userId - ID of the post owner receiving the notification
+ * @param {string} type - 'LIKE' or 'COMMENT'
+ * @param {string} actorName - Name of the user performing the action
+ * @param {string} postPreview - Preview of the post content
+ */
+const sendSocialNotification = async (userId, type, actorName, postPreview) => {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id_user: userId },
+            select: { fcm_token: true }
+        });
+
+        if (!user?.fcm_token) {
+            console.log(`No FCM token for user ${userId}, skipping social notification`);
+            return { success: false, error: 'No FCM token' };
+        }
+
+        const title = type === 'LIKE'
+            ? `❤️ ${actorName} menyukai postingan Anda`
+            : `💬 ${actorName} mengomentari postingan Anda`;
+
+        const truncatedPreview = postPreview.length > 50 
+            ? postPreview.substring(0, 50) + '...'
+            : postPreview;
+
+        const body = truncatedPreview;
+
+        const data = {
+            type: 'SOCIAL_NOTIFICATION',
+            social_type: type,
+            actor_name: actorName,
+            timestamp: new Date().toISOString()
+        };
+
+        return await sendPushNotification(user.fcm_token, title, body, data);
+    } catch (error) {
+        console.error('❌ Error in sendSocialNotification:', error.message);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     initializeFirebase,
     sendPushNotification,
-    sendParkingNotification
+    sendParkingNotification,
+    sendSocialNotification
 };

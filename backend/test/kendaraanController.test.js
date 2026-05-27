@@ -237,7 +237,7 @@ describe('Kendaraan Controller Tests', () => {
      * DELETE KENDARAAN
      */
     describe('deleteKendaraan', () => {
-        test('should delete vehicle and files', async () => {
+        test('should soft delete vehicle', async () => {
             const req = createMockReq({}, { id_user: 1 }, {}, { id_kendaraan: 1 });
             const res = createMockRes();
 
@@ -246,12 +246,14 @@ describe('Kendaraan Controller Tests', () => {
                 fotoKendaraan: ['url1', 'url2'],
                 fotoSTNK: 'urlStnk'
             });
-            fileExists.mockResolvedValue(true);
 
             await kendaraanController.deleteKendaraan(req, res);
 
-            expect(deleteFile).toHaveBeenCalledTimes(3); // 2 vehicle + 1 stnk
-            expect(prisma.kendaraan.delete).toHaveBeenCalled();
+            expect(deleteFile).not.toHaveBeenCalled(); 
+            expect(prisma.kendaraan.update).toHaveBeenCalledWith({
+                where: { id_kendaraan: 1, id_user: 1 },
+                data: { deletedAt: expect.any(Date) }
+            });
             expect(res.status).toHaveBeenCalledWith(200);
         });
     });
