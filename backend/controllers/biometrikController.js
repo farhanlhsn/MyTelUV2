@@ -7,6 +7,7 @@ const fs = require('fs');
 const { uploadFile, deleteFile } = require('../utils/r2FileHandler');
 const embeddingCache = require('../utils/embeddingCache');
 const { logAudit, BIOMETRIK_ACTIONS } = require('../utils/auditLogger');
+const livenessTokenManager = require('../utils/livenessTokenManager');
 
 
 
@@ -32,7 +33,10 @@ axiosRetry(axios, {
 const callPythonService = async (endpoint, formData) => {
     try {
         const response = await axios.post(`${PYTHON_SERVICE_URL}${endpoint}`, formData, {
-            headers: formData.getHeaders ? formData.getHeaders() : { 'Content-Type': 'application/json' },
+            headers: {
+                ...(formData.getHeaders ? formData.getHeaders() : { 'Content-Type': 'application/json' }),
+                'X-API-Key': process.env.FACE_API_KEY || ''
+            },
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
             timeout: PYTHON_SERVICE_TIMEOUT
@@ -40,6 +44,9 @@ const callPythonService = async (endpoint, formData) => {
         return response.data;
     } catch (error) {
         console.error('Python service error:', error.response?.data || error.message);
+        if (error.code === 'ECONNREFUSED' || error.code === 'ECONNABORTED') {
+            throw new Error('Layanan pengenalan wajah sedang tidak tersedia. Silakan coba beberapa saat lagi.');
+        }
         throw new Error(error.response?.data?.error || 'Face recognition service unavailable');
     }
 };
@@ -60,6 +67,25 @@ function cosineSimilarity(vecA, vecB) {
     if (normA === 0 || normB === 0) return 0;
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
+
+/**
+ * @desc    Request a one-time liveness token for biometric attendance
+ * @route   POST /api/biometrik/request-liveness-token
+ * @access  Protected (MAHASISWA)
+ */
+exports.requestLivenessToken = asyncHandler(async (req, res) => {
+    const userId = req.user.id_user;
+    const { token, expiresAt } = livenessTokenManager.generateToken(userId);
+    
+    res.status(200).json({
+        status: 'success',
+        message: 'Liveness token generated',
+        data: {
+            token,
+            expires_in: expiresAt
+        }
+    });
+});
 
 /**
  * @desc    Add biometric data (register face)
@@ -557,23 +583,14 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  * @access  Protected (MAHASISWA)
  */
 exports.biometrikAbsen = asyncHandler(async (req, res) => {
-    const { latitude, longitude, id_sesi_absensi } = req.body;
+    const { latitude, longitude, id_sesi_absensi, liveness_token } = req.body;
     const id_user = req.user.id_user;
     const isMock = req.body.is_mock_location === true || req.body.is_mock_location === 'true';
-    const isLivenessVerified = req.body.liveness_verified === true || req.body.liveness_verified === 'true';
 
-    // Allow id_sesi_absensi to be optional for auto-detect
-    // if (!id_sesi_absensi) {
-    //     return res.status(400).json({
-    //         status: 'error',
-    //         message: 'Parameter id_sesi_absensi wajib disertakan'
-    //     });
-    // }
-
-    if (!isLivenessVerified) {
+    if (!liveness_token || !livenessTokenManager.verifyAndConsume(id_user, liveness_token)) {
         return res.status(400).json({
             status: 'error',
-            message: 'Liveness verification diperlukan. Silakan lakukan verifikasi wajah melalui aplikasi.'
+            message: 'Token liveness tidak valid atau sudah kadaluarsa. Silakan ulangi verifikasi wajah.'
         });
     }
 
@@ -608,9 +625,8 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         formData.append('image', fs.createReadStream(req.file.path));
         const faceResult = await callPythonService('/detect-face', formData);
 
-        fs.unlinkSync(req.file.path);
-
         if (!faceResult.success) {
+            fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 status: 'error',
                 message: faceResult.error || 'Face detection failed'
@@ -624,19 +640,22 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         });
 
         if (!userBiometric || userBiometric.deletedAt) {
+            fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 status: 'error',
                 message: 'Anda belum terdaftar biometrik. Hubungi admin untuk pendaftaran.'
             });
         }
 
-        // Compare embeddings
-        const matchResult = await callPythonService('/find-match', {
-            target_embedding: faceResult.embedding,
-            embeddings_list: [userBiometric.face_embedding]
-        });
+        // Compare embeddings using JS cosine similarity
+        const similarity = cosineSimilarity(faceResult.embedding, userBiometric.face_embedding);
+        const matchResult = {
+            is_match: similarity >= SIMILARITY_THRESHOLD,
+            similarity: similarity
+        };
 
         if (!matchResult.is_match) {
+            fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 status: 'error',
                 message: 'Wajah tidak cocok',
@@ -758,9 +777,29 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
             }
         }
 
-        // Step 7: Create attendance record
+        // Step 7: Upload photo to R2
+        let absenPhotoUrl = null;
+        try {
+            const fileBuffer = fs.readFileSync(req.file.path);
+            const r2Result = await uploadFile(
+                fileBuffer,
+                req.file.originalname,
+                req.file.mimetype,
+                'attendance-photos'
+            );
+            absenPhotoUrl = r2Result.fileUrl;
+        } catch (uploadError) {
+            console.error('[Biometrik Absen] Gagal upload foto ke R2:', uploadError);
+            // Tetap lanjutkan absensi meskipun gagal upload foto
+        } finally {
+            if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+        }
+
+        // Step 8: Create attendance record
         await prisma.$executeRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, "updatedAt")
             VALUES (
                 ${id_user},
                 ${activeSesi.id_kelas},
@@ -768,6 +807,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 ${activeSesi.type_absensi}::"TypeAbsensi",
                 POINT(${lng}, ${lat}),
                 ${isMock},
+                ${absenPhotoUrl},
                 NOW()
             )
         `;

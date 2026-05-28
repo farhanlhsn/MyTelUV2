@@ -46,6 +46,8 @@ const upload = multer({
     fileFilter: fileFilter
 });
 
+const { biometrikLimiter } = require('../middlewares/rateLimiterMiddleware');
+
 // Routes - ADMIN ONLY untuk add/edit/delete (kampus yang daftarin)
 router.post('/add',
     protect,
@@ -71,20 +73,30 @@ router.put('/edit/:id_user',
 // Verify & Scan - semua authenticated user bisa akses
 router.post('/verify',
     protect,
+    biometrikLimiter,
     upload.single('image'),
     verifyWajah
 );
 
 router.post('/scan',
     protect,
+    biometrikLimiter,
     upload.single('image'),
     scanWajah
 );
 
 // Biometric attendance - MAHASISWA absen pakai wajah
+router.post('/request-liveness-token',
+    protect,
+    authorize('MAHASISWA'),
+    biometrikLimiter,
+    require('../controllers/biometrikController').requestLivenessToken
+);
+
 router.post('/absen',
     protect,
     authorize('MAHASISWA'),
+    biometrikLimiter,
     upload.single('image'),
     validateRequired(['latitude', 'longitude']),
     biometrikAbsen

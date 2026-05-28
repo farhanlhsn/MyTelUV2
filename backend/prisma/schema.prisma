@@ -316,6 +316,7 @@ model Absensi {
   id_sesi_absensi Int
   type_absensi TypeAbsensi
   is_mock_location Boolean @default(false)
+  photo_url    String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?

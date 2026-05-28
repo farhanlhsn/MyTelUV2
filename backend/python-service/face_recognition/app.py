@@ -34,6 +34,16 @@ else:
 # Allowed image extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
+FACE_API_KEY = os.getenv('FACE_API_KEY', '')
+
+@app.before_request
+def check_api_key():
+    if request.path == '/health':
+        return  # Skip auth for health check
+    api_key = request.headers.get('X-API-Key', '')
+    if FACE_API_KEY and api_key != FACE_API_KEY:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 

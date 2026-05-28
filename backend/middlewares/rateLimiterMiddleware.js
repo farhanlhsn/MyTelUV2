@@ -35,3 +35,16 @@ exports.authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Rate limiter for biometric endpoints
+exports.biometrikLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // limit each user/IP to 5 requests per minute
+  keyGenerator: (req) => req.user?.id_user || req.ip,
+  message: {
+    status: "error",
+    error: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

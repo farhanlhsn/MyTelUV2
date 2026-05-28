@@ -35,8 +35,10 @@ services:
       context: ./backend/python-service/face_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-face-recognition
-    ports:
-      - "5051:5051"
+    expose:
+      - "5051"
+    environment:
+      - FACE_API_KEY=${FACE_API_KEY}
     volumes:
       - insightface-models:/root/.insightface
     networks:
@@ -49,8 +51,8 @@ services:
       context: ./backend/python-service/plate_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-plate-recognition
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"
     environment:
       - NODEJS_BACKEND_URL=http://backend:5050
     env_file:

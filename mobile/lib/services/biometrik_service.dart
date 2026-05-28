@@ -35,6 +35,25 @@ class BiometrikService {
   /// }
   /// ```
 
+  /// Request a one-time liveness token for biometric attendance
+  Future<String> requestLivenessToken() async {
+    try {
+      final Response<dynamic> response = await _dio.post<dynamic>(
+        '/api/v1/biometrik/request-liveness-token',
+      );
+
+      if (response.data is Map<String, dynamic> &&
+          response.data['status'] == 'success') {
+        return response.data['data']['token'] as String;
+      }
+      throw Exception('Gagal mendapatkan token liveness');
+    } on DioException catch (e) {
+      final message =
+          e.response?.data?['message'] ?? e.message ?? 'Terjadi kesalahan';
+      throw Exception(message);
+    }
+  }
+
   /// Verify current user's face against stored biometric data
   /// Returns verification result with matched status and similarity score
   Future<Map<String, dynamic>> verifyWajah(File imageFile, {bool isLivenessVerified = false}) async {
@@ -106,7 +125,7 @@ class BiometrikService {
     required File imageFile,
     required double latitude,
     required double longitude,
-    bool isLivenessVerified = false,
+    required String livenessToken,
     bool isMockLocation = false,
   }) async {
     try {
@@ -117,7 +136,7 @@ class BiometrikService {
         ),
         'latitude': latitude.toString(),
         'longitude': longitude.toString(),
-        'liveness_verified': isLivenessVerified.toString(),
+        'liveness_token': livenessToken,
         'is_mock_location': isMockLocation.toString(),
       });
 

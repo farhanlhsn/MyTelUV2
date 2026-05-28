@@ -160,10 +160,52 @@ io.on('connection', (socket) => {
     });
 });
 
+// Clean up orphaned files in uploads directory
+function cleanupUploads() {
+    const fs = require('fs');
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+        const files = fs.readdirSync(uploadsDir);
+        let count = 0;
+        const now = Date.now();
+        files.forEach(file => {
+            const filePath = path.join(uploadsDir, file);
+            const stat = fs.statSync(filePath);
+            // Delete files older than 1 hour
+            if (now - stat.mtimeMs > 3600000) {
+                fs.unlinkSync(filePath);
+                count++;
+            }
+        });
+        if (count > 0) {
+            console.log(`[Startup] Cleaned up ${count} orphaned files in uploads/`);
+        }
+    }
+}
+
+// Periodic Python service health check
+function startPythonHealthCheck() {
+    const axios = require('axios');
+    const pythonUrl = process.env.FACE_API_URL || 'http://localhost:5051';
+    setInterval(async () => {
+        try {
+            await axios.get(`${pythonUrl}/health`, { timeout: 3000 });
+        } catch (error) {
+            console.error('[HealthCheck] Python service is down or unresponsive:', error.message);
+        }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+}
+
 server.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`);
     console.log(`Local: http://localhost:${port}`);
     console.log(`Network: http://10.0.2.2:${port} (Android Emulator)`);
+
+    // Initialize startup tasks
+    cleanupUploads();
+    if (process.env.NODE_ENV === 'production') {
+        startPythonHealthCheck();
+    }
 
     // Initialize scheduled tasks (auto-close sessions, etc.)
     if (process.env.NODE_ENV !== 'test') {

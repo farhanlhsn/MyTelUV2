@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import '../../services/biometrik_service.dart';
 
@@ -56,6 +54,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     }
 
     final errorMap = {
+      'Layanan pengenalan wajah sedang tidak tersedia':
+          'Layanan sedang sibuk atau tidak tersedia. Silakan coba beberapa saat lagi.',
       'Face recognition service unavailable':
           'Layanan pengenalan wajah tidak tersedia. Coba lagi nanti.',
       'No face detected': 'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
@@ -137,6 +137,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       _errorMessage = null;
       _isSuccess = false;
       _result = null;
+      _capturedImage = null;
+      _isLivenessVerified = false;
     });
 
     try {
@@ -148,20 +150,42 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         return;
       }
 
+      // Ensure location is ready before starting liveness
+      if (_currentPosition == null) {
+        await _getCurrentLocation();
+        if (_currentPosition == null) {
+          setState(() => _errorMessage = 'Tidak dapat mengambil lokasi. Aktifkan GPS terlebih dahulu.');
+          return;
+        }
+      }
+
       Get.to(() => LivenessDetectionScreen(
         cameras: cameras,
         config: LivenessConfig(
           enableScreenGlareDetection: false,
+          // Use sandwich normal challenge so the final captured frame
+          // is a neutral/centered face, not mid-gesture
+          sandwichNormalChallenge: true,
         ),
+        showAppBar: false,
         captureFinalImage: true,
+        // Provide an empty overlay so the default "Verification Complete!"
+        // screen is never shown — we auto-close immediately
+        customSuccessOverlay: const SizedBox.shrink(),
         onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) {
-          final resultPath = imageFile.path;
-          setState(() {
-            _capturedImage = File(resultPath);
-            _isLivenessVerified = true;
-            _errorMessage = null;
+          // Save the captured image and mark liveness as verified
+          _capturedImage = File(imageFile.path);
+          _isLivenessVerified = true;
+
+          // Navigate back and immediately submit attendance
+          if (Get.currentRoute != '/BiometrikAbsenPage') {
+            Get.back();
+          }
+
+          // Auto-submit after a brief frame delay to let navigation settle
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _submitAbsen();
           });
-          Get.back(); // Return to BiometrikAbsenPage
         },
       ));
     } catch (e) {
@@ -171,19 +195,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     }
   }
 
-  void _retakePhoto() {
-    setState(() {
-      _capturedImage = null;
-      _errorMessage = null;
-      _isSuccess = false;
-      _result = null;
-      _isLivenessVerified = false;
-    });
-  }
-
   Future<void> _submitAbsen() async {
     if (_capturedImage == null) {
-      setState(() => _errorMessage = 'Silakan ambil foto wajah dengan Liveness Check terlebih dahulu');
+      setState(() => _errorMessage = 'Silakan lakukan Liveness Check terlebih dahulu');
       return;
     }
 
@@ -201,11 +215,15 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     });
 
     try {
+      // 1. Get liveness token
+      final String token = await _biometrikService.requestLivenessToken();
+
+      // 2. Submit absen
       final result = await _biometrikService.biometrikAbsen(
         imageFile: _capturedImage!,
         latitude: _currentPosition!.latitude,
         longitude: _currentPosition!.longitude,
-        isLivenessVerified: _isLivenessVerified,
+        livenessToken: token,
         isMockLocation: _currentPosition!.isMocked,
       );
 
@@ -286,8 +304,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
                       const SizedBox(height: 24),
 
-                      // Capture/Retake button
-                      if (!_isSuccess) _buildCaptureButton(),
+                      // Action buttons area
+                      if (!_isSuccess && !_isLoading) _buildCaptureButton(),
 
                       const SizedBox(height: 24),
 
@@ -297,51 +315,6 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
                       // Success result
                       if (_isSuccess && _result != null) _buildSuccessResult(),
-
-                      const SizedBox(height: 16),
-
-                      // Submit button
-                      if (_capturedImage != null)
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                (_isLoading || _isSuccess) ? null : _submitAbsen,
-                            icon: _isLoading
-                                ? const SizedBox.shrink()
-                                : Icon(
-                                    _isSuccess ? Icons.check : Icons.fingerprint,
-                                    color: Colors.white,
-                                  ),
-                            label: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : Text(
-                                    _isSuccess ? 'Berhasil!' : 'Absen Sekarang',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  _isSuccess ? Colors.green : primaryRed,
-                              disabledBackgroundColor:
-                                  _isSuccess ? Colors.green : Colors.grey.shade300,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
 
                       const SizedBox(height: 20),
                     ],
@@ -438,7 +411,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Widget _buildCameraContent() {
-    // Show captured image
+    // Show captured image (loading or success state)
     if (_capturedImage != null) {
       return Stack(
         fit: StackFit.expand,
@@ -476,7 +449,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 12),
                     Text(
-                      'Memverifikasi wajah...',
+                      'Mencatat absensi...',
                       style: TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
@@ -497,7 +470,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.0),
             child: Text(
-              'Silakan lakukan Liveness Check untuk mengambil foto wajah Anda secara langsung.',
+              'Tekan tombol di bawah untuk memulai verifikasi wajah dan absensi otomatis.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
@@ -508,15 +481,16 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Widget _buildCaptureButton() {
-    if (_capturedImage == null) {
+    // After an error, show retry button
+    if (_errorMessage != null && _capturedImage != null) {
       return SizedBox(
         width: double.infinity,
         height: 50,
         child: ElevatedButton.icon(
           onPressed: _startLivenessCheck,
-          icon: const Icon(Icons.face_retouching_natural, color: Colors.white),
+          icon: const Icon(Icons.refresh, color: Colors.white),
           label: const Text(
-            'Mulai Liveness Check',
+            'Coba Lagi',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           style: ElevatedButton.styleFrom(
@@ -527,33 +501,33 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           ),
         ),
       );
-    } else {
-      // Retake button
-      return GestureDetector(
-        onTap: _retakePhoto,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(30),
+    }
+
+    // Initial state — start the one-tap flow
+    if (_capturedImage == null) {
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: (_isGettingLocation) ? null : _startLivenessCheck,
+          icon: const Icon(Icons.fingerprint, color: Colors.white),
+          label: Text(
+            _isGettingLocation ? 'Menunggu lokasi...' : 'Mulai Absen',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.refresh, color: Colors.grey.shade700),
-              const SizedBox(width: 8),
-              Text(
-                'Ambil Ulang',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryRed,
+            disabledBackgroundColor: Colors.grey.shade300,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
         ),
       );
     }
+
+    // Captured but no error (shouldn't normally be visible since auto-submit runs)
+    return const SizedBox.shrink();
   }
 
   Widget _buildErrorMessage() {
