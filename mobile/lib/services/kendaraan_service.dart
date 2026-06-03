@@ -19,53 +19,38 @@ class KendaraanService {
   // Get histori pengajuan kendaraan user
   static Future<List<PengajuanPlatModel>> getHistoriPengajuan() async {
     try {
-      print('🔄 Fetching histori pengajuan...');
-
-      // Debug: Print current user info from storage
-      final idUser = await _secureStorage.read(key: 'id_user');
-      final username = await _secureStorage.read(key: 'username');
-      final token = await _secureStorage.read(key: 'token');
-      print('👤 Current user from storage: ID=$idUser, username=$username');
-      print('🔑 Token preview: ${token?.substring(0, 20)}...');
+      debugLog('Fetching histori pengajuan');
 
       final response = await _dio.get('/api/v1/kendaraan/histori-pengajuan');
-
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response data: ${response.data}');
+      debugLog('Histori pengajuan response status: ${response.statusCode}');
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
         final dynamic rawData = response.data['data'];
-        print('📦 Raw data type: ${rawData.runtimeType}');
-        print('📦 Raw data: $rawData');
 
         if (rawData == null || rawData is! List) {
-          print('⚠️ Data is not a list, returning empty');
+          debugLog('Histori pengajuan returned non-list data');
           return [];
         }
 
         final List<dynamic> data = rawData;
-        print('📊 Number of items: ${data.length}');
+        debugLog('Histori pengajuan item count: ${data.length}');
 
         // Parse each item with error handling
-        List<PengajuanPlatModel> result = [];
+        final List<PengajuanPlatModel> result = [];
         for (int i = 0; i < data.length; i++) {
           try {
-            print('🔍 Parsing item $i: ${data[i]}');
             final item = PengajuanPlatModel.fromJson(
               data[i] as Map<String, dynamic>,
             );
             result.add(item);
-            print('✅ Successfully parsed item $i');
-          } catch (e, stackTrace) {
-            print('❌ Error parsing item $i: $e');
-            print('📋 Stack trace: $stackTrace');
-            print('📄 JSON data: ${data[i]}');
+          } catch (e) {
+            debugLog('Skipping invalid histori pengajuan item at index $i: $e');
             // Skip invalid items
             continue;
           }
         }
 
-        print('✅ Total parsed: ${result.length} items');
+        debugLog('Parsed histori pengajuan items: ${result.length}');
         return result;
       } else {
         throw Exception(
@@ -73,18 +58,18 @@ class KendaraanService {
         );
       }
     } on DioException catch (e) {
-      print('❌ DioException: ${e.message}');
+      debugLog(
+        'Histori pengajuan request failed: status=${e.response?.statusCode ?? '-'} type=${e.type}',
+      );
       if (e.response != null) {
-        print('❌ Response: ${e.response?.data}');
         throw Exception(
           e.response?.data['message'] ?? 'Error fetching histori pengajuan',
         );
       } else {
         throw Exception('Network error: ${e.message}');
       }
-    } catch (e, stackTrace) {
-      print('❌ Unexpected error: $e');
-      print('📋 Stack trace: $stackTrace');
+    } catch (e) {
+      debugLog('Unexpected histori pengajuan error: $e');
       throw Exception('Unexpected error: $e');
     }
   }
@@ -97,15 +82,9 @@ class KendaraanService {
     required String fotoSTNKPath,
   }) async {
     try {
-      // Debug: Print current user info from storage
-      final idUserStorage = await _secureStorage.read(key: 'id_user');
-      final username = await _secureStorage.read(key: 'username');
-      final token = await _secureStorage.read(key: 'token');
-      print('🚗 Registering kendaraan...');
-      print(
-        '👤 Current user from storage: ID=$idUserStorage, username=$username',
+      debugLog(
+        'Registering kendaraan with ${fotoKendaraanPaths.length} vehicle photos',
       );
-      print('🔑 Token preview: ${token?.substring(0, 20)}...');
 
       // Prepare multipart form data
       // TIDAK mengirim id_user karena backend akan menggunakan id dari token
@@ -140,6 +119,7 @@ class KendaraanService {
         data: formData,
         options: Options(headers: {'Content-Type': 'multipart/form-data'}),
       );
+      debugLog('Register kendaraan response status: ${response.statusCode}');
 
       if (response.statusCode == 201 && response.data['status'] == 'success') {
         return PengajuanPlatModel.fromJson(response.data['data']);
@@ -149,6 +129,9 @@ class KendaraanService {
         );
       }
     } on DioException catch (e) {
+      debugLog(
+        'Register kendaraan request failed: status=${e.response?.statusCode ?? '-'} type=${e.type}',
+      );
       if (e.response != null) {
         throw Exception(
           e.response?.data['message'] ?? 'Error registering kendaraan',

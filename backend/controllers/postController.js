@@ -27,6 +27,7 @@ exports.getAllPosts = asyncHandler(async (req, res) => {
                     }
                 },
                 likes: {
+                    where: { id_user: userId },
                     select: { id_user: true }
                 },
                 comments: {
@@ -48,7 +49,7 @@ exports.getAllPosts = asyncHandler(async (req, res) => {
     // Add isLiked field for current user
     const postsWithLikeStatus = posts.map(post => ({
         ...post,
-        isLiked: post.likes.some(like => like.id_user === userId),
+        isLiked: post.likes.length > 0,
         likeCount: post._count.likes,
         commentCount: post._count.comments,
         likes: undefined,
@@ -82,6 +83,7 @@ exports.getPostById = asyncHandler(async (req, res) => {
                 }
             },
             likes: {
+                where: { id_user: userId },
                 select: { id_user: true }
             },
             comments: {
@@ -117,7 +119,7 @@ exports.getPostById = asyncHandler(async (req, res) => {
         status: "success",
         data: {
             ...post,
-            isLiked: post.likes.some(like => like.id_user === userId),
+            isLiked: post.likes.length > 0,
             likeCount: post._count.likes,
             commentCount: post._count.comments,
             likes: undefined,

@@ -31,6 +31,7 @@ const {
     getAbsensiKu,
     getAbsensiKelas,
     getAbsensiStats,
+    getAbsensiKuStats,
 
     // Sesi Absensi
     getSesiAbsensiByKelas,
@@ -231,6 +232,11 @@ router.post('/absensi',
     authorize('MAHASISWA'),
     validateRequired(['id_kelas', 'id_sesi_absensi', 'latitude', 'longitude']),
     createAbsensi
+);
+
+router.get('/absensi/ku/stats',
+    protect,
+    getAbsensiKuStats
 );
 
 router.get('/absensi/ku',

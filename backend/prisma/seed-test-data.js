@@ -19,6 +19,22 @@ async function main() {
   await prisma.kendaraan.deleteMany({}).catch(() => {});
   await prisma.dataBiometrik.deleteMany({}).catch(() => {});
   await prisma.user.deleteMany({}).catch(() => {});
+  
+  // Reset autoincrement sequences to ensure E2E tests have predictable IDs starting from 1
+  console.log('🔄 Resetting database sequences...');
+  const sequences = [
+    'users_id_user_seq',
+    'parkiran_id_parkiran_seq',
+    'kendaraan_id_kendaraan_seq',
+    'kelas_id_kelas_seq',
+    'absensi_id_absensi_seq',
+    'SesiAbsensi_id_sesi_absensi_seq',
+    'matakuliah_id_matakuliah_seq',
+    'semesters_id_semester_seq'
+  ];
+  for (const seq of sequences) {
+    await prisma.$executeRawUnsafe(`ALTER SEQUENCE IF EXISTS "${seq}" RESTART WITH 1;`).catch(() => {});
+  }
 
   // 1. Create Users
   const passwordHash = await bcrypt.hash('password123', 10);

@@ -9,7 +9,8 @@ model:
 
 # Server Configuration
 server:
-  url: "http://213.210.37.132:5001"  # Replace with your server URL
+  url: "http://localhost:5050"  # Direct backend URL
+  secret: "e2e-testing-edge-device-secret-32-chars"  # Edge device secret key
   timeout: 10  # Request timeout in seconds
 
 # Camera Configuration

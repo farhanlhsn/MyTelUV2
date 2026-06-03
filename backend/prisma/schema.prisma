@@ -221,7 +221,7 @@ model Kelas {
   id_kelas       Int       @id @default(autoincrement())
   id_matakuliah  Int
   id_dosen       Int
-  id_semester    Int?      // Nullable first to allow smooth transition, or mapped to active semester
+  id_semester    Int       // Wajib — setiap kelas harus terhubung ke semester
   hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
   jam_mulai      Unsupported("time")
   jam_berakhir   Unsupported("time")
@@ -234,7 +234,7 @@ model Kelas {
 
   matakuliah Matakuliah @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
   dosen      User       @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
-  semester   Semester?  @relation(fields: [id_semester], references: [id_semester], onDelete: SetNull)
+  semester   Semester   @relation(fields: [id_semester], references: [id_semester], onDelete: Restrict)
   peserta    PesertaKelas[]
   absensi    Absensi[]
   laporan    LaporanAnomali[]
@@ -354,6 +354,7 @@ model LaporanAnomali {
   @@index([id_user, type_anomali, createdAt], map: "idx_anomali_user_type_ts")
   @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
   @@index([deletedAt], map: "idx_anomali_deleted")
+  @@index([status], map: "idx_anomali_status")
   @@map("laporan_anomali")
 }
 

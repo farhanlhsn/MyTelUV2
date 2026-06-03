@@ -121,9 +121,11 @@ class AppRoutes {
       name: otpVerification,
       page: () => OtpVerificationPage(phoneNumber: Get.arguments ?? ""),
     ),
+    // TODO: Verifikasi apakah route ini seharusnya menampilkan halaman kehadiran
+    // bukan halaman parkir. Jika salah, ganti dengan halaman yang sesuai.
     GetPage<dynamic>(
       name: analitikKehadiran,
-      page: () => const AnalitikParkirPage(),
+      page: () => const AnalitikParkirPage(), // Intentional atau bug?
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(

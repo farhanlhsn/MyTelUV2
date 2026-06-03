@@ -1600,7 +1600,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         }
     }
 
-    // Impossible Travel Heuristic Check
+    // Step 6: Server-Side Heuristics & Impossible Travel Check
     const prevAbsensi = await prisma.$queryRaw`
         SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
         FROM absensi 
@@ -1609,6 +1609,11 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         ORDER BY "createdAt" DESC 
         LIMIT 1
     `;
+
+    let credibilityScore = 100;
+    let suspensionReason = "";
+    let calculatedSpeedKmh = 0;
+    let calculatedDistanceMeters = 0;
 
     if (prevAbsensi && prevAbsensi.length > 0) {
         const prevLat = parseFloat(prevAbsensi[0].lat);
@@ -1620,17 +1625,35 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         if (timeDiffSeconds > 0) {
             const distMeters = haversineDistance(prevLat, prevLng, lat, lng);
             const speedMps = distMeters / timeDiffSeconds;
-            
-            // If speed > 55.6 m/s (200 km/h) and distance > 500 meters, flag as impossible travel!
-            if (speedMps > 55.6 && distMeters > 500) {
-                return res.status(400).json({
-                    status: "error",
-                    message: "Impossible travel detected. Lokasi absensi Anda mencurigakan.",
-                    speed_kmh: Math.round(speedMps * 3.6),
-                    distance_meters: Math.round(distMeters)
-                });
+            calculatedSpeedKmh = Math.round(speedMps * 3.6);
+            calculatedDistanceMeters = Math.round(distMeters);
+
+            // Heuristic 1: Impossible travel (speed > 120 km/h and distance > 1000m)
+            if (calculatedSpeedKmh > 120 && distMeters > 1000) {
+                credibilityScore = 0;
+                suspensionReason = `Impossible travel detected. Speed: ${calculatedSpeedKmh} km/h.`;
+            }
+            // Heuristic 2: Suspicious speed (speed > 80 km/h and distance > 1000m)
+            else if (calculatedSpeedKmh > 80 && distMeters > 1000) {
+                credibilityScore -= 50;
+                suspensionReason = `Suspicious high travel speed: ${calculatedSpeedKmh} km/h.`;
+            }
+            // Heuristic 3: Teleportation / GPS Jump (moving > 100m in < 10 seconds)
+            else if (timeDiffSeconds < 10 && distMeters > 100) {
+                credibilityScore -= 80;
+                suspensionReason = "GPS jump detected (teleportation).";
             }
         }
+    }
+
+    if (credibilityScore < 50) {
+        return res.status(400).json({
+            status: "error",
+            message: "Aktivitas absensi mencurigakan terdeteksi (mock location / spoofing).",
+            details: suspensionReason || `Skor kredibilitas lokasi rendah: ${credibilityScore}`,
+            speed_kmh: calculatedSpeedKmh,
+            distance_meters: calculatedDistanceMeters
+        });
     }
 
     await prisma.$executeRaw`
@@ -2196,6 +2219,8 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
         absensiByKelas.get(a.id_kelas).push(a);
     });
 
+    const now = new Date();
+
     // 6. Build result (pure in-memory mapping, no async)
     const result = enrolledClasses.map(pk => {
         const kelasSesi = sesiByKelas.get(pk.id_kelas) || [];
@@ -2211,7 +2236,12 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
 
         const sessions = kelasSesi.map(sesi => ({
             id_sesi: sesi.id_sesi_absensi,
+            id_sesi_absensi: sesi.id_sesi_absensi,
             tanggal: sesi.mulai,
+            mulai: sesi.mulai,
+            selesai: sesi.selesai,
+            status: sesi.status,
+            is_active: sesi.status === true && sesi.mulai <= now && sesi.selesai >= now,
             hadir: absensiMap.has(sesi.id_sesi_absensi),
             type_absensi: absensiMap.get(sesi.id_sesi_absensi)?.type || null,
             waktu_absen: absensiMap.get(sesi.id_sesi_absensi)?.waktu || null
@@ -2543,4 +2573,22 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
         status: "success",
         data: grouped
     });
+});
+
+// GET /api/v1/akademik/absensi/ku/stats
+exports.getAbsensiKuStats = asyncHandler(async (req, res) => {
+    const userId = req.user.id_user;
+    const { id_kelas } = req.query;
+
+    const where = { id_user: userId, deletedAt: null };
+    if (id_kelas) where.id_kelas = parseInt(id_kelas);
+
+    // Aggregasi di database level
+    const stats = await prisma.absensi.groupBy({
+        by: ['id_kelas', 'type_absensi'],
+        where,
+        _count: { type_absensi: true }
+    });
+
+    res.status(200).json({ status: 'success', data: stats });
 });

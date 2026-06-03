@@ -31,7 +31,8 @@ const corsOptions = {
             allowedOrigins.push(process.env.FRONTEND_URL);
         }
 
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
+        if (allowedOrigins.indexOf(origin) !== -1 || allowAllOrigins) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
@@ -94,16 +95,13 @@ app.get('/health', async (req, res) => {
     };
 
     // Check Database
-    const { PrismaClient } = require('./generated/prisma');
-    const prismaHealth = new PrismaClient();
+    const prismaHealth = require('./utils/prisma');
     try {
         await prismaHealth.$queryRaw`SELECT 1`;
         health.services.database = { status: 'ok' };
     } catch (e) {
         health.services.database = { status: 'error', message: e.message };
         health.status = 'degraded';
-    } finally {
-        await prismaHealth.$disconnect();
     }
 
     // Check Python Face Service (Port 5051)

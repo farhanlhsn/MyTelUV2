@@ -6,7 +6,7 @@ exports.generalLimiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 500 : 1000,
   message: {
     status: "error",
-    error: 'Too many requests from this IP, please try again later.'
+    message: 'Too many requests from this IP, please try again later.'
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
@@ -30,7 +30,7 @@ exports.authLimiter = rateLimit({
   max: 5, // limit each IP to 5 requests per windowMs for auth
   message: {
     status: "error",
-    error: 'Too many authentication attempts, please try again later.'
+    message: 'Too many authentication attempts, please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -43,7 +43,7 @@ exports.biometrikLimiter = rateLimit({
   keyGenerator: (req) => req.user?.id_user || req.ip,
   message: {
     status: "error",
-    error: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
+    message: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
   },
   standardHeaders: true,
   legacyHeaders: false,

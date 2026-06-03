@@ -3,6 +3,7 @@ import '../models/kelas.dart';
 import '../models/kelas_hari_ini.dart';
 import '../models/matakuliah.dart';
 import '../models/absensi.dart';
+import '../utils/jadwal_cache.dart';
 import 'api_client.dart';
 
 class AkademikService {
@@ -11,7 +12,8 @@ class AkademikService {
   AkademikService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   /// Get kelas hari ini (classes scheduled for today based on user role)
-  Future<List<KelasHariIniModel>> getKelasHariIni() async {
+  /// Returns tuple: (data, isFromCache)
+  Future<(List<KelasHariIniModel>, bool)> getKelasHariIni() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
         '/api/v1/akademik/kelas/hari-ini',
@@ -21,21 +23,36 @@ class AkademikService {
         final Map<String, dynamic> data = response.data as Map<String, dynamic>;
         final List<dynamic> kelasData = data['data'] as List<dynamic>? ?? [];
 
-        return kelasData
+        // Save to cache
+        await JadwalCache.saveKelasHariIni(kelasData);
+
+        final list = kelasData
             .map(
               (dynamic item) =>
                   KelasHariIniModel.fromJson(item as Map<String, dynamic>),
             )
             .toList();
+        return (list, false);
       }
-      return [];
+      return ([], false);
     } on DioException catch (e) {
+      final cached = await JadwalCache.loadKelasHariIni();
+      if (cached != null) {
+        final list = cached
+            .map(
+              (dynamic item) =>
+                  KelasHariIniModel.fromJson(item as Map<String, dynamic>),
+            )
+            .toList();
+        return (list, true);
+      }
       throw Exception('Failed to get kelas hari ini: ${e.message}');
     }
   }
 
   /// Get jadwal mingguan (weekly schedule grouped by day)
-  Future<Map<String, List<dynamic>>> getJadwalMingguan() async {
+  /// Returns tuple: (data, isFromCache)
+  Future<(Map<String, List<dynamic>>, bool)> getJadwalMingguan() async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
         '/api/v1/akademik/kelas/jadwal-mingguan',
@@ -45,13 +62,22 @@ class AkademikService {
         final Map<String, dynamic> data = response.data as Map<String, dynamic>;
         final Map<String, dynamic> jadwalData = data['data'] as Map<String, dynamic>? ?? {};
 
-        return jadwalData.map((key, value) => MapEntry(
+        final result = jadwalData.map((key, value) => MapEntry(
           key,
           (value as List<dynamic>),
         ));
+
+        // Save to cache
+        await JadwalCache.saveJadwalMingguan(result);
+
+        return (result, false);
       }
-      return {};
+      return ({}, false);
     } on DioException catch (e) {
+      final cached = await JadwalCache.loadJadwalMingguan();
+      if (cached != null) {
+        return (cached, true);
+      }
       throw Exception('Failed to get jadwal mingguan: ${e.message}');
     }
   }
@@ -148,37 +174,31 @@ class AkademikService {
   }
 
   // Get absensi stats untuk mahasiswa
-  Future<Map<int, AbsensiStatsModel>> getAbsensiStats() async {
+  Future<Map<int, AbsensiStatsModel>> getAbsensiStats({int? idKelas}) async {
     try {
-      final List<AbsensiModel> absensiList = await getAbsensiKu();
-
-      // Group by id_kelas
-      final Map<int, List<AbsensiModel>> groupedByKelas = {};
-      for (final AbsensiModel absensi in absensiList) {
-        if (!groupedByKelas.containsKey(absensi.idKelas)) {
-          groupedByKelas[absensi.idKelas] = [];
+      final queryParams = idKelas != null
+          ? <String, dynamic>{'id_kelas': idKelas}
+          : <String, dynamic>{};
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        '/api/v1/akademik/absensi/ku/stats',
+        queryParameters: queryParams,
+      );
+      if (response.data is Map<String, dynamic>) {
+        final List<dynamic> raw =
+            (response.data as Map<String, dynamic>)['data'] as List<dynamic>? ?? [];
+        // raw adalah list {id_kelas, type_absensi, _count: {type_absensi: N}}
+        final Map<int, Map<String, int>> grouped = {};
+        for (final item in raw) {
+          final m = item as Map<String, dynamic>;
+          final int kelasId = m['id_kelas'] as int;
+          final String type = m['type_absensi'] as String;
+          final int count = (m['_count'] as Map<String, dynamic>)['type_absensi'] as int;
+          grouped.putIfAbsent(kelasId, () => {'HADIR': 0, 'IJIN': 0, 'SAKIT': 0, 'ALPHA': 0});
+          grouped[kelasId]![type] = count;
         }
-        groupedByKelas[absensi.idKelas]!.add(absensi);
+        return grouped.map((k, v) => MapEntry(k, AbsensiStatsModel.fromJson(v)));
       }
-
-      // Calculate stats for each kelas
-      final Map<int, AbsensiStatsModel> stats = {};
-      groupedByKelas.forEach((int idKelas, List<AbsensiModel> absensiList) {
-        final Map<String, int> counts = {
-          'HADIR': 0,
-          'IJIN': 0,
-          'SAKIT': 0,
-          'ALPHA': 0,
-        };
-
-        for (final AbsensiModel absensi in absensiList) {
-          counts[absensi.typeAbsensi] = (counts[absensi.typeAbsensi] ?? 0) + 1;
-        }
-
-        stats[idKelas] = AbsensiStatsModel.fromJson(counts);
-      });
-
-      return stats;
+      return {};
     } on DioException catch (e) {
       throw Exception('Failed to get absensi stats: ${e.message}');
     }
@@ -469,9 +489,6 @@ class AkademikService {
       if (namaKelas != null) data['nama_kelas'] = namaKelas;
       if (ruangan != null) data['ruangan'] = ruangan;
       if (hari != null) data['hari'] = hari;
-      if (jamBerakhir != null) data['jam_berakhir'] = jamBerakhir;
-      if (namaKelas != null) data['nama_kelas'] = namaKelas;
-      if (ruangan != null) data['ruangan'] = ruangan;
 
       final Response<dynamic> response = await _dio.put<dynamic>(
         '/api/v1/akademik/kelas/$idKelas',

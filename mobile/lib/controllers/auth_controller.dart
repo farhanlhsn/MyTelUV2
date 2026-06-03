@@ -35,7 +35,7 @@ class AuthController extends GetxController {
     try {
       // Hapus token lama terlebih dahulu untuk memastikan clean state
       await _secureStorage.deleteAll();
-      print('🗑️ Cleared all old tokens and user data');
+      debugLog('🗑️ Cleared all old tokens and user data');
 
       final Map<String, dynamic> result = await _authService.login(
         username: username,
@@ -65,9 +65,7 @@ class AuthController extends GetxController {
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
-      AuthMiddleware.cachedToken = token;
-      AuthMiddleware.cachedRole = user.role;
-      AuthMiddleware.hasLoaded = true;
+      await AuthMiddleware.loadCredentials();
 
       debugLog(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
@@ -75,7 +73,7 @@ class AuthController extends GetxController {
 
       // Reset Dio instance to ensure new token is used
       ApiClient.reset();
-      print('🔄 Reset Dio instance');
+      debugLog('🔄 Reset Dio instance');
 
       // Register FCM token for push notifications
       await _registerNotificationToken();
@@ -147,14 +145,14 @@ class AuthController extends GetxController {
 
       // Reset Dio instance to clear any cached requests
       ApiClient.reset();
-      print('🚪 Logged out and reset Dio instance');
+      debugLog('🚪 Logged out and reset Dio instance');
 
       // Unregister FCM token locally
       await _unregisterNotificationToken();
 
       return true;
     } catch (e) {
-      print('❌ Logout failed: $e');
+      debugLog('❌ Logout failed: $e');
       return false;
     } finally {
       isLoading.value = false;

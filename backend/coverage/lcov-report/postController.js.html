@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">48.46% </span>
+                <span class="strong">48.44% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>79/163</span>
+                <span class='fraction'>78/161</span>
             </div>
         
             
@@ -37,16 +37,16 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">42.1% </span>
+                <span class="strong">41.17% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>8/19</span>
+                <span class='fraction'>7/17</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">48.75% </span>
+                <span class="strong">48.73% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>78/160</span>
+                <span class='fraction'>77/158</span>
             </div>
         
             
@@ -741,7 +741,9 @@
 <a name='L676'></a><a href='#L676'>676</a>
 <a name='L677'></a><a href='#L677'>677</a>
 <a name='L678'></a><a href='#L678'>678</a>
-<a name='L679'></a><a href='#L679'>679</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L679'></a><a href='#L679'>679</a>
+<a name='L680'></a><a href='#L680'>680</a>
+<a name='L681'></a><a href='#L681'>681</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -756,6 +758,7 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -791,14 +794,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -807,6 +802,14 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -849,18 +852,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1448,6 +1452,7 @@ exports.getAllPosts = asyncHandler(async (req, res) =&gt; {
                     }
                 },
                 likes: {
+                    where: { id_user: userId },
                     select: { id_user: true }
                 },
                 comments: {
@@ -1469,7 +1474,7 @@ exports.getAllPosts = asyncHandler(async (req, res) =&gt; {
     // Add isLiked field for current user
     const postsWithLikeStatus = posts.map(post =&gt; ({
         ...post,
-        isLiked: post.likes.some(like =&gt; like.id_user === userId),
+        isLiked: post.likes.length &gt; 0,
         likeCount: post._count.likes,
         commentCount: post._count.comments,
         likes: undefined,
@@ -1503,6 +1508,7 @@ exports.getPostById = asyncHandler(<span class="fstat-no" title="function not co
                 }
             },
             likes: {
+                where: { id_user: userId },
                 select: { id_user: true }
             },
             comments: {
@@ -1538,7 +1544,7 @@ exports.getPostById = asyncHandler(<span class="fstat-no" title="function not co
         status: "success",
         data: {
             ...post,
-            isLiked: post.likes.some(<span class="fstat-no" title="function not covered" >li</span>ke =&gt; <span class="cstat-no" title="statement not covered" >like.id_user === userId)</span>,
+            isLiked: post.likes.length &gt; 0,
             likeCount: post._count.likes,
             commentCount: post._count.comments,
             likes: undefined,
@@ -2104,7 +2110,7 @@ exports.getMyPosts = asyncHandler(<span class="fstat-no" title="function not cov
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-05-22T03:56:04.375Z
+                at 2026-06-01T16:28:33.781Z
             </div>
         <script src="prettify.js"></script>
         <script>

@@ -9,7 +9,7 @@
 jest.mock('../utils/prisma', () => ({
     kendaraan: { findMany: jest.fn(), findFirst: jest.fn() },
     logParkir: { count: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-    parkiran: { findUnique: jest.fn() },
+    parkiran: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
     $executeRawUnsafe: jest.fn(),
@@ -149,10 +149,8 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                status: 'error',
-                data: expect.objectContaining({
-                    gate_action: 'DENY'
-                }),
+                success: false,
+                gate_action: 'DENY',
                 message: expect.stringContaining('penuh')
             }));
         });
@@ -254,6 +252,101 @@ describe('Parkir Controller - processEdgeEntry', () => {
                 })
             }));
         });
+    });
+});
+
+describe('Parkir Controller - create/update parkiran validation', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('should reject createParkiran if kapasitas is not numeric', async () => {
+        const req = createMockReq({
+            nama_parkiran: 'Gedung A',
+            kapasitas: 'NaN',
+            latitude: '-6.2',
+            longitude: '106.8'
+        });
+        const res = createMockRes();
+
+        await parkirController.createParkiran(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'error',
+            message: expect.stringContaining('Kapasitas')
+        }));
+        expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    test('should reject updateParkiran if id is not numeric', async () => {
+        const req = createMockReq({ nama_parkiran: 'Gedung B' });
+        req.params = { id: 'abc' };
+        const res = createMockRes();
+
+        await parkirController.updateParkiran(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(prisma.parkiran.findFirst).not.toHaveBeenCalled();
+        expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+    });
+
+    test('should reject updateParkiran if longitude is out of range', async () => {
+        prisma.parkiran.findFirst.mockResolvedValueOnce({ id_parkiran: 1 });
+
+        const req = createMockReq({
+            latitude: '-6.2',
+            longitude: '181'
+        });
+        req.params = { id: '1' };
+        const res = createMockRes();
+
+        await parkirController.updateParkiran(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'error',
+            message: expect.stringContaining('Longitude')
+        }));
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+    });
+
+    test('should update parkiran without unsafe raw SQL', async () => {
+        prisma.parkiran.findFirst
+            .mockResolvedValueOnce({ id_parkiran: 1 })
+            .mockResolvedValueOnce(null);
+        prisma.parkiran.update.mockResolvedValue({ id_parkiran: 1 });
+        prisma.$executeRaw.mockResolvedValue(1);
+        prisma.$transaction.mockImplementation(async operations => Promise.all(operations));
+        prisma.$queryRaw.mockResolvedValue([{
+            id_parkiran: 1,
+            nama_parkiran: 'Gedung Baru',
+            kapasitas: 50,
+            live_kapasitas: 0
+        }]);
+
+        const req = createMockReq({
+            nama_parkiran: 'Gedung Baru',
+            kapasitas: '50',
+            latitude: '-6.2',
+            longitude: '106.8'
+        });
+        req.params = { id: '1' };
+        const res = createMockRes();
+
+        await parkirController.updateParkiran(req, res);
+
+        expect(prisma.parkiran.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id_parkiran: 1 },
+            data: {
+                nama_parkiran: 'Gedung Baru',
+                kapasitas: 50
+            }
+        }));
+        expect(prisma.$executeRaw).toHaveBeenCalled();
+        expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
     });
 });
 

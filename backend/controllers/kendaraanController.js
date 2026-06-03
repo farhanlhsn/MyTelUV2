@@ -135,7 +135,8 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
 exports.getKendaraan = asyncHandler(async (req, res) => {
     const kendaraan = await prisma.kendaraan.findMany({
         where: {
-            id_user: req.user.id_user
+            id_user: req.user.id_user,
+            deletedAt: null
         },
         select: {
             id_kendaraan: true,
@@ -161,21 +162,13 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
     const kendaraan = await prisma.kendaraan.findUnique({
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user }
     });
-    if (!kendaraan) {
+    if (!kendaraan || kendaraan.deletedAt) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
     }
-    // Delete foto kendaraan dan foto STNK from R2
-    for (const foto of kendaraan.fotoKendaraan) {
-        if (await fileExists(foto)) {
-            await deleteFile(foto);
-        }
-    }
-    if (await fileExists(kendaraan.fotoSTNK)) {
-        await deleteFile(kendaraan.fotoSTNK);
-    }
-    // Delete kendaraan from database
-    await prisma.kendaraan.delete({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user }
+    // Soft delete kendaraan from database (preserve R2 files for audit)
+    await prisma.kendaraan.update({
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user },
+        data: { deletedAt: new Date() }
     });
     res.status(200).json({ status: "success", message: `Kendaraan ${kendaraan.plat_nomor} deleted successfully` });
 });

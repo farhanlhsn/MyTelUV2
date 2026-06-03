@@ -30,7 +30,7 @@ class BiometrikService {
   ///   if (result != null && result.isSuccess) {
   ///     File liveFaceFile = File(result.imagePath);
   ///     // Pass the verified file and isLivenessVerified = true
-  ///     await biometrikAbsen(imageFile: liveFaceFile, latitude: lat, longitude: lng, isLivenessVerified: true);
+  ///     await biometrikAbsen(imageFile: liveFaceFile, idSesiAbsensi: selectedSesiId, latitude: lat, longitude: lng, livenessToken: token);
   ///   }
   /// }
   /// ```
@@ -123,6 +123,7 @@ class BiometrikService {
   /// Returns success with kelas info or error message
   Future<Map<String, dynamic>> biometrikAbsen({
     required File imageFile,
+    required int idSesiAbsensi,
     required double latitude,
     required double longitude,
     required String livenessToken,
@@ -134,6 +135,7 @@ class BiometrikService {
           imageFile.path,
           filename: 'absen_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
+        'id_sesi_absensi': idSesiAbsensi.toString(),
         'latitude': latitude.toString(),
         'longitude': longitude.toString(),
         'liveness_token': livenessToken,

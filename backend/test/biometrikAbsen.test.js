@@ -33,6 +33,11 @@ jest.mock('../utils/r2FileHandler', () => ({
     deleteFile: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock('../utils/livenessTokenManager', () => ({
+    generateToken: jest.fn(),
+    verifyAndConsume: jest.fn().mockReturnValue(true),
+}));
+
 jest.mock('form-data', () => {
     return jest.fn().mockImplementation(() => ({
         append: jest.fn(),
@@ -44,6 +49,7 @@ jest.mock('form-data', () => {
 const prisma = require('../utils/prisma');
 const axios = require('axios');
 const fs = require('fs');
+const embeddingCache = require('../utils/embeddingCache');
 
 // Import the actual controller
 const { biometrikAbsen } = require('../controllers/biometrikController');
@@ -52,11 +58,12 @@ const { biometrikAbsen } = require('../controllers/biometrikController');
 // TEST HELPERS
 // ============================================
 
+
 const createMockReq = (overrides = {}) => {
     const { body: overrideBody, ...rest } = overrides;
     return {
         file: { path: '/tmp/test.jpg', originalname: 'test.jpg', mimetype: 'image/jpeg' },
-        body: { latitude: '-7.9826', longitude: '112.6308', id_sesi_absensi: 1, ...overrideBody },
+        body: { latitude: '-7.9826', longitude: '112.6308', id_sesi_absensi: 1, liveness_token: 'valid-token', ...overrideBody },
         user: { id_user: 1, role: 'MAHASISWA' },
         ...rest
     };
@@ -77,6 +84,15 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        axios.post.mockReset();
+        embeddingCache.invalidateCache();
+        prisma.dataBiometrik.findUnique.mockReset();
+        prisma.pesertaKelas.findMany.mockReset();
+        prisma.sesiAbsensi.findMany.mockReset();
+        prisma.sesiAbsensi.findFirst.mockReset();
+        prisma.absensi.findFirst.mockReset();
+        prisma.$executeRaw.mockReset();
+        prisma.$queryRaw.mockReset().mockResolvedValue([]);
         prisma.sesiAbsensi.findFirst.mockImplementation(async () => {
             const manyResult = await prisma.sesiAbsensi.findMany();
             return Array.isArray(manyResult) && manyResult.length > 0 ? manyResult[0] : null;
@@ -116,6 +132,24 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
                 message: 'Image file is required'
+            });
+        });
+    });
+
+    describe('Required Session Context', () => {
+        test('TC001c - Should return 400 when id_sesi_absensi is missing', async () => {
+            const req = createMockReq({
+                body: { id_sesi_absensi: undefined }
+            });
+            const res = createMockRes();
+            const next = jest.fn();
+
+            await biometrikAbsen(req, res, next);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'id_sesi_absensi wajib diisi untuk absensi biometrik. Silakan pilih sesi absensi terlebih dahulu.'
             });
         });
     });
@@ -313,18 +347,14 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 5: Face Not Matched', () => {
         test('TC005 - Should return 400 when face does not match', async () => {
-            axios.post
-                .mockResolvedValueOnce({
-                    data: { success: true, embedding: [0.1, 0.2, 0.3] }
-                })
-                .mockResolvedValueOnce({
-                    data: { is_match: false, similarity: 0.35 }
-                });
+            axios.post.mockResolvedValueOnce({
+                data: { success: true, embedding: [1, 0, 0] }
+            });
 
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
                 id_biometrik: 1,
                 id_user: 1,
-                face_embedding: [0.5, 0.6, 0.7],
+                face_embedding: [0, 1, 0],
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
@@ -339,7 +369,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
                 message: 'Wajah tidak cocok',
-                similarity: 0.35
+                similarity: 0
             });
         });
     });
@@ -504,8 +534,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     status: 'error',
-                    message: 'Lokasi Anda di luar area absensi',
-                    required_radius: 100
+                    message: expect.stringContaining('Lokasi Anda di luar area absensi')
                 })
             );
         });
@@ -569,7 +598,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Algoritma Pemrograman',
                         ruangan: 'R.101',
                         type: 'HADIR',
-                        similarity: 0.92
+                        similarity: 1
                     })
                 })
             );
@@ -632,7 +661,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Basis Data',
                         ruangan: 'R.202',
                         type: 'HADIR',
-                        similarity: 0.88
+                        similarity: 1
                     })
                 })
             );

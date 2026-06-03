@@ -1,3 +1,4 @@
+import 'package:mobile/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
@@ -67,7 +68,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading pengajuan: $e');
+      debugLog('Error loading pengajuan: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -94,7 +95,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
         _isLoadingMore = false;
       });
     } catch (e) {
-      print('Error loading more pengajuan: $e');
+      debugLog('Error loading more pengajuan: $e');
       setState(() {
         _isLoadingMore = false;
       });

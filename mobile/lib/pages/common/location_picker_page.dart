@@ -1,3 +1,4 @@
+import 'package:mobile/utils/logger.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -86,7 +87,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         await _reverseGeocode(_selectedLocation);
       }
     } catch (e) {
-      print('Error getting location: $e');
+      debugLog('Error getting location: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -121,7 +122,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         });
       }
     } catch (e) {
-      print('Reverse geocode error: $e');
+      debugLog('Reverse geocode error: $e');
     }
   }
 
@@ -155,7 +156,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         });
       }
     } catch (e) {
-      print('Search error: $e');
+      debugLog('Search error: $e');
     } finally {
       setState(() => _isSearching = false);
     }

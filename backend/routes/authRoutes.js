@@ -97,14 +97,39 @@ router.put('/preferences',
 
 // Profile Picture
 const multer = require('multer');
-const upload = multer({
+const path = require('path');
+
+const allowedProfilePictureMimes = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp'
+]);
+const allowedProfilePictureExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+const profilePictureFileFilter = (req, file, cb) => {
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    const hasAllowedMime = allowedProfilePictureMimes.has(file.mimetype);
+    const hasAllowedExtension = allowedProfilePictureExtensions.has(extension);
+
+    if (!hasAllowedMime || !hasAllowedExtension) {
+        return cb(new Error('Invalid profile picture file type. Allowed: jpeg, png, webp'), false);
+    }
+
+    return cb(null, true);
+};
+
+const uploadProfilePictureImage = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+    limits: {
+        files: 1,
+        fileSize: 5 * 1024 * 1024
+    },
+    fileFilter: profilePictureFileFilter
 });
 
 router.post('/profile-picture',
     protect,
-    upload.single('image'),
+    uploadProfilePictureImage.single('image'),
     uploadProfilePicture
 );
 

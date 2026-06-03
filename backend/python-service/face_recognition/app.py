@@ -22,7 +22,8 @@ import numpy as np
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for Node.js backend
+ALLOWED_ORIGIN = os.getenv('BACKEND_URL', 'http://localhost:5050')
+CORS(app, origins=[ALLOWED_ORIGIN])
 
 # Initialize face processor
 if os.getenv('TEST_MODE') == 'true':

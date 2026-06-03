@@ -331,6 +331,10 @@ def recognize_plate():
     """
     init_recognizer()
     
+    # Validate request has 'image' field before checking TEST_MODE
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image provided', 'success': False}), 400
+        
     if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
         return jsonify({
             'success': True,

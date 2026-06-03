@@ -49,7 +49,7 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
         _errorMessage = null;
       });
 
-      print('🔄 Loading analitik data...');
+      debugLog('🔄 Loading analitik data...');
       final data = await _parkirService.getAnalitikParkiran();
       debugLog('✅ Analitik data loaded: ${data?.parkiran.length ?? 0} parkiran');
 

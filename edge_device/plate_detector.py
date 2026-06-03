@@ -469,10 +469,15 @@ class PlateDetector:
                 'face_detected': str(face_detected).lower()  # 'true' or 'false'
             }
             
+            headers = {
+                'X-Edge-Secret': self.config.get('server', {}).get('secret', 'your-secret-key')
+            }
+            
             response = requests.post(
-                f"{self.server_url}/api/parking/process",
+                f"{self.server_url}/api/v1/parkir/edge-entry",
                 files=files,
                 data=data,
+                headers=headers,
                 timeout=self.server_timeout
             )
             

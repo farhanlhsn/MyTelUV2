@@ -26,7 +26,7 @@ exports.validateRequired = (fields) => {
         if (missingFields.length > 0) {
             return res.status(400).json({
                 status: "error",
-                error: `Missing required fields: ${missingFields.join(', ')}`
+                message: `Missing required fields: ${missingFields.join(', ')}`
             });
         }
 
@@ -41,7 +41,7 @@ exports.validateEmail = (req, res, next) => {
     if (email && !validator.isEmail(email)) {
         return res.status(400).json({
             status: "error",
-            error: 'Please provide a valid email address'
+            message: 'Please provide a valid email address'
         });
     }
     next();

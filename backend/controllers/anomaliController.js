@@ -2,10 +2,19 @@ const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const axios = require('axios');
 const { logAudit } = require('../utils/auditLogger'); // Opsional, jika Anda menggunakan logger
+const CircuitBreaker = require('../utils/CircuitBreaker');
+const { globalAnomalyQueue } = require('../utils/TaskQueue');
 
 // URL Service Python (Port 5003 sesuai setup anomaly_detection)
 // Gunakan environment variable atau fallback ke localhost
-const PYTHON_SERVICE_URL = process.env.ANOMALY_SERVICE_URL || 'http://localhost:5003';
+const ANOMALY_SERVICE_URL = (process.env.ANOMALY_SERVICE_URL || 'http://localhost:5003').replace(/\/+$/, '');
+const ANOMALY_SERVICE_TIMEOUT_MS = Number.parseInt(process.env.ANOMALY_SERVICE_TIMEOUT_MS, 10) || 10000;
+
+// Initialize Circuit Breaker for Anomaly Detection API
+const anomalyApiBreaker = new CircuitBreaker("AnomalyAPI", {
+    failureThreshold: parseInt(process.env.ANOMALY_CB_FAILURE_THRESHOLD || '3'),
+    recoveryTimeout: parseInt(process.env.ANOMALY_CB_RECOVERY_TIMEOUT || '30000')
+});
 
 /**
  * @desc    Memicu analisis AI untuk mendeteksi anomali pada kelas tertentu
@@ -150,12 +159,23 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         })
     };
 
-    try {
+    const isAsync = req.query.async === 'true';
+
+    const runAnalysisTask = async () => {
         // 6. Request ke Python Microservice
-        console.log(`[Anomali] Sending data to ${PYTHON_SERVICE_URL}/detect-anomalies...`);
-        const pythonResponse = await axios.post(`${PYTHON_SERVICE_URL}/detect-anomalies`, payload);
+        console.log(`[Anomali] Sending data to ${ANOMALY_SERVICE_URL}/detect-anomalies...`);
+        const pythonResponse = await anomalyApiBreaker.fire(async () => {
+            return await axios.post(`${ANOMALY_SERVICE_URL}/detect-anomalies`, payload, {
+                timeout: ANOMALY_SERVICE_TIMEOUT_MS,
+                headers: {
+                    'X-API-Key': process.env.ANOMALY_API_KEY || ''
+                }
+            });
+        });
         
-        const { anomalies } = pythonResponse.data;
+        const anomalies = Array.isArray(pythonResponse.data?.anomalies)
+            ? pythonResponse.data.anomalies
+            : [];
 
         // 7. Simpan Hasil ke Database (Soft Delete laporan lama)
         await prisma.laporanAnomali.updateMany({
@@ -194,6 +214,26 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 ip: req.ip || (req.headers && req.headers['x-forwarded-for']) || '127.0.0.1'
             });
         }
+
+        return anomalies;
+    };
+
+    if (isAsync) {
+        const jobId = `anomaly_kelas_${id_kelas}_${Date.now()}`;
+        globalAnomalyQueue.addJob(jobId, runAnalysisTask);
+        
+        return res.status(202).json({
+            status: "success",
+            message: "Analisis anomali telah dijadwalkan di latar belakang.",
+            data: {
+                jobId,
+                status: "QUEUED"
+            }
+        });
+    }
+
+    try {
+        const anomalies = await runAnalysisTask();
 
         // 8. Return Response ke Client (Mobile/Web)
         // Kita kembalikan juga data raw anomalinya agar Frontend bisa langsung menampilkan
@@ -337,5 +377,27 @@ exports.updateLaporanAnomali = asyncHandler(async (req, res) => {
         status: "success",
         message: "Laporan anomali berhasil diperbarui",
         data: updatedLaporan
+    });
+});
+
+/**
+ * @desc    Mengambil status pekerjaan background asinkron
+ * @route   GET /api/anomali/job-status/:jobId
+ * @access  Private (Dosen/Admin)
+ */
+exports.getJobStatus = asyncHandler(async (req, res) => {
+    const { jobId } = req.params;
+    const job = globalAnomalyQueue.getJobStatus(jobId);
+    
+    if (!job) {
+        return res.status(404).json({
+            status: "error",
+            message: "Pekerjaan analisis tidak ditemukan atau sudah dibersihkan dari memori."
+        });
+    }
+    
+    res.status(200).json({
+        status: "success",
+        data: job
     });
 });

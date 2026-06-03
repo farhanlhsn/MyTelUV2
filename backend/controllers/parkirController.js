@@ -4,6 +4,18 @@ const prisma = require('../utils/prisma');
 const { sendParkingNotification } = require('../utils/firebase');
 const { uploadFile } = require('../utils/r2FileHandler');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
+const FormData = require('form-data');
+const axios = require('axios');
+const CircuitBreaker = require('../utils/CircuitBreaker');
+
+const PLATE_SERVICE_URL = process.env.PLATE_API_URL || 'http://localhost:5001';
+const PLATE_SERVICE_TIMEOUT = parseInt(process.env.PLATE_SERVICE_TIMEOUT || '10000');
+
+// Initialize Circuit Breaker for Plate Recognition API
+const plateApiBreaker = new CircuitBreaker("PlateAPI", {
+    failureThreshold: parseInt(process.env.PLATE_CB_FAILURE_THRESHOLD || '5'),
+    recoveryTimeout: parseInt(process.env.PLATE_CB_RECOVERY_TIMEOUT || '30000')
+});
 
 // Get histori parkir untuk user (berdasarkan kendaraan yang dimiliki)
 exports.getHistoriParkir = asyncHandler(async (req, res) => {
@@ -144,7 +156,7 @@ exports.createParkiran = asyncHandler(async (req, res) => {
         });
     }
 
-    if (!kapasitas || kapasitas <= 0) {
+    if (kapasitas === undefined || isNaN(Number(kapasitas)) || parseInt(kapasitas) <= 0) {
         return res.status(400).json({
             status: "error",
             message: "Kapasitas must be a positive number"
@@ -158,14 +170,30 @@ exports.createParkiran = asyncHandler(async (req, res) => {
         });
     }
 
-    // Cek apakah nama sudah ada
-    const existing = await prisma.$queryRaw`
-        SELECT id_parkiran FROM parkiran 
-        WHERE nama_parkiran = ${nama_parkiran.trim()} 
-        AND "deletedAt" IS NULL
-    `;
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+            status: "error",
+            message: "Latitude must be a valid number between -90 and 90"
+        });
+    }
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+        return res.status(400).json({
+            status: "error",
+            message: "Longitude must be a valid number between -180 and 180"
+        });
+    }
 
-    if (existing.length > 0) {
+    // Cek apakah nama sudah ada (menggunakan Prisma Client)
+    const existing = await prisma.parkiran.findFirst({
+        where: {
+            nama_parkiran: nama_parkiran.trim(),
+            deletedAt: null
+        }
+    });
+
+    if (existing) {
         return res.status(409).json({
             status: "error",
             message: "Nama parkiran already exists"
@@ -213,30 +241,39 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { nama_parkiran, kapasitas, latitude, longitude } = req.body;
 
-    // Cek apakah parkiran ada
-    const existing = await prisma.$queryRaw`
-        SELECT id_parkiran FROM parkiran 
-        WHERE id_parkiran = ${parseInt(id)} 
-        AND "deletedAt" IS NULL
-    `;
+    if (isNaN(parseInt(id))) {
+        return res.status(400).json({
+            status: "error",
+            message: "Invalid ID format"
+        });
+    }
 
-    if (existing.length === 0) {
+    // Cek apakah parkiran ada (menggunakan Prisma Client)
+    const existing = await prisma.parkiran.findFirst({
+        where: {
+            id_parkiran: parseInt(id),
+            deletedAt: null
+        }
+    });
+
+    if (!existing) {
         return res.status(404).json({
             status: "error",
             message: "Parkiran not found"
         });
     }
 
-    // Jika nama berubah, cek unique
+    // Jika nama berubah, cek unique (menggunakan Prisma Client)
     if (nama_parkiran) {
-        const nameCheck = await prisma.$queryRaw`
-            SELECT id_parkiran FROM parkiran 
-            WHERE nama_parkiran = ${nama_parkiran.trim()} 
-            AND id_parkiran != ${parseInt(id)}
-            AND "deletedAt" IS NULL
-        `;
+        const nameCheck = await prisma.parkiran.findFirst({
+            where: {
+                nama_parkiran: nama_parkiran.trim(),
+                id_parkiran: { not: parseInt(id) },
+                deletedAt: null
+            }
+        });
 
-        if (nameCheck.length > 0) {
+        if (nameCheck) {
             return res.status(409).json({
                 status: "error",
                 message: "Nama parkiran already exists"
@@ -244,21 +281,64 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         }
     }
 
-    // Build update query dynamically
-    let updates = [];
-    if (nama_parkiran) updates.push(`nama_parkiran = '${nama_parkiran.trim()}'`);
-    if (kapasitas) updates.push(`kapasitas = ${parseInt(kapasitas)}`);
-    if (latitude !== undefined && longitude !== undefined) {
-        updates.push(`koordinat = point(${parseFloat(longitude)}, ${parseFloat(latitude)})`);
+    if (kapasitas !== undefined) {
+        if (isNaN(Number(kapasitas)) || parseInt(kapasitas) <= 0) {
+            return res.status(400).json({
+                status: "error",
+                message: "Kapasitas must be a positive number"
+            });
+        }
     }
-    updates.push(`"updatedAt" = NOW()`);
 
-    if (updates.length > 1) {
-        await prisma.$executeRawUnsafe(`
+    if (latitude !== undefined || longitude !== undefined) {
+        if (latitude === undefined || longitude === undefined) {
+            return res.status(400).json({
+                status: "error",
+                message: "Latitude and longitude are required"
+            });
+        }
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        if (isNaN(lat) || lat < -90 || lat > 90) {
+            return res.status(400).json({
+                status: "error",
+                message: "Latitude must be a valid number between -90 and 90"
+            });
+        }
+        if (isNaN(lng) || lng < -180 || lng > 180) {
+            return res.status(400).json({
+                status: "error",
+                message: "Longitude must be a valid number between -180 and 180"
+            });
+        }
+    }
+
+    // Update data standard dengan Prisma update (safe & typed)
+    const dataToUpdate = {};
+    if (nama_parkiran) dataToUpdate.nama_parkiran = nama_parkiran.trim();
+    if (kapasitas !== undefined) dataToUpdate.kapasitas = parseInt(kapasitas);
+
+    if (Object.keys(dataToUpdate).length > 0) {
+        await prisma.parkiran.update({
+            where: { id_parkiran: parseInt(id) },
+            data: dataToUpdate
+        });
+    }
+
+    // Update koordinat secara aman dengan parameterized $executeRaw jika disediakan
+    if (latitude !== undefined && longitude !== undefined) {
+        await prisma.$executeRaw`
             UPDATE parkiran 
-            SET ${updates.join(', ')}
+            SET koordinat = point(${parseFloat(longitude)}, ${parseFloat(latitude)}),
+                "updatedAt" = NOW()
             WHERE id_parkiran = ${parseInt(id)}
-        `);
+        `;
+    } else {
+        await prisma.$executeRaw`
+            UPDATE parkiran 
+            SET "updatedAt" = NOW()
+            WHERE id_parkiran = ${parseInt(id)}
+        `;
     }
 
     // Ambil data yang diupdate
@@ -333,8 +413,49 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         });
     }
 
-    // 2. Validate required fields
-    if (!plate_text || !parkiran_id || !gate_type) {
+    // 2. OCR Fallback: If plate_text is missing but we have a plate image, call AI Service
+    let recognizedPlate = plate_text;
+    let ocrConfidence = confidence;
+
+    if (!recognizedPlate && plateFile) {
+        try {
+            const form = new FormData();
+            form.append('image', plateFile.buffer, {
+                filename: plateFile.originalname || 'plate.jpg',
+                contentType: plateFile.mimetype || 'image/jpeg'
+            });
+
+            const apiHeaders = {
+                ...form.getHeaders(),
+                'X-API-Key': process.env.PLATE_API_KEY || ''
+            };
+            if (req.headers['x-test-mode']) {
+                apiHeaders['X-Test-Mode'] = req.headers['x-test-mode'];
+            }
+
+            const response = await plateApiBreaker.fire(async () => {
+                return await axios.post(`${PLATE_SERVICE_URL}/api/recognize-plate`, form, {
+                    headers: apiHeaders,
+                    timeout: PLATE_SERVICE_TIMEOUT
+                });
+            });
+
+            if (response.data && response.data.success) {
+                recognizedPlate = response.data.plate_text;
+                ocrConfidence = response.data.confidence;
+            } else {
+                recognizedPlate = 'UNKNOWN';
+                ocrConfidence = 0.0;
+            }
+        } catch (error) {
+            console.error('Failed to recognize plate via AI service:', error.message);
+            recognizedPlate = 'UNKNOWN';
+            ocrConfidence = 0.0;
+        }
+    }
+
+    // 3. Validate required fields
+    if (!recognizedPlate || !parkiran_id || !gate_type) {
         return res.status(400).json({
             status: "error",
             message: "Missing required fields: plate_text, parkiran_id, gate_type",
@@ -343,9 +464,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     }
 
     // Normalize plate text (remove spaces, uppercase)
-    const normalizedPlate = plate_text.toUpperCase().replace(/\s/g, '');
+    const normalizedPlate = recognizedPlate.toUpperCase().replace(/\s/g, '');
 
-    // 3. Find registered vehicle by plate number
+    // 4. Find registered vehicle by plate number
     const kendaraan = await prisma.kendaraan.findFirst({
         where: {
             plat_nomor: normalizedPlate,
@@ -358,12 +479,12 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     if (!kendaraan) {
         return res.status(404).json({
             status: "error",
-            message: `Kendaraan ${plate_text} tidak terdaftar atau belum terverifikasi`,
+            message: `Kendaraan ${recognizedPlate} tidak terdaftar atau belum terverifikasi`,
             data: { gate_action: "DENY" }
         });
     }
 
-    // 4. Check parkiran exists and has capacity
+    // 5. Check parkiran exists and has capacity
     const parkiran = await prisma.$queryRaw`
         SELECT id_parkiran, nama_parkiran, kapasitas, live_kapasitas
         FROM parkiran WHERE id_parkiran = ${parseInt(parkiran_id)} AND "deletedAt" IS NULL
@@ -396,6 +517,11 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                     data: { image_url: uploadResult.fileUrl }
                 });
                 console.log(`Plate image uploaded for log ${logId}: ${uploadResult.fileUrl}`);
+
+                // Active learning trigger for low-confidence OCR
+                if (ocrConfidence < 0.75 || recognizedPlate === 'UNKNOWN') {
+                    console.log("[Active Learning] Low-confidence OCR recorded. Queued for model retraining at R2: " + uploadResult.fileUrl);
+                }
             } catch (error) {
                 console.error('Failed to upload plate image:', error);
             }
@@ -428,7 +554,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         }
     };
 
-    // 5. Process based on gate type
+    // 6. Process based on gate type
     if (gate_type === 'MASUK') {
         // Check capacity
         if (Number(parkiranData.live_kapasitas) >= Number(parkiranData.kapasitas)) {
@@ -448,7 +574,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         if (lastLog && lastLog.type === 'MASUK') {
             return res.status(400).json({
                 status: "error",
-                message: `Kendaraan ${plate_text} sudah berada di dalam parkiran`,
+                message: `Kendaraan ${recognizedPlate} sudah berada di dalam parkiran`,
                 data: { gate_action: "DENY" }
             });
         }
@@ -477,7 +603,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 id_parkiran: parsedParkiranId,
                 id_user: kendaraan.user?.id_user,
                 type: 'MASUK',
-                confidence: confidence ? parseFloat(confidence) : null,
+                confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
                 image_url: null // Will be updated asynchronously
             }
         });
@@ -510,13 +636,14 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             status: "success",
-            message: `Selamat datang ${kendaraan.user?.nama || 'User'}! Kendaraan ${plate_text} masuk.`,
+            message: `Selamat datang ${kendaraan.user?.nama || 'User'}! Kendaraan ${recognizedPlate} masuk.`,
             data: {
                 gate_action: "OPEN",
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
                 parkiran: parkiranData.nama_parkiran,
-                slot_tersisa: slotTersisa
+                slot_tersisa: slotTersisa,
+                ocr_confidence: ocrConfidence
             }
         });
 
@@ -530,7 +657,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         if (!lastLog || lastLog.type === 'KELUAR') {
             return res.status(400).json({
                 status: "error",
-                message: `Kendaraan ${plate_text} tidak tercatat masuk di parkiran ini`,
+                message: `Kendaraan ${recognizedPlate} tidak tercatat masuk di parkiran ini`,
                 data: { gate_action: "DENY" }
             });
         }
@@ -543,7 +670,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                     id_parkiran: parseInt(parkiran_id),
                     id_user: kendaraan.user?.id_user,
                     type: 'KELUAR',
-                    confidence: confidence ? parseFloat(confidence) : null,
+                    confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
                     image_url: null // Will be updated asynchronously
                 }
             }),
@@ -580,12 +707,13 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             status: "success",
-            message: `Sampai jumpa ${kendaraan.user?.nama || 'User'}! Kendaraan ${plate_text} keluar.`,
+            message: `Sampai jumpa ${kendaraan.user?.nama || 'User'}! Kendaraan ${recognizedPlate} keluar.`,
             data: {
                 gate_action: "OPEN",
                 plate_text: normalizedPlate,
                 owner: kendaraan.user?.nama,
-                parkiran: parkiranData.nama_parkiran
+                parkiran: parkiranData.nama_parkiran,
+                ocr_confidence: ocrConfidence
             }
         });
     }

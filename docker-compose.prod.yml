@@ -16,6 +16,7 @@ services:
       - FACE_API_URL=http://face-recognition:5051
       - PYTHON_SERVICE_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
+      - ANOMALY_SERVICE_URL=http://anomaly-detection:5003
     env_file:
       - .env
     volumes:
@@ -24,6 +25,8 @@ services:
       face-recognition:
         condition: service_healthy
       plate-recognition:
+        condition: service_healthy
+      anomaly-detection:
         condition: service_healthy
     networks:
       - myteluv2-network
@@ -59,6 +62,24 @@ services:
       - .env
     volumes:
       - ./backend/python-service/plate_recognition/models:/app/models
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Anomaly Detection Service (Isolation Forest)
+  anomaly-detection:
+    build:
+      context: ./backend/python-service/anomaly_detection
+      dockerfile: Dockerfile
+    container_name: myteluv2-anomaly-detection
+    expose:
+      - "5003"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     networks:
       - myteluv2-network
     restart: unless-stopped

@@ -1,6 +1,7 @@
 const prisma = require('../utils/prisma');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
 const asyncHandler = require('express-async-handler');
 const { logAudit } = require('../utils/auditLogger');
 const embeddingCache = require('../utils/embeddingCache');
@@ -83,7 +84,6 @@ exports.login = asyncHandler(async (req, res) => {
     const token = jwt.sign({ id: user.id_user }, process.env.JWT_SECRET, { expiresIn: '1h' });
     
     // Generate refresh token (7 days)
-    const { v4: uuidv4 } = require('uuid');
     const refreshToken = uuidv4();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
@@ -184,7 +184,6 @@ exports.refreshToken = asyncHandler(async (req, res) => {
     const token = jwt.sign({ id: existingToken.user.id_user }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     // Rotate refresh token: generate new one, delete old one
-    const { v4: uuidv4 } = require('uuid');
     const newRefreshToken = uuidv4();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
@@ -610,7 +609,6 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
 });
 
 const { sendPasswordResetEmail } = require('../utils/mailer');
-const { v4: uuidv4 } = require('uuid');
 
 exports.requestPasswordReset = asyncHandler(async (req, res) => {
     const { username } = req.body;
@@ -643,7 +641,13 @@ exports.requestPasswordReset = asyncHandler(async (req, res) => {
     // Handle token creation and email sending asynchronously in the background
     setImmediate(async () => {
         try {
-            const targetEmail = user.email || `${user.username}@example.com`; // Mock email if none
+            // Jika user tidak punya email terdaftar, batalkan pengiriman
+            // (email bersifat opsional di sistem ini — user tanpa email hubungi admin)
+            if (!user.email) {
+                console.warn(`[PasswordReset] User '${user.username}' tidak memiliki email. Reset link tidak dikirim.`);
+                return;
+            }
+            const targetEmail = user.email;
             const resetToken = uuidv4();
             const expiresAt = new Date();
             expiresAt.setMinutes(expiresAt.getMinutes() + 30); // 30 mins validity

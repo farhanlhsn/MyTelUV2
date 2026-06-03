@@ -1,9 +1,22 @@
+import os
+import traceback
 from flask import Flask, request, jsonify
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
 app = Flask(__name__)
+
+ANOMALY_API_KEY = os.getenv('ANOMALY_API_KEY', '')
+
+@app.before_request
+def check_api_key():
+    if request.path in ['/', '/health']:
+        return  # Skip auth untuk health check
+    api_key = request.headers.get('X-API-Key', '')
+    if ANOMALY_API_KEY and api_key != ANOMALY_API_KEY:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+
 
 @app.route('/', methods=['GET'])
 def index():
@@ -185,7 +198,8 @@ def detect_anomalies():
         })
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        traceback.print_exc()  # Log ke stderr (server log)
+        return jsonify({'success': False, 'error': 'Internal server error. Please check server logs.'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5003, debug=True)

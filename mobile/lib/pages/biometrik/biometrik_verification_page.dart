@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:camera/camera.dart';
@@ -7,7 +10,9 @@ import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import '../../services/biometrik_service.dart';
 
 class BiometrikAbsenPage extends StatefulWidget {
-  const BiometrikAbsenPage({super.key});
+  final int? idSesiAbsensi;
+
+  const BiometrikAbsenPage({super.key, this.idSesiAbsensi});
 
   @override
   State<BiometrikAbsenPage> createState() => _BiometrikAbsenPageState();
@@ -24,14 +29,29 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   Map<String, dynamic>? _result;
   Position? _currentPosition;
   bool _isGettingLocation = false;
-  bool _isLivenessVerified = false;
+  Future<List<CameraDescription>>? _camerasFuture;
+  Future<Position?>? _locationFuture;
+  Future<String?>? _livenessTokenFuture;
+  String? _livenessToken;
+  DateTime? _livenessTokenFetchedAt;
+  int? _idSesiAbsensi;
 
   final Color primaryRed = const Color(0xFFE63946);
+  static const Duration _livenessTokenMaxAge = Duration(minutes: 4);
 
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
+    _idSesiAbsensi =
+        widget.idSesiAbsensi ?? _readIdSesiAbsensiFromArguments();
+    if (_idSesiAbsensi == null) {
+      _errorMessage = _missingSessionContextMessage;
+    }
+    _camerasFuture = availableCameras();
+    if (_idSesiAbsensi != null) {
+      _prefetchLivenessToken();
+    }
+    unawaited(_getCurrentLocation());
   }
 
   @override
@@ -58,7 +78,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           'Layanan sedang sibuk atau tidak tersedia. Silakan coba beberapa saat lagi.',
       'Face recognition service unavailable':
           'Layanan pengenalan wajah tidak tersedia. Coba lagi nanti.',
-      'No face detected': 'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
+      'No face detected':
+          'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
       'Face detection failed': 'Gagal mendeteksi wajah. Coba ambil foto ulang.',
       'Wajah tidak cocok': 'Wajah tidak cocok dengan data terdaftar.',
       'Image file is required': 'Silakan ambil foto terlebih dahulu.',
@@ -66,6 +87,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       'Anda belum terdaftar biometrik':
           'Anda belum terdaftar biometrik. Hubungi admin.',
       'Tidak ada sesi absensi': 'Tidak ada kelas yang sedang berlangsung.',
+      'id_sesi_absensi wajib diisi':
+          'Konteks sesi absensi tidak tersedia. Silakan pilih sesi absensi dari daftar absensi.',
       'Sesi absensi yang dipilih tidak valid':
           'Sesi absensi tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar.',
       'Anda sudah melakukan absensi':
@@ -80,69 +103,228 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     return message;
   }
 
-  Future<void> _getCurrentLocation() async {
+  String get _missingSessionContextMessage =>
+      'Konteks sesi absensi tidak tersedia. Silakan pilih sesi absensi dari daftar absensi.';
+
+  int? _parsePositiveInt(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return null;
+  }
+
+  int? _readIdSesiAbsensiFromArguments() {
+    final arguments = Get.arguments;
+    if (arguments is Map) {
+      return _parsePositiveInt(
+        arguments['idSesiAbsensi'] ??
+            arguments['id_sesi_absensi'] ??
+            arguments['id_sesi'],
+      );
+    }
+    return _parsePositiveInt(arguments);
+  }
+
+  bool _ensureSessionContext() {
+    if (_idSesiAbsensi != null) return true;
+    setState(() {
+      _isLoading = false;
+      _errorMessage = _missingSessionContextMessage;
+    });
+    return false;
+  }
+
+  bool get _hasFreshLivenessToken {
+    final fetchedAt = _livenessTokenFetchedAt;
+    return _livenessToken != null &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < _livenessTokenMaxAge;
+  }
+
+  void _prefetchLivenessToken() {
+    if (_hasFreshLivenessToken || _livenessTokenFuture != null) return;
+
+    _livenessTokenFuture = _biometrikService
+        .requestLivenessToken()
+        .then<String?>((token) {
+          _livenessToken = token;
+          _livenessTokenFetchedAt = DateTime.now();
+          return token;
+        })
+        .catchError((_) {
+          return null;
+        })
+        .whenComplete(() {
+          _livenessTokenFuture = null;
+        });
+  }
+
+  Future<String> _consumeLivenessToken() async {
+    if (_hasFreshLivenessToken) {
+      final token = _livenessToken!;
+      _livenessToken = null;
+      _livenessTokenFetchedAt = null;
+      return token;
+    }
+
+    final pendingToken = _livenessTokenFuture;
+    if (pendingToken != null) {
+      final token = await pendingToken;
+      if (token != null) {
+        _livenessToken = null;
+        _livenessTokenFetchedAt = null;
+        return token;
+      }
+    }
+
+    return _biometrikService.requestLivenessToken();
+  }
+
+  Future<List<CameraDescription>> _getAvailableCameras() async {
+    try {
+      return await (_camerasFuture ??= availableCameras());
+    } catch (_) {
+      _camerasFuture = null;
+      rethrow;
+    }
+  }
+
+  Future<Position?> _getCurrentLocation() async {
+    if (_locationFuture != null) return _locationFuture!;
+
     setState(() => _isGettingLocation = true);
+    _locationFuture = _resolveCurrentLocation();
 
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() {
-          _errorMessage = 'Lokasi tidak aktif. Silakan aktifkan GPS.';
-          _isGettingLocation = false;
-        });
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() {
-            _errorMessage = 'Izin lokasi ditolak';
-            _isGettingLocation = false;
-          });
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _errorMessage = 'Izin lokasi diblokir. Aktifkan di pengaturan.';
-          _isGettingLocation = false;
-        });
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+      final position = await _locationFuture!;
+      if (!mounted) return position;
 
       setState(() {
         _currentPosition = position;
         _isGettingLocation = false;
-        _errorMessage = null;
+        if (_idSesiAbsensi != null) {
+          _errorMessage = null;
+        }
       });
+      return position;
     } catch (e) {
+      if (!mounted) return _currentPosition;
+
+      if (_currentPosition != null) {
+        setState(() => _isGettingLocation = false);
+        return _currentPosition;
+      }
+
       setState(() {
-        _errorMessage = 'Gagal mendapatkan lokasi: ${e.toString()}';
+        _errorMessage = _idSesiAbsensi == null
+            ? _missingSessionContextMessage
+            : 'Gagal mendapatkan lokasi: ${e.toString()}';
         _isGettingLocation = false;
       });
+      return null;
+    } finally {
+      _locationFuture = null;
     }
   }
 
+  Future<Position?> _resolveCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Lokasi tidak aktif. Silakan aktifkan GPS.');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw Exception('Izin lokasi ditolak');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Izin lokasi diblokir. Aktifkan di pengaturan.');
+    }
+
+    final lastKnown = await Geolocator.getLastKnownPosition();
+    if (lastKnown != null && mounted) {
+      setState(() {
+        _currentPosition = lastKnown;
+        if (_idSesiAbsensi != null) {
+          _errorMessage = null;
+        }
+      });
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+    } catch (_) {
+      if (_currentPosition != null) return _currentPosition;
+      rethrow;
+    }
+  }
+
+  math.Random _challengeRandom() {
+    try {
+      return math.Random.secure();
+    } catch (_) {
+      return math.Random();
+    }
+  }
+
+  List<ChallengeType> _studentChallengeTypes() {
+    final random = _challengeRandom();
+    final secondaryChallenges = [
+      ChallengeType.turnLeft,
+      ChallengeType.turnRight,
+      ChallengeType.smile,
+      ChallengeType.nod,
+    ]..shuffle(random);
+
+    final activeChallenges = [ChallengeType.blink, secondaryChallenges.first]
+      ..shuffle(random);
+
+    return [...activeChallenges, ChallengeType.normal];
+  }
+
+  LivenessConfig _studentLivenessConfig() {
+    return LivenessConfig.performance().copyWith(
+      enableScreenGlareDetection: false,
+      enablePerformanceMonitoring: false,
+      sandwichNormalChallenge: false,
+      challengeTypes: _studentChallengeTypes(),
+      frameSkipInterval: 2,
+      imageProcessingTimeout: const Duration(milliseconds: 800),
+      memoryCleanupInterval: const Duration(seconds: 20),
+    );
+  }
+
   Future<void> _startLivenessCheck() async {
+    if (!_ensureSessionContext()) return;
+
     setState(() {
       _errorMessage = null;
       _isSuccess = false;
       _result = null;
       _capturedImage = null;
-      _isLivenessVerified = false;
     });
 
+    _prefetchLivenessToken();
+    if (_currentPosition == null && !_isGettingLocation) {
+      unawaited(_getCurrentLocation());
+    }
+
     try {
-      final List<CameraDescription> cameras = await availableCameras();
+      final List<CameraDescription> cameras = await _getAvailableCameras();
+      if (!mounted) return;
+
       if (cameras.isEmpty) {
         setState(() {
           _errorMessage = 'Tidak ada kamera tersedia untuk Liveness Check';
@@ -150,45 +332,33 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         return;
       }
 
-      // Ensure location is ready before starting liveness
-      if (_currentPosition == null) {
-        await _getCurrentLocation();
-        if (_currentPosition == null) {
-          setState(() => _errorMessage = 'Tidak dapat mengambil lokasi. Aktifkan GPS terlebih dahulu.');
-          return;
-        }
-      }
+      await Get.to(
+        () => LivenessDetectionScreen(
+          cameras: cameras,
+          config: _studentLivenessConfig(),
+          showAppBar: false,
+          captureFinalImage: true,
+          customSuccessOverlay: const SizedBox.shrink(),
+          onFinalImageCaptured:
+              (
+                String sessionId,
+                XFile imageFile,
+                Map<String, dynamic> metadata,
+              ) {
+                _capturedImage = File(imageFile.path);
 
-      Get.to(() => LivenessDetectionScreen(
-        cameras: cameras,
-        config: LivenessConfig(
-          enableScreenGlareDetection: false,
-          // Use sandwich normal challenge so the final captured frame
-          // is a neutral/centered face, not mid-gesture
-          sandwichNormalChallenge: true,
+                if (Get.currentRoute != '/BiometrikAbsenPage') {
+                  Get.back();
+                }
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  unawaited(_submitAbsen());
+                });
+              },
         ),
-        showAppBar: false,
-        captureFinalImage: true,
-        // Provide an empty overlay so the default "Verification Complete!"
-        // screen is never shown — we auto-close immediately
-        customSuccessOverlay: const SizedBox.shrink(),
-        onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) {
-          // Save the captured image and mark liveness as verified
-          _capturedImage = File(imageFile.path);
-          _isLivenessVerified = true;
-
-          // Navigate back and immediately submit attendance
-          if (Get.currentRoute != '/BiometrikAbsenPage') {
-            Get.back();
-          }
-
-          // Auto-submit after a brief frame delay to let navigation settle
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _submitAbsen();
-          });
-        },
-      ));
+      );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Gagal memuat Liveness Check: ${e.toString()}';
       });
@@ -196,17 +366,13 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Future<void> _submitAbsen() async {
-    if (_capturedImage == null) {
-      setState(() => _errorMessage = 'Silakan lakukan Liveness Check terlebih dahulu');
-      return;
-    }
+    if (!_ensureSessionContext()) return;
 
-    if (_currentPosition == null) {
-      await _getCurrentLocation();
-      if (_currentPosition == null) {
-        setState(() => _errorMessage = 'Tidak dapat mengambil lokasi');
-        return;
-      }
+    if (_capturedImage == null) {
+      setState(
+        () => _errorMessage = 'Silakan lakukan Liveness Check terlebih dahulu',
+      );
+      return;
     }
 
     setState(() {
@@ -215,16 +381,29 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     });
 
     try {
-      // 1. Get liveness token
-      final String token = await _biometrikService.requestLivenessToken();
+      final tokenFuture = _consumeLivenessToken();
+      final locationFuture = _currentPosition == null
+          ? _getCurrentLocation()
+          : Future<Position?>.value(_currentPosition);
 
-      // 2. Submit absen
+      final position = await locationFuture;
+      if (position == null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Tidak dapat mengambil lokasi';
+        });
+        return;
+      }
+
+      final String token = await tokenFuture;
+
       final result = await _biometrikService.biometrikAbsen(
         imageFile: _capturedImage!,
-        latitude: _currentPosition!.latitude,
-        longitude: _currentPosition!.longitude,
+        idSesiAbsensi: _idSesiAbsensi!,
+        latitude: position.latitude,
+        longitude: position.longitude,
         livenessToken: token,
-        isMockLocation: _currentPosition!.isMocked,
+        isMockLocation: position.isMocked,
       );
 
       setState(() {
@@ -241,9 +420,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            _mapErrorMessage(e.toString().replaceFirst('Exception: ', ''));
+        _errorMessage = _mapErrorMessage(
+          e.toString().replaceFirst('Exception: ', ''),
+        );
       });
+      _prefetchLivenessToken();
     }
   }
 
@@ -257,14 +438,19 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           children: [
             // Header
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 20.0,
+              ),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios,
-                        color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.arrow_back_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -354,7 +540,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                   _currentPosition != null
                       ? Icons.location_on
                       : Icons.location_off,
-                  color: _currentPosition != null ? Colors.green : Colors.orange,
+                  color: _currentPosition != null
+                      ? Colors.green
+                      : Colors.orange,
                   size: 20,
                 ),
           const SizedBox(width: 10),
@@ -363,8 +551,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
               _isGettingLocation
                   ? 'Mendapatkan lokasi...'
                   : _currentPosition != null
-                      ? 'Lokasi: ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}'
-                      : 'Lokasi tidak tersedia',
+                  ? 'Lokasi: ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}'
+                  : 'Lokasi tidak tersedia',
               style: TextStyle(
                 fontSize: 12,
                 color: _currentPosition != null
@@ -376,8 +564,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           if (_currentPosition == null && !_isGettingLocation)
             GestureDetector(
               onTap: _getCurrentLocation,
-              child:
-                  Icon(Icons.refresh, color: Colors.orange.shade700, size: 20),
+              child: Icon(
+                Icons.refresh,
+                color: Colors.orange.shade700,
+                size: 20,
+              ),
             ),
         ],
       ),
@@ -433,7 +624,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                     Text(
                       'Absensi Berhasil',
                       style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -491,7 +684,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           icon: const Icon(Icons.refresh, color: Colors.white),
           label: const Text(
             'Coba Lagi',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           style: ElevatedButton.styleFrom(
             backgroundColor: primaryRed,
@@ -509,11 +706,15 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         width: double.infinity,
         height: 50,
         child: ElevatedButton.icon(
-          onPressed: (_isGettingLocation) ? null : _startLivenessCheck,
+          onPressed: _startLivenessCheck,
           icon: const Icon(Icons.fingerprint, color: Colors.white),
-          label: Text(
-            _isGettingLocation ? 'Menunggu lokasi...' : 'Mulai Absen',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          label: const Text(
+            'Mulai Absen',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           style: ElevatedButton.styleFrom(
             backgroundColor: primaryRed,
@@ -545,8 +746,10 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(_errorMessage!,
-                style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -584,10 +787,21 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           ),
           if (data != null) ...[
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.class_, 'Kelas', data['kelas']?.toString() ?? '-'),
-            _buildInfoRow(Icons.room, 'Ruangan', data['ruangan']?.toString() ?? '-'),
             _buildInfoRow(
-                Icons.access_time, 'Waktu', _formatTime(data['waktu']?.toString())),
+              Icons.class_,
+              'Kelas',
+              data['kelas']?.toString() ?? '-',
+            ),
+            _buildInfoRow(
+              Icons.room,
+              'Ruangan',
+              data['ruangan']?.toString() ?? '-',
+            ),
+            _buildInfoRow(
+              Icons.access_time,
+              'Waktu',
+              _formatTime(data['waktu']?.toString()),
+            ),
           ],
         ],
       ),
@@ -601,12 +815,15 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         children: [
           Icon(icon, size: 16, color: Colors.grey.shade600),
           const SizedBox(width: 8),
-          Text('$label: ',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          Text(
+            '$label: ',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
           Expanded(
-            child: Text(value,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
@@ -653,8 +870,7 @@ class FaceOvalPainter extends CustomPainter {
     for (final metric in pathMetrics) {
       double distance = 0;
       while (distance < metric.length) {
-        final extractPath =
-            metric.extractPath(distance, distance + dashLength);
+        final extractPath = metric.extractPath(distance, distance + dashLength);
         canvas.drawPath(extractPath, dashPaint);
         distance += dashLength + dashSpace;
       }

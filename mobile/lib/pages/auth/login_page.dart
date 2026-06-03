@@ -118,6 +118,7 @@ class _LoginPageState extends State<LoginPage> {
 
                           // Username Field
                           TextFormField(
+                            key: const Key('login_username_field'),
                             controller: _usernameController,
                             decoration: InputDecoration(
                               border: OutlineInputBorder(
@@ -141,6 +142,7 @@ class _LoginPageState extends State<LoginPage> {
 
                           // Password Field
                           TextFormField(
+                            key: const Key('login_password_field'),
                             controller: _passwordController,
                             obscureText: _isPasswordObscured,
                             decoration: InputDecoration(
@@ -178,7 +180,7 @@ class _LoginPageState extends State<LoginPage> {
                             },
                           ),
                           const SizedBox(height: 10),
-                          
+
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
@@ -207,6 +209,7 @@ class _LoginPageState extends State<LoginPage> {
                               width: double.infinity,
                               height: 50,
                               child: ElevatedButton(
+                                key: const Key('login_submit_button'),
                                 onPressed: isLoading ? null : _handleLogin,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFE63946),
