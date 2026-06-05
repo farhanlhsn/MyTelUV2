@@ -279,8 +279,25 @@ exports.createKelas = asyncHandler(async (req, res) => {
         });
     }
 
+    // Resolve id_semester: check if provided in body, otherwise query active semester
+    let semesterId = req.body.id_semester ? parseInt(req.body.id_semester) : null;
+    if (!semesterId) {
+        const activeSemester = await prisma.semesters.findFirst({
+            where: { is_active: true, deletedAt: null }
+        });
+        if (!activeSemester) {
+            return res.status(400).json({
+                status: "error",
+                message: "No active semester found. Please contact admin to setup an active semester."
+            });
+        }
+        semesterId = activeSemester.id_semester;
+    }
+
+    const targetKapasitas = req.body.kapasitas ? parseInt(req.body.kapasitas) : 50;
+
     const kelas = await prisma.$executeRaw`
-        INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, "createdAt", "updatedAt")
+        INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, id_semester, kapasitas, "createdAt", "updatedAt")
         VALUES (
             ${parseInt(id_matakuliah)}, 
             ${parseInt(id_dosen)}, 
@@ -289,10 +306,11 @@ exports.createKelas = asyncHandler(async (req, res) => {
             ${nama_kelas.trim()}, 
             ${ruangan.trim()},
             ${req.body.hari ? parseInt(req.body.hari) : null},
+            ${semesterId},
+            ${targetKapasitas},
             NOW(),
             NOW()
         )
-        RETURNING *
     `;
 
     // Fetch the created kelas with relations

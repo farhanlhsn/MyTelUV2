@@ -1,60 +1,40 @@
 generator client {
-  provider        = "prisma-client-js"
-  output          = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")                 
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-// =================== Enums ====================
-enum Role { 
-  MAHASISWA 
-  DOSEN 
-  ADMIN 
-}
-enum TypeAbsensi { 
-  REMOTE_ABSENSI 
-  LOKAL_ABSENSI 
-}
-enum TypeAnomali { 
-  KEHADIRAN_GANDA 
-  TIDAK_HADIR_BERULANG 
-}
-enum StatusPengajuan {
-  MENUNGGU
-  DISETUJUI
-  DITOLAK
-}
-enum ParkingType {
-  MASUK
-  KELUAR
-}
-
-// =================== Models ===================
 model User {
-  id_user        Int              @id @default(autoincrement())
-  nama           String
-  username       String           @unique
-  password       String
-  role           Role
-  fcm_token      String?          // Firebase Cloud Messaging device token
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  deletedAt      DateTime?
-
-  dataBiometrik  DataBiometrik?
-  kendaraan      Kendaraan[]
-  absensi        Absensi[]
-  laporanAnomali LaporanAnomali[]
-  logParkir      LogParkir[]
-  kelasDiampu    Kelas[]          @relation("DosenKelas")
-  pesertaKelas   PesertaKelas[]
-  posts          Post[]
-  postLikes      PostLike[]
-  postComments   PostComment[]
-  jadwalPengganti JadwalPengganti[] @relation("DosenJadwalPengganti")
+  id_user                    Int                     @id @default(autoincrement())
+  nama                       String
+  username                   String                  @unique
+  password                   String
+  role                       Role
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  deletedAt                  DateTime?
+  email                      String?                 @unique
+  fcm_token                  String?
+  nim_nip                    String?                 @unique @db.VarChar(20)
+  profile_picture            String?
+  push_notifications_enabled Boolean                 @default(true)
+  absensi                    Absensi[]
+  dataBiometrik              DataBiometrik?
+  jadwalPengganti            JadwalPengganti[]       @relation("DosenJadwalPengganti")
+  kelasDiampu                Kelas[]                 @relation("DosenKelas")
+  kendaraan                  Kendaraan[]
+  laporanAnomali             LaporanAnomali[]
+  logParkir                  LogParkir[]
+  password_reset_tokens      password_reset_tokens[]
+  pesertaKelas               PesertaKelas[]
+  postComments               PostComment[]
+  postLikes                  PostLike[]
+  posts                      Post[]
+  refresh_tokens             refresh_tokens[]
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
@@ -65,13 +45,12 @@ model User {
 model DataBiometrik {
   id_biometrik   Int       @id @default(autoincrement())
   id_user        Int       @unique
-  face_embedding Float[]   // 512D embedding vector from InsightFace
-  photo_url      String?   // Face image URL from Cloudflare R2 (optional backup)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
-
-  user User @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  face_embedding Float[]
+  photo_url      String?
+  user           User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([createdAt], map: "idx_bio_created")
   @@index([deletedAt], map: "idx_bio_deleted")
@@ -79,21 +58,20 @@ model DataBiometrik {
 }
 
 model Kendaraan {
-  id_kendaraan     Int              @id @default(autoincrement())
-  plat_nomor       String           @unique @db.VarChar(20)
-  nama_kendaraan   String           @db.VarChar(100) @default("Motor")
+  id_kendaraan     Int             @id @default(autoincrement())
+  plat_nomor       String          @unique @db.VarChar(20)
   id_user          Int
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
   fotoKendaraan    String[]
   fotoSTNK         String
-  statusVerif      Boolean          @default(false)
-  status_pengajuan StatusPengajuan  @default(MENUNGGU)
+  statusVerif      Boolean         @default(false)
   feedback         String?
-
-  user      User       @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-  logParkir LogParkir[]
+  nama_kendaraan   String          @default("Motor") @db.VarChar(100)
+  status_pengajuan StatusPengajuan @default(MENUNGGU)
+  user             User            @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  logParkir        LogParkir[]
 
   @@index([id_user], map: "idx_kendaraan_user")
   @@index([createdAt], map: "idx_kendaraan_created")
@@ -103,38 +81,35 @@ model Kendaraan {
 }
 
 model Parkiran {
-  id_parkiran    Int       @id @default(autoincrement())
-  nama_parkiran  String    @db.VarChar(100)
+  id_parkiran    Int                  @id @default(autoincrement())
+  nama_parkiran  String               @unique(map: "uq_parkiran_nama") @db.VarChar(100)
   kapasitas      Int
-  live_kapasitas Int       @default(0)
-  koordinat     Unsupported("point")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  live_kapasitas Int                  @default(0)
+  koordinat      Unsupported("point")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   deletedAt      DateTime?
+  logParkir      LogParkir[]
 
-  logParkir LogParkir[]
-
-  @@unique([nama_parkiran], map: "uq_parkiran_nama")
   @@index([kapasitas], map: "idx_parkiran_kapasitas")
   @@index([deletedAt], map: "idx_parkiran_deleted")
   @@map("parkiran")
 }
 
 model LogParkir {
-  id_log_parkir Int         @id @default(autoincrement())
-  id_kendaraan  Int
-  id_parkiran   Int
-  id_user       Int?
-  type          ParkingType // MASUK atau KELUAR
-  confidence    Float?      // OCR confidence score
-  image_url     String?     // Captured plate image URL
-  face_image_url String?    // Face capture (cropped face or full frame fallback)
-  face_detected  Boolean    @default(false) // True if face was detected, false = full frame fallback
-  timestamp     DateTime    @default(now())
-
-  kendaraan Kendaraan @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)
-  parkiran  Parkiran  @relation(fields: [id_parkiran], references: [id_parkiran], onDelete: Restrict)
-  user      User?     @relation(fields: [id_user], references: [id_user])
+  id_log_parkir  Int         @id @default(autoincrement())
+  id_kendaraan   Int
+  id_parkiran    Int
+  id_user        Int?
+  timestamp      DateTime    @default(now())
+  confidence     Float?
+  face_detected  Boolean     @default(false)
+  face_image_url String?
+  image_url      String?
+  type           ParkingType
+  kendaraan      Kendaraan   @relation(fields: [id_kendaraan], references: [id_kendaraan], onDelete: Cascade)
+  parkiran       Parkiran    @relation(fields: [id_parkiran], references: [id_parkiran])
+  user           User?       @relation(fields: [id_user], references: [id_user])
 
   @@index([id_kendaraan, timestamp], map: "idx_log_kendaraan_ts")
   @@index([id_parkiran, timestamp], map: "idx_log_parkiran_ts")
@@ -151,8 +126,7 @@ model Matakuliah {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
-
-  kelas Kelas[]
+  kelas           Kelas[]
 
   @@index([nama_matakuliah], map: "idx_mk_nama")
   @@index([deletedAt], map: "idx_mk_deleted")
@@ -160,52 +134,53 @@ model Matakuliah {
 }
 
 model Kelas {
-  id_kelas       Int       @id @default(autoincrement())
-  id_matakuliah  Int
-  id_dosen       Int
-  hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
-  jam_mulai      Unsupported("time")
-  jam_berakhir   Unsupported("time")
-  nama_kelas     String
-  ruangan        String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-
-  matakuliah Matakuliah @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
-  dosen      User       @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
-  peserta    PesertaKelas[]
-  absensi    Absensi[]
-  laporan    LaporanAnomali[]
-  sesiAbsensi  SesiAbsensi[]
+  id_kelas        Int               @id @default(autoincrement())
+  id_matakuliah   Int
+  id_dosen        Int
+  jam_mulai       DateTime          @db.Time(6)
+  jam_berakhir    DateTime          @db.Time(6)
+  nama_kelas      String
+  ruangan         String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+  hari            Int?
+  id_semester     Int
+  kapasitas       Int               @default(50)
+  sesiAbsensi     SesiAbsensi[]
+  absensi         Absensi[]
   jadwalPengganti JadwalPengganti[]
+  dosen           User              @relation("DosenKelas", fields: [id_dosen], references: [id_user])
+  matakuliah      Matakuliah        @relation(fields: [id_matakuliah], references: [id_matakuliah])
+  semesters       semesters         @relation(fields: [id_semester], references: [id_semester])
+  laporan         LaporanAnomali[]
+  peserta         PesertaKelas[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
   @@index([ruangan], map: "idx_kelas_ruangan")
   @@index([jam_mulai, jam_berakhir], map: "idx_kelas_waktu")
   @@index([deletedAt], map: "idx_kelas_deleted")
   @@index([hari], map: "idx_kelas_hari")
+  @@index([id_semester], map: "idx_kelas_semester")
   @@map("kelas")
 }
 
-// Jadwal pengganti untuk perubahan jadwal sementara (dosen tidak bisa hadir, dll)
 model JadwalPengganti {
   id_jadwal_pengganti Int       @id @default(autoincrement())
   id_kelas            Int
-  tanggal_asli        DateTime  // Tanggal kelas yang dijadwalkan aslinya
-  status              String    // LIBUR, GANTI_JADWAL
-  tanggal_ganti       DateTime? // Tanggal baru (null jika LIBUR)
-  jam_mulai_ganti     Unsupported("time")? // Jam baru (opsional)
-  jam_berakhir_ganti  Unsupported("time")? 
-  ruangan_ganti       String?   // Ruangan baru (opsional)
-  alasan              String    // Alasan perubahan
-  createdBy           Int       // ID dosen yang membuat
+  tanggal_asli        DateTime
+  status              String
+  tanggal_ganti       DateTime?
+  jam_mulai_ganti     DateTime? @db.Time(6)
+  jam_berakhir_ganti  DateTime? @db.Time(6)
+  ruangan_ganti       String?
+  alasan              String
+  createdBy           Int
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
-
-  kelas               Kelas     @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
   dosen               User      @relation("DosenJadwalPengganti", fields: [createdBy], references: [id_user])
+  kelas               Kelas     @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
 
   @@index([id_kelas, tanggal_asli], map: "idx_jadwal_pengganti_kelas_tgl")
   @@index([tanggal_ganti], map: "idx_jadwal_pengganti_tgl_ganti")
@@ -215,11 +190,10 @@ model JadwalPengganti {
 model PesertaKelas {
   id_mahasiswa Int
   id_kelas     Int
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   deletedAt    DateTime?
-
-  mahasiswa User  @relation(fields: [id_mahasiswa], references: [id_user], onDelete: Cascade)
-  kelas     Kelas @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  kelas        Kelas     @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  mahasiswa    User      @relation(fields: [id_mahasiswa], references: [id_user], onDelete: Cascade)
 
   @@id([id_mahasiswa, id_kelas], map: "pk_pesertakelas")
   @@index([id_kelas, deletedAt], map: "idx_peserta_kelas")
@@ -227,41 +201,40 @@ model PesertaKelas {
   @@map("peserta_kelas")
 }
 
-model SesiAbsensi {        // Dosen/Admin buat SesiAbsensi, MAHASISWA Absensi
-  id_sesi_absensi Int              @id @default(autoincrement())
+model SesiAbsensi {
+  id_sesi_absensi Int         @id @default(autoincrement())
   id_kelas        Int
-  type_absensi    TypeAbsensi      @default(LOKAL_ABSENSI) // Legacy, deprecated
-  latitude        Float?           // Koordinat geofence
+  type_absensi    TypeAbsensi
+  latitude        Float?
   longitude       Float?
-  radius_meter    Int?             // radius validasi lokasi (meter), null = bebas (misal PJJ)
-  require_face    Boolean          @default(false)  // Perlu verifikasi wajah?
+  radius_meter    Int?
+  require_face    Boolean     @default(false)
   mulai           DateTime
   selesai         DateTime
-  status          Boolean          @default(true) //True = masih terbuka
-  createdBy       Int              // id_user dosen/admin yang buka
-
-  kelas           Kelas            @relation(fields: [id_kelas], references: [id_kelas])
-  absensi         Absensi[]
-
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  status          Boolean     @default(true)
+  createdBy       Int
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
   deletedAt       DateTime?
+  kelas           Kelas       @relation(fields: [id_kelas], references: [id_kelas])
+  absensi         Absensi[]
 }
 
 model Absensi {
-  id_absensi   Int       @id @default(autoincrement())
-  id_user      Int
-  id_kelas     Int
-  id_sesi_absensi Int
-  type_absensi TypeAbsensi
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
-  koordinat    Unsupported("point")
-
-  user  User  @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-  kelas Kelas @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
-  sesiAbsensi     SesiAbsensi @relation(fields: [id_sesi_absensi], references: [id_sesi_absensi])
+  id_absensi       Int                  @id @default(autoincrement())
+  id_user          Int
+  id_kelas         Int
+  type_absensi     TypeAbsensi
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  deletedAt        DateTime?
+  koordinat        Unsupported("point")
+  id_sesi_absensi  Int
+  is_mock_location Boolean              @default(false)
+  photo_url        String?
+  kelas            Kelas                @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
+  sesiAbsensi      SesiAbsensi          @relation(fields: [id_sesi_absensi], references: [id_sesi_absensi])
+  user             User                 @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([id_user, createdAt], map: "idx_absensi_user_ts")
   @@index([id_kelas, createdAt], map: "idx_absensi_kelas_ts")
@@ -272,39 +245,42 @@ model Absensi {
 }
 
 model LaporanAnomali {
-  id_anomali   Int         @id @default(autoincrement())
-  id_user      Int
-  id_kelas     Int?
-  type_anomali TypeAnomali
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  deletedAt    DateTime?
-
-  user  User   @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-  kelas Kelas? @relation(fields: [id_kelas], references: [id_kelas]) // ← optional match Int?
+  id_anomali    Int           @id @default(autoincrement())
+  id_user       Int
+  id_kelas      Int?
+  type_anomali  TypeAnomali
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+  catatan_dosen String?
+  confidence    Float?
+  deskripsi     String?
+  resolved_at   DateTime?
+  status        StatusAnomali @default(OPEN)
+  kelas         Kelas?        @relation(fields: [id_kelas], references: [id_kelas])
+  user          User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([id_user, type_anomali, createdAt], map: "idx_anomali_user_type_ts")
   @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
   @@index([deletedAt], map: "idx_anomali_deleted")
+  @@index([status], map: "idx_anomali_status")
   @@map("laporan_anomali")
 }
 
-// =================== POST MODELS ===================
 model Post {
-  id_post     Int           @id @default(autoincrement())
-  id_user     Int
-  content     String        @db.Text
-  media       String[]      // Array of media URLs (images, videos, gifs)
-  latitude    Float?
-  longitude   Float?
-  location_name String?     @db.VarChar(255)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
-
-  user        User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-  likes       PostLike[]
-  comments    PostComment[]
+  id_post       Int           @id @default(autoincrement())
+  id_user       Int
+  content       String
+  media         String[]
+  latitude      Float?
+  longitude     Float?
+  location_name String?       @db.VarChar(255)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+  comments      PostComment[]
+  likes         PostLike[]
+  user          User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([id_user, createdAt], map: "idx_post_user_created")
   @@index([createdAt], map: "idx_post_created")
@@ -313,13 +289,12 @@ model Post {
 }
 
 model PostLike {
-  id_like     Int      @id @default(autoincrement())
-  id_post     Int
-  id_user     Int
-  createdAt   DateTime @default(now())
-
-  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
-  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  id_like   Int      @id @default(autoincrement())
+  id_post   Int
+  id_user   Int
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user      User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@unique([id_post, id_user], map: "uq_post_user_like")
   @@index([id_post], map: "idx_like_post")
@@ -328,19 +303,91 @@ model PostLike {
 }
 
 model PostComment {
-  id_comment  Int      @id @default(autoincrement())
-  id_post     Int
-  id_user     Int
-  content     String   @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
-
-  post        Post     @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
-  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  id_comment Int       @id @default(autoincrement())
+  id_post    Int
+  id_user    Int
+  content    String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  post       Post      @relation(fields: [id_post], references: [id_post], onDelete: Cascade)
+  user       User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([id_post, createdAt], map: "idx_comment_post_created")
   @@index([id_user], map: "idx_comment_user")
   @@index([deletedAt], map: "idx_comment_deleted")
   @@map("post_comments")
+}
+
+model password_reset_tokens {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  id_user   Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  users     User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([token], map: "idx_reset_token")
+  @@index([id_user], map: "idx_reset_user")
+}
+
+model refresh_tokens {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  id_user   Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  users     User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([expiresAt], map: "idx_refresh_expires")
+  @@index([token], map: "idx_refresh_token")
+  @@index([id_user], map: "idx_refresh_user")
+}
+
+model semesters {
+  id_semester     Int       @id @default(autoincrement())
+  nama_semester   String
+  tanggal_mulai   DateTime
+  tanggal_selesai DateTime
+  drop_deadline   DateTime
+  is_active       Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  deletedAt       DateTime?
+  kelas           Kelas[]
+}
+
+enum Role {
+  MAHASISWA
+  DOSEN
+  ADMIN
+}
+
+enum TypeAbsensi {
+  REMOTE_ABSENSI
+  LOKAL_ABSENSI
+}
+
+enum TypeAnomali {
+  KEHADIRAN_GANDA
+  TIDAK_HADIR_BERULANG
+  POLA_WAKTU_TIDAK_WAJAR
+}
+
+enum StatusPengajuan {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
+}
+
+enum ParkingType {
+  MASUK
+  KELUAR
+}
+
+enum StatusAnomali {
+  OPEN
+  REVIEWED
+  RESOLVED
 }

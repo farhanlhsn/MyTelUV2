@@ -184,9 +184,9 @@ def find_match():
     return jsonify(result), 200
 
 if __name__ == '__main__':
-    print("🚀 Face Recognition API Server starting...")
-    print("📡 Server running on http://localhost:5051")
-    print("🔍 Endpoints:")
+    print("[*] Face Recognition API Server starting...")
+    print("[*] Server running on http://localhost:5051")
+    print("[*] Endpoints:")
     print("   - GET  /health")
     print("   - POST /detect-face")
     print("   - POST /detect-multiple")

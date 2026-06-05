@@ -95,4 +95,47 @@ app.listen(port, '0.0.0.0', () => {
     initScheduler();
 });
 
+<<<<<<< Updated upstream
 module.exports = app;
+=======
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        status: "error",
+        message: `Route ${req.method} ${req.originalUrl} not found`
+    });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`, err.stack);
+
+    // Multer errors (file too large, wrong type, etc.)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+            status: "error",
+            message: "File terlalu besar"
+        });
+    }
+
+    if (err.message?.includes('Not allowed by CORS')) {
+        return res.status(403).json({
+            status: "error",
+            message: "CORS not allowed"
+        });
+    }
+
+    // Hide internal details in production
+    const message = process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : err.message;
+
+    res.status(err.statusCode || 500).json({
+        status: "error",
+        message
+    });
+});
+
+module.exports = app;
+// Trigger nodemon restart
+>>>>>>> Stashed changes

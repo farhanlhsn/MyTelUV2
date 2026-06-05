@@ -584,3 +584,39 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         message: "Invalid gate_type. Use 'MASUK' or 'KELUAR'"
     });
 });
+<<<<<<< Updated upstream
+=======
+
+// Reconcile live_kapasitas berdasarkan log aktual (Admin only)
+exports.reconcileKapasitas = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const parsedId = parseInt(id);
+
+    // Hitung kendaraan yang masih di dalam berdasarkan log
+    // (kendaraan yang terakhir MASUK dan belum KELUAR di parkiran ini)
+    const result = await prisma.$queryRaw`
+        SELECT COUNT(DISTINCT lp.id_kendaraan) as actual_count
+        FROM log_parkir lp
+        INNER JOIN (
+            SELECT id_kendaraan, MAX(timestamp) as last_ts
+            FROM log_parkir
+            WHERE id_parkiran = ${parsedId}
+            GROUP BY id_kendaraan
+        ) latest ON lp.id_kendaraan = latest.id_kendaraan AND lp.timestamp = latest.last_ts
+        WHERE lp.id_parkiran = ${parsedId} AND lp.type = 'MASUK'
+    `;
+
+    const actualCount = Number(result[0]?.actual_count || 0);
+
+    await prisma.$executeRaw`
+        UPDATE parkiran SET live_kapasitas = ${actualCount}, "updatedAt" = NOW()
+        WHERE id_parkiran = ${parsedId}
+    `;
+
+    res.status(200).json({
+        status: "success",
+        message: `Kapasitas direconcile: ${actualCount} kendaraan di dalam`,
+        data: { live_kapasitas: actualCount }
+    });
+});
+>>>>>>> Stashed changes
