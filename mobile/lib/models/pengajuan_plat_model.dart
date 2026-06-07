@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 class PengajuanPlatModel {
   final int idKendaraan;
@@ -32,11 +35,11 @@ class PengajuanPlatModel {
   // Factory constructor untuk membuat instance dari JSON
   factory PengajuanPlatModel.fromJson(Map<String, dynamic> json) {
     try {
-      print('🔍 Parsing JSON: $json');
+      debugLog('🔍 Parsing JSON: $json');
 
       // Helper function untuk parsing int dengan aman
       int parseId(dynamic value) {
-        print('  - Parsing ID from: $value (${value.runtimeType})');
+        debugLog('  - Parsing ID from: $value (${value.runtimeType})');
         if (value == null) return 0;
         if (value is int) return value;
         if (value is String) return int.tryParse(value) ?? 0;
@@ -46,30 +49,30 @@ class PengajuanPlatModel {
 
       // Helper function untuk parsing list string dengan aman
       List<String> parseStringList(dynamic value, String fieldName) {
-        print('  - Parsing $fieldName from: $value (${value.runtimeType})');
+        debugLog('  - Parsing $fieldName from: $value (${value.runtimeType})');
         if (value == null) {
-          print('    -> $fieldName is null, returning empty list');
+          debugLog('    -> $fieldName is null, returning empty list');
           return [];
         }
         if (value is List) {
-          print('    -> $fieldName is List with ${value.length} items');
+          debugLog('    -> $fieldName is List with ${value.length} items');
           try {
             List<String> result = [];
             for (var item in value) {
               result.add(item.toString());
             }
-            print('    -> Successfully parsed ${result.length} items');
+            debugLog('    -> Successfully parsed ${result.length} items');
             return result;
           } catch (e) {
-            print('    -> Error parsing list items: $e');
+            debugLog('    -> Error parsing list items: $e');
             return [];
           }
         }
         if (value is String) {
-          print('    -> $fieldName is String: $value');
+          debugLog('    -> $fieldName is String: $value');
           return [value];
         }
-        print('    -> $fieldName is unknown type, returning empty list');
+        debugLog('    -> $fieldName is unknown type, returning empty list');
         return [];
       }
 
@@ -101,7 +104,7 @@ class PengajuanPlatModel {
         json['updatedAt'] ?? DateTime.now().toIso8601String(),
       );
 
-      print(
+      debugLog(
         '✅ Successfully parsed: id=$idKendaraan, plat=$platNomor, nama=$namaKendaraan',
       );
 
@@ -120,8 +123,8 @@ class PengajuanPlatModel {
         updatedAt: updatedAt,
       );
     } catch (e, stackTrace) {
-      print('❌ Error in fromJson: $e');
-      print('📋 Stack trace: $stackTrace');
+      debugLog('❌ Error in fromJson: $e');
+      debugLog('📋 Stack trace: $stackTrace');
       rethrow;
     }
   }

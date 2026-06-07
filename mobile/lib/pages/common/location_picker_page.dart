@@ -4,6 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
+import 'package:mobile/utils/logger.dart';
+
+
 
 /// Model untuk menyimpan data lokasi
 class LocationData {
@@ -86,7 +89,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         await _reverseGeocode(_selectedLocation);
       }
     } catch (e) {
-      print('Error getting location: $e');
+      debugLog('Error getting location: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -121,7 +124,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         });
       }
     } catch (e) {
-      print('Reverse geocode error: $e');
+      debugLog('Reverse geocode error: $e');
     }
   }
 
@@ -155,7 +158,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
         });
       }
     } catch (e) {
-      print('Search error: $e');
+      debugLog('Search error: $e');
     } finally {
       setState(() => _isSearching = false);
     }

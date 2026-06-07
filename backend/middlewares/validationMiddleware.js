@@ -1,15 +1,40 @@
 const validator = require('validator');
 
+const { ZodError } = require('zod');
+
 // Sanitize and validate input data
 exports.sanitizeInput = (req, res, next) => {
-    // Sanitize string inputs
     for (let key in req.body) {
         if (typeof req.body[key] === 'string') {
-            // Trim whitespace and normalize
             req.body[key] = req.body[key].trim();
+            // Skip sanitization for password and content fields
+            const skipEscape = ['password', 'oldPassword', 'newPassword', 'new_password', 'content'];
+            if (!skipEscape.includes(key)) {
+                req.body[key] = validator.escape(req.body[key]);
+            }
         }
     }
     next();
+};
+
+// Generic Zod Validator Middleware
+exports.validateZod = (schema) => {
+    return async (req, res, next) => {
+        try {
+            req.body = await schema.parseAsync(req.body);
+            next();
+        } catch (error) {
+            if (error instanceof ZodError) {
+                const errorMessages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+                return res.status(400).json({
+                    status: "error",
+                    message: "Validation failed",
+                    details: errorMessages
+                });
+            }
+            next(error);
+        }
+    };
 };
 
 // Validate required fields
@@ -26,7 +51,7 @@ exports.validateRequired = (fields) => {
         if (missingFields.length > 0) {
             return res.status(400).json({
                 status: "error",
-                error: `Missing required fields: ${missingFields.join(', ')}`
+                message: `Missing required fields: ${missingFields.join(', ')}`
             });
         }
 
@@ -41,7 +66,7 @@ exports.validateEmail = (req, res, next) => {
     if (email && !validator.isEmail(email)) {
         return res.status(400).json({
             status: "error",
-            error: 'Please provide a valid email address'
+            message: 'Please provide a valid email address'
         });
     }
     next();

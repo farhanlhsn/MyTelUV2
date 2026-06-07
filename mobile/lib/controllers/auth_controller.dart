@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../models/user.dart';
+import 'package:mobile/utils/logger.dart';
 
 class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
@@ -32,7 +33,7 @@ class AuthController extends GetxController {
     try {
       // Hapus token lama terlebih dahulu untuk memastikan clean state
       await _secureStorage.deleteAll();
-      print('🗑️ Cleared all old tokens and user data');
+      debugLog('🗑️ Cleared all old tokens and user data');
 
       final Map<String, dynamic> result = await _authService.login(
         username: username,
@@ -57,21 +58,21 @@ class AuthController extends GetxController {
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
-      print(
+      debugLog(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
       );
-      print('🔑 Token preview: ${token.length > 20 ? token.substring(0, 20) : token}...');
+      debugLog('🔑 Token preview: ${token.length > 20 ? token.substring(0, 20) : token}...');
 
       // Reset Dio instance to ensure new token is used
       ApiClient.reset();
-      print('🔄 Reset Dio instance');
+      debugLog('🔄 Reset Dio instance');
 
       // Register FCM token for push notifications
       await _registerNotificationToken();
 
       return true;
     } on DioException catch (e) {
-      print('❌ Login failed: ${e.message}');
+      debugLog('❌ Login failed: ${e.message}');
       return false;
     } catch (e) {
       return false;
@@ -98,7 +99,10 @@ class AuthController extends GetxController {
         role: role,
       );
 
-      return true;
+      if (result['status'] == 'success') {
+        return true;
+      }
+      return false;
     } on DioException catch (e) {
       return false;
     } catch (e) {
@@ -122,14 +126,14 @@ class AuthController extends GetxController {
 
       // Reset Dio instance to clear any cached requests
       ApiClient.reset();
-      print('🚪 Logged out and reset Dio instance');
+      debugLog('🚪 Logged out and reset Dio instance');
 
       // Unregister FCM token locally
       await _unregisterNotificationToken();
 
       return true;
     } catch (e) {
-      print('❌ Logout failed: $e');
+      debugLog('❌ Logout failed: $e');
       return false;
     }
   }

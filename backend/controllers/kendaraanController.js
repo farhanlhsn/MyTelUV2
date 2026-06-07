@@ -121,7 +121,8 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
 exports.getKendaraan = asyncHandler(async (req, res) => {
     const kendaraan = await prisma.kendaraan.findMany({
         where: {
-            id_user: req.user.id_user
+            id_user: req.user.id_user,
+            deletedAt: null
         },
         select: {
             id_kendaraan: true,
@@ -145,23 +146,15 @@ exports.getKendaraan = asyncHandler(async (req, res) => {
 exports.deleteKendaraan = asyncHandler(async (req, res) => {
     const { id_kendaraan } = req.params;
     const kendaraan = await prisma.kendaraan.findUnique({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user }
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user, deletedAt: null }
     });
     if (!kendaraan) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
     }
-    // Delete foto kendaraan dan foto STNK from R2
-    for (const foto of kendaraan.fotoKendaraan) {
-        if (await fileExists(foto)) {
-            await deleteFile(foto);
-        }
-    }
-    if (await fileExists(kendaraan.fotoSTNK)) {
-        await deleteFile(kendaraan.fotoSTNK);
-    }
-    // Delete kendaraan from database
-    await prisma.kendaraan.delete({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user }
+    // Soft delete kendaraan (preserves LogParkir history)
+    await prisma.kendaraan.update({
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user },
+        data: { deletedAt: new Date() }
     });
     res.status(200).json({ status: "success", message: `Kendaraan ${kendaraan.plat_nomor} deleted successfully` });
 });
@@ -169,7 +162,7 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
 exports.verifyKendaraan = asyncHandler(async (req, res) => {
     const { id_kendaraan, id_user } = req.body;
     const kendaraan = await prisma.kendaraan.findUnique({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) }
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user), deletedAt: null }
     });
     if (!kendaraan) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
@@ -211,11 +204,11 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const total = await prisma.kendaraan.count({ where: { statusVerif: false } });
+    const total = await prisma.kendaraan.count({ where: { statusVerif: false, deletedAt: null } });
     const totalPages = Math.ceil(total / parseInt(limit));
 
     const unverifiedKendaraan = await prisma.kendaraan.findMany({
-        where: { statusVerif: false },
+        where: { statusVerif: false, deletedAt: null },
         include: {
             user: {
                 select: {
@@ -246,9 +239,10 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
 exports.getAllKendaraan = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const total = await prisma.kendaraan.count();
+    const total = await prisma.kendaraan.count({ where: { deletedAt: null } });
     const totalPages = Math.ceil(total / parseInt(limit));
     const kendaraan = await prisma.kendaraan.findMany({
+        where: { deletedAt: null },
         skip: offset,
         take: parseInt(limit),
         orderBy: { createdAt: 'desc' }
@@ -267,7 +261,8 @@ exports.getAllKendaraan = asyncHandler(async (req, res) => {
 exports.getHistoriPengajuan = asyncHandler(async (req, res) => {
     const kendaraan = await prisma.kendaraan.findMany({
         where: {
-            id_user: req.user.id_user
+            id_user: req.user.id_user,
+            deletedAt: null
         },
         select: {
             id_kendaraan: true,
@@ -304,7 +299,7 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     }
 
     const kendaraan = await prisma.kendaraan.findUnique({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) }
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user), deletedAt: null }
     });
 
     if (!kendaraan) {

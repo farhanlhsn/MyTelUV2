@@ -920,6 +920,16 @@ class _HomePageState extends State<HomePage> {
               });
             }
 
+            // Add Anomaly menu for ADMIN and DOSEN
+            if (userRole == 'ADMIN' || userRole == 'DOSEN') {
+              filteredMenuItems.add({
+                'icon': Icons.warning_amber_rounded,
+                'label': 'Anomaly',
+                'color': const Color(0xFFE63946),
+                'route': AppRoutes.anomaliDashboard,
+              });
+            }
+
             return GridView.builder(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,

@@ -6,7 +6,7 @@ exports.generalLimiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 500 : 1000,
   message: {
     status: "error",
-    error: 'Too many requests from this IP, please try again later.'
+    message: 'Too many requests from this IP, please try again later.'
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
@@ -30,7 +30,20 @@ exports.authLimiter = rateLimit({
   max: 5, // limit each IP to 5 requests per windowMs for auth
   message: {
     status: "error",
-    error: 'Too many authentication attempts, please try again later.'
+    message: 'Too many authentication attempts, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter for edge device endpoints
+exports.edgeLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute per IP
+  message: {
+    success: false,
+    gate_action: "DENY",
+    message: 'Too many requests from this edge device'
   },
   standardHeaders: true,
   legacyHeaders: false,

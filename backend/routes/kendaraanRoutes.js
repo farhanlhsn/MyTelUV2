@@ -1,7 +1,8 @@
 const express = require('express');
 const { registerKendaraan, getKendaraan, deleteKendaraan, verifyKendaraan, getAllUnverifiedKendaraan, getAllKendaraan, getHistoriPengajuan, rejectKendaraan } = require('../controllers/kendaraanController');
 const { uploadFields, validateFileSize, requireFile } = require('../middlewares/multerMiddleware');
-const { validateRequired } = require('../middlewares/validationMiddleware');
+const { validateZod } = require('../middlewares/validationMiddleware');
+const { registerKendaraanSchema, verifyKendaraanSchema, rejectKendaraanSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const router = express.Router();
 
@@ -11,7 +12,7 @@ router.post('/register',
         { name: 'fotoSTNK', maxCount: 1 }        // Wajib 1 foto STNK
     ]),
     protect,
-    validateRequired(['plat_nomor', 'nama_kendaraan']), // id_user tidak perlu, ambil dari token
+    validateZod(registerKendaraanSchema), // id_user tidak perlu, ambil dari token
     validateFileSize,
     requireFile,
     registerKendaraan
@@ -23,14 +24,13 @@ router.get('/',
 );
 router.delete('/:id_kendaraan',
     protect,
-    validateRequired(['id_kendaraan']),
     deleteKendaraan
 );
 
 router.post('/verify',
     protect,
     authorize('ADMIN'),
-    validateRequired(['id_kendaraan', 'id_user']),
+    validateZod(verifyKendaraanSchema),
     verifyKendaraan
 );
 
@@ -56,7 +56,7 @@ router.get('/histori-pengajuan',
 router.post('/reject',
     protect,
     authorize('ADMIN'),
-    validateRequired(['id_kendaraan', 'id_user', 'feedback']),
+    validateZod(rejectKendaraanSchema),
     rejectKendaraan
 );
 

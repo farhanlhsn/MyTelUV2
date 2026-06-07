@@ -282,7 +282,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
     // Resolve id_semester: check if provided in body, otherwise query active semester
     let semesterId = req.body.id_semester ? parseInt(req.body.id_semester) : null;
     if (!semesterId) {
-        const activeSemester = await prisma.semesters.findFirst({
+        const activeSemester = await prisma.semester.findFirst({
             where: { is_active: true, deletedAt: null }
         });
         if (!activeSemester) {
@@ -296,7 +296,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
 
     const targetKapasitas = req.body.kapasitas ? parseInt(req.body.kapasitas) : 50;
 
-    const kelas = await prisma.$executeRaw`
+    const insertResult = await prisma.$executeRaw`
         INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, id_semester, kapasitas, "createdAt", "updatedAt")
         VALUES (
             ${parseInt(id_matakuliah)}, 
@@ -1408,7 +1408,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
             latitude: isNaN(lat) ? null : lat,
             longitude: isNaN(lng) ? null : lng,
             radius_meter: radius,
-            // require_face: require_face === true, // TODO: Uncomment after running: ALTER TABLE "SesiAbsensi" ADD COLUMN "require_face" BOOLEAN NOT NULL DEFAULT false;
+            require_face: require_face === true,
             mulai: mulaiTime,
             selesai: selesaiTime,
             status: true,

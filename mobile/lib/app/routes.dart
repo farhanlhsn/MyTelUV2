@@ -7,12 +7,11 @@ import '../pages/auth/register_page.dart';
 import '../pages/auth/register_success_page.dart';
 import '../bindings/auth_binding.dart';
 import '../pages/kendaraan/registerplat.dart';
-import '../pages/Punya_Raja/registerplat/pengajuan_list_page.dart';
-import '../pages/Punya_Raja/auth/otp_verification_page.dart';
-import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
+import '../pages/kendaraan/pengajuan_list_page.dart';
+import '../pages/auth/otp_verification_page.dart';
+import '../pages/kendaraan/parkir/analitik_parkir.dart';
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
 import '../pages/absensi/absensi_page.dart';
-import '../pages/Punya_Raja/analitik/analitik_parkir.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
@@ -26,6 +25,8 @@ import '../pages/jadwal/jadwal_mingguan_page.dart';
 import '../pages/jadwal/form_jadwal_pengganti_page.dart';
 import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
+import 'auth_middleware.dart';
+import 'role_middleware.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -151,10 +152,12 @@ class AppRoutes {
     GetPage<dynamic>(
       name: anomaliResult,
       page: () => const AnomaliResultPage(),
+      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
     ),
     GetPage<dynamic>(
       name: anomaliDashboard,
       page: () => const AnomaliDashboardPage(),
+      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
     ),
   ];
 }

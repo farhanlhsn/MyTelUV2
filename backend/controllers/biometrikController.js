@@ -91,13 +91,14 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
     try {
         // Call Python service to detect face and extract embedding
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path));
+        formData.append('image', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
 
         const faceResult = await callPythonService('/detect-face', formData);
 
         if (!faceResult.success) {
-            // Clean up uploaded file
-            fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 status: 'error',
                 message: faceResult.error
@@ -105,16 +106,12 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
         }
 
         // Upload photo to R2
-        const fileBuffer = fs.readFileSync(req.file.path);
         const r2Result = await uploadFile(
-            fileBuffer,
+            req.file.buffer,
             req.file.originalname,
             req.file.mimetype,
             'biometric-faces'
         );
-
-        // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
 
         // Save to database
         const biometrik = await prisma.dataBiometrik.upsert({
@@ -157,10 +154,6 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
         });
 
     } catch (error) {
-        // Clean up file if exists
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         throw error;
     }
 });
@@ -243,12 +236,14 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
     try {
         // Call Python service to detect face and extract embedding
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path));
+        formData.append('image', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
 
         const faceResult = await callPythonService('/detect-face', formData);
 
         if (!faceResult.success) {
-            fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 status: 'error',
                 message: faceResult.error
@@ -256,16 +251,12 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
         }
 
         // Upload new photo to R2
-        const fileBuffer = fs.readFileSync(req.file.path);
         const r2Result = await uploadFile(
-            fileBuffer,
+            req.file.buffer,
             req.file.originalname,
             req.file.mimetype,
             'biometric-faces'
         );
-
-        // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
 
         // Delete old photo from R2 (optional)
         // if (biometrik.photo_url) {
@@ -308,9 +299,6 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
         });
 
     } catch (error) {
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         throw error;
     }
 });
@@ -331,12 +319,12 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     try {
         // Detect face in uploaded image
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path));
+        formData.append('image', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
 
         const faceResult = await callPythonService('/detect-face', formData);
-
-        // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
 
         if (!faceResult.success) {
             return res.status(400).json({
@@ -415,9 +403,6 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
         }
 
     } catch (error) {
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         throw error;
     }
 });
@@ -440,12 +425,12 @@ exports.scanWajah = asyncHandler(async (req, res) => {
     try {
         // Detect multiple faces
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path));
+        formData.append('image', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
 
         const facesResult = await callPythonService('/detect-multiple', formData);
-
-        // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
 
         if (!facesResult.success) {
             return res.status(400).json({
@@ -515,9 +500,6 @@ exports.scanWajah = asyncHandler(async (req, res) => {
         });
 
     } catch (error) {
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         throw error;
     }
 });
@@ -558,7 +540,6 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-        fs.unlinkSync(req.file.path);
         return res.status(400).json({
             status: 'error',
             message: 'Invalid coordinates'
@@ -568,10 +549,12 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     try {
         // Step 1: Verify face
         const formData = new FormData();
-        formData.append('image', fs.createReadStream(req.file.path));
+        formData.append('image', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
+        
         const faceResult = await callPythonService('/detect-face', formData);
-
-        fs.unlinkSync(req.file.path);
 
         if (!faceResult.success) {
             return res.status(400).json({
@@ -626,16 +609,21 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
 
         const kelasIds = enrolledClasses.map(p => p.id_kelas);
 
-        // Step 3: Find OPEN attendance session for enrolled classes
+        // Step 3: Find ALL OPEN attendance sessions for enrolled classes
         const now = new Date();
-        const activeSesi = await prisma.sesiAbsensi.findFirst({
-            where: {
-                id_kelas: { in: kelasIds },
-                status: true,  // true = sesi masih terbuka
-                mulai: { lte: now },
-                selesai: { gte: now },
-                deletedAt: null
-            },
+        const whereClause = {
+            id_kelas: { in: kelasIds },
+            status: true,
+            mulai: { lte: now },
+            selesai: { gte: now },
+            deletedAt: null
+        };
+        if (req.body.id_sesi_absensi) {
+            whereClause.id_sesi_absensi = parseInt(req.body.id_sesi_absensi);
+        }
+
+        const activeSessions = await prisma.sesiAbsensi.findMany({
+            where: whereClause,
             include: {
                 kelas: {
                     include: {
@@ -646,11 +634,57 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
             }
         });
 
-        if (!activeSesi) {
+        if (activeSessions.length === 0) {
             return res.status(400).json({
                 status: 'error',
-                message: 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
+                message: req.body.id_sesi_absensi 
+                    ? 'Sesi absensi yang dipilih tidak valid atau sudah ditutup' 
+                    : 'Tidak ada sesi absensi yang sedang berlangsung untuk kelas Anda'
             });
+        }
+
+        let activeSesi;
+        // If multiple sessions active, ask user to choose
+        if (activeSessions.length > 1) {
+            // Filter out sessions where user already has attendance
+            const existingAbsensiList = await prisma.absensi.findMany({
+                where: {
+                    id_user,
+                    id_sesi_absensi: { in: activeSessions.map(s => s.id_sesi_absensi) },
+                    deletedAt: null
+                },
+                select: { id_sesi_absensi: true }
+            });
+            const alreadyAttendedIds = new Set(existingAbsensiList.map(a => a.id_sesi_absensi));
+            const pendingSessions = activeSessions.filter(s => !alreadyAttendedIds.has(s.id_sesi_absensi));
+
+            if (pendingSessions.length === 0) {
+                return res.status(409).json({
+                    status: 'error',
+                    message: 'Anda sudah melakukan absensi pada semua sesi yang sedang berlangsung'
+                });
+            }
+            
+            if (pendingSessions.length === 1) {
+                // Only one pending session left, auto-pick it
+                activeSesi = pendingSessions[0];
+            } else {
+                // Still multiple pending sessions, require explicit selection
+                return res.status(400).json({
+                    status: 'error',
+                    message: 'Terdapat beberapa sesi absensi aktif. Pilih kelas yang ingin diabsen.',
+                    require_selection: true,
+                    sessions: pendingSessions.map(s => ({
+                        id_sesi: s.id_sesi_absensi,
+                        id_kelas: s.id_kelas,
+                        nama_kelas: s.kelas.nama_kelas,
+                        matakuliah: s.kelas.matakuliah?.nama_matakuliah,
+                        dosen: s.kelas.dosen?.nama
+                    }))
+                });
+            }
+        } else {
+            activeSesi = activeSessions[0];
         }
 
         // Step 4: Check if already marked attendance
@@ -728,9 +762,6 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         });
 
     } catch (error) {
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         throw error;
     }
 });

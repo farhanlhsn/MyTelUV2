@@ -9,21 +9,14 @@ const {
     scanWajah,
     biometrikAbsen
 } = require('../controllers/biometrikController');
+const { validateZod } = require('../middlewares/validationMiddleware');
+const { addBiometrikSchema, biometrikAbsenSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
-const { validateRequired } = require('../middlewares/validationMiddleware');
 
 const router = express.Router();
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'face-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
     // Accept images only
@@ -51,7 +44,7 @@ router.post('/add',
     protect,
     authorize('ADMIN'),
     upload.single('image'),
-    validateRequired(['id_user']),
+    validateZod(addBiometrikSchema),
     addBiometrik
 );
 
@@ -86,7 +79,7 @@ router.post('/absen',
     protect,
     authorize('MAHASISWA'),
     upload.single('image'),
-    validateRequired(['latitude', 'longitude']),
+    validateZod(biometrikAbsenSchema),
     biometrikAbsen
 );
 

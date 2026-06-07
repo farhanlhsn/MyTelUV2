@@ -44,7 +44,8 @@ const {
     deleteJadwalPengganti
 } = require('../controllers/akademikController');
 
-const { validateRequired } = require('../middlewares/validationMiddleware');
+const { validateZod } = require('../middlewares/validationMiddleware');
+const { createMatakuliahSchema, createKelasSchema, createJadwalPenggantiSchema, daftarKelasSchema, adminAddPesertaSchema, openAbsensiSchema, createAbsensiSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const {
@@ -75,7 +76,7 @@ router.get('/laporan/kelas/:id/excel', protect, authorize('DOSEN', 'ADMIN'), gen
 router.post('/matakuliah',
     protect,
     authorize('ADMIN'),
-    validateRequired(['nama_matakuliah', 'kode_matakuliah']),
+    validateZod(createMatakuliahSchema),
     createMatakuliah
 );
 
@@ -105,7 +106,7 @@ router.delete('/matakuliah/:id',
 router.post('/kelas',
     protect,
     authorize('ADMIN', 'DOSEN'),
-    validateRequired(['id_matakuliah', 'id_dosen', 'jam_mulai', 'jam_berakhir', 'nama_kelas', 'ruangan']),
+    validateZod(createKelasSchema),
     createKelas
 );
 
@@ -138,7 +139,7 @@ router.get('/kelas/jadwal-mingguan',
 router.post('/kelas/:id/jadwal-pengganti',
     protect,
     authorize('DOSEN', 'ADMIN'),
-    validateRequired(['tanggal_asli', 'status', 'alasan']),
+    validateZod(createJadwalPenggantiSchema),
     createJadwalPengganti
 );
 
@@ -181,7 +182,7 @@ router.get('/kelas/ku',
 router.post('/kelas/daftar',
     protect,
     authorize('MAHASISWA'),
-    validateRequired(['id_kelas']),
+    validateZod(daftarKelasSchema),
     daftarKelas
 );
 
@@ -218,7 +219,7 @@ router.get('/kelas/:id/peserta',
 router.post('/kelas/peserta/add',
     protect,
     authorize('ADMIN'),
-    validateRequired(['id_kelas', 'id_mahasiswa']),
+    validateZod(adminAddPesertaSchema),
     adminAddPeserta
 );
 
@@ -228,14 +229,14 @@ router.post('/kelas/peserta/add',
 router.post('/open-absensi',
     protect,
     authorize('DOSEN', 'ADMIN'),
-    validateRequired(['id_kelas', 'mulai', 'selesai']),
+    validateZod(openAbsensiSchema),
     openAbsensi
 );
 
 router.post('/absensi',
     protect,
     authorize('MAHASISWA'),
-    validateRequired(['id_kelas', 'id_sesi_absensi', 'latitude', 'longitude']),
+    validateZod(createAbsensiSchema),
     createAbsensi
 );
 

@@ -4,6 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart' hide Response;
+import 'package:mobile/utils/logger.dart';
+
+
 
 /// Environment configuration for API URLs
 /// 
@@ -43,7 +46,7 @@ class ApiClient {
 
   static Dio get dio {
     if (_dioInstance == null) {
-      print('🔧 Initializing Dio with baseUrl: $baseUrl (ENV: ${AppConfig.envName})');
+      debugLog('🔧 Initializing Dio with baseUrl: $baseUrl (ENV: ${AppConfig.envName})');
 
       _dioInstance = Dio(
         BaseOptions(
@@ -63,18 +66,18 @@ class ApiClient {
       _dioInstance!.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) async {
-            print(
+            debugLog(
               '🌐 Request: ${options.method} ${options.baseUrl}${options.path}',
             );
             if (AppConfig.isDevelopment) {
-              print('📤 Headers: ${options.headers}');
+              debugLog('📤 Headers: ${options.headers}');
             }
 
             // Get token from secure storage
             try {
               final String? token = await _secureStorage.read(key: 'token');
               if (AppConfig.isDevelopment) {
-                print(
+                debugLog(
                   '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
                 );
               }
@@ -84,22 +87,22 @@ class ApiClient {
                 options.headers['Authorization'] = 'Bearer $token';
               }
             } catch (e) {
-              print('❌ Error reading token: $e');
+              debugLog('❌ Error reading token: $e');
             }
 
             return handler.next(options);
           },
           onResponse: (response, handler) async {
-            print(
+            debugLog(
               '✅ Response: ${response.statusCode} ${response.statusMessage}',
             );
             if (AppConfig.isDevelopment) {
-              print('📥 Data: ${response.data}');
+              debugLog('📥 Data: ${response.data}');
             }
             
             // Handle 401 Unauthorized in response (because validateStatus accepts < 500)
             if (response.statusCode == 401) {
-              print('🚪 Token expired (in response), clearing storage and redirecting to login');
+              debugLog('🚪 Token expired (in response), clearing storage and redirecting to login');
               await _secureStorage.deleteAll();
               _dioInstance = null; // Reset Dio instance
               _redirectToLogin();
@@ -108,15 +111,15 @@ class ApiClient {
             return handler.next(response);
           },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
-            print('❌ DioError Type: ${error.type}');
-            print('❌ DioError Message: ${error.message}');
+            debugLog('❌ DioError Type: ${error.type}');
+            debugLog('❌ DioError Message: ${error.message}');
             if (AppConfig.isDevelopment) {
-              print('❌ DioError Response: ${error.response?.data}');
+              debugLog('❌ DioError Response: ${error.response?.data}');
             }
 
             // Handle 401 Unauthorized - Token expired
             if (error.response?.statusCode == 401) {
-              print('🚪 Token expired, clearing storage and redirecting to login');
+              debugLog('🚪 Token expired, clearing storage and redirecting to login');
               await _secureStorage.deleteAll();
               _dioInstance = null; // Reset Dio instance
               

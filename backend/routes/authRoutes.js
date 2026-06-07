@@ -1,21 +1,20 @@
 const express = require('express');
 const { login, logout, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken } = require('../controllers/authController');
-const { validateRequired, validatePassword, validateUsername } = require('../middlewares/validationMiddleware');
+const { validateZod } = require('../middlewares/validationMiddleware');
+const { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, adminResetPasswordSchema, fcmTokenSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();
 
 router.post('/register',
     authLimiter,
-    validateRequired(['nama', 'username', 'password']),
-    validateUsername,
-    validatePassword,
+    validateZod(registerSchema),
     register
 );
 
 router.post('/login',
     authLimiter,
-    validateRequired(['username', 'password']),
+    validateZod(loginSchema),
     login
 );
 
@@ -37,27 +36,27 @@ router.get('/users',
 
 router.put('/profile',
     protect,
-    validateRequired(['nama']),
+    validateZod(updateProfileSchema),
     updateProfile
 );
 
 router.put('/password',
     protect,
-    validateRequired(['oldPassword', 'newPassword']),
+    validateZod(changePasswordSchema),
     changePassword
 );
 
 router.put('/admin/reset-password',
     protect,
     authorize('ADMIN'),
-    validateRequired(['id_user', 'new_password']),
+    validateZod(adminResetPasswordSchema),
     adminResetPassword
 );
 
 // FCM Token Registration
 router.post('/fcm-token',
     protect,
-    validateRequired(['fcm_token']),
+    validateZod(fcmTokenSchema),
     registerFcmToken
 );
 

@@ -24,22 +24,52 @@ model User {
   push_notifications_enabled Boolean                 @default(true)
   absensi                    Absensi[]
   dataBiometrik              DataBiometrik?
-  jadwalPengganti            JadwalPengganti[]       @relation("DosenJadwalPengganti")
-  kelasDiampu                Kelas[]                 @relation("DosenKelas")
+  refreshTokens              RefreshToken[]
+  passwordResetTokens        PasswordResetToken[]
   kendaraan                  Kendaraan[]
   laporanAnomali             LaporanAnomali[]
   logParkir                  LogParkir[]
-  password_reset_tokens      password_reset_tokens[]
+  kelasDiampu                Kelas[]                 @relation("DosenKelas")
   pesertaKelas               PesertaKelas[]
-  postComments               PostComment[]
-  postLikes                  PostLike[]
   posts                      Post[]
-  refresh_tokens             refresh_tokens[]
+  postLikes                  PostLike[]
+  postComments               PostComment[]
+  jadwalPengganti            JadwalPengganti[]       @relation("DosenJadwalPengganti")
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
   @@index([deletedAt], map: "idx_user_deleted")
   @@map("users")
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  id_user   Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([token], map: "idx_refresh_token")
+  @@index([id_user], map: "idx_refresh_user")
+  @@index([expiresAt], map: "idx_refresh_expires")
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  id_user   Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+
+  @@index([token], map: "idx_reset_token")
+  @@index([id_user], map: "idx_reset_user")
+  @@map("password_reset_tokens")
 }
 
 model DataBiometrik {
@@ -133,28 +163,44 @@ model Matakuliah {
   @@map("matakuliah")
 }
 
+model Semester {
+  id_semester     Int       @id @default(autoincrement())
+  nama_semester   String
+  tanggal_mulai   DateTime
+  tanggal_selesai DateTime
+  drop_deadline   DateTime
+  is_active       Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+  kelas           Kelas[]
+
+  @@map("semesters")
+}
+
 model Kelas {
   id_kelas        Int               @id @default(autoincrement())
   id_matakuliah   Int
   id_dosen        Int
+  id_semester     Int
+  hari            Int?
   jam_mulai       DateTime          @db.Time(6)
   jam_berakhir    DateTime          @db.Time(6)
   nama_kelas      String
   ruangan         String
+  kapasitas       Int               @default(50)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   deletedAt       DateTime?
-  hari            Int?
-  id_semester     Int
-  kapasitas       Int               @default(50)
-  sesiAbsensi     SesiAbsensi[]
-  absensi         Absensi[]
-  jadwalPengganti JadwalPengganti[]
-  dosen           User              @relation("DosenKelas", fields: [id_dosen], references: [id_user])
-  matakuliah      Matakuliah        @relation(fields: [id_matakuliah], references: [id_matakuliah])
-  semesters       semesters         @relation(fields: [id_semester], references: [id_semester])
-  laporan         LaporanAnomali[]
+
+  matakuliah      Matakuliah        @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
+  dosen           User              @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
+  semester        Semester          @relation(fields: [id_semester], references: [id_semester], onDelete: Restrict)
   peserta         PesertaKelas[]
+  absensi         Absensi[]
+  laporan         LaporanAnomali[]
+  sesiAbsensi     SesiAbsensi[]
+  jadwalPengganti JadwalPengganti[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
   @@index([ruangan], map: "idx_kelas_ruangan")
@@ -224,17 +270,18 @@ model Absensi {
   id_absensi       Int                  @id @default(autoincrement())
   id_user          Int
   id_kelas         Int
+  id_sesi_absensi  Int
   type_absensi     TypeAbsensi
+  is_mock_location Boolean              @default(false)
+  photo_url        String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   deletedAt        DateTime?
   koordinat        Unsupported("point")
-  id_sesi_absensi  Int
-  is_mock_location Boolean              @default(false)
-  photo_url        String?
+
+  user             User                 @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   kelas            Kelas                @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
   sesiAbsensi      SesiAbsensi          @relation(fields: [id_sesi_absensi], references: [id_sesi_absensi])
-  user             User                 @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([id_user, createdAt], map: "idx_absensi_user_ts")
   @@index([id_kelas, createdAt], map: "idx_absensi_kelas_ts")
@@ -249,16 +296,17 @@ model LaporanAnomali {
   id_user       Int
   id_kelas      Int?
   type_anomali  TypeAnomali
+  status        StatusAnomali @default(OPEN)
+  catatan_dosen String?       @db.Text
+  resolved_at   DateTime?
+  deskripsi     String?       @db.Text
+  confidence    Float?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
-  catatan_dosen String?
-  confidence    Float?
-  deskripsi     String?
-  resolved_at   DateTime?
-  status        StatusAnomali @default(OPEN)
-  kelas         Kelas?        @relation(fields: [id_kelas], references: [id_kelas])
+
   user          User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  kelas         Kelas?        @relation(fields: [id_kelas], references: [id_kelas])
 
   @@index([id_user, type_anomali, createdAt], map: "idx_anomali_user_type_ts")
   @@index([id_kelas, createdAt], map: "idx_anomali_kelas_ts")
@@ -319,60 +367,28 @@ model PostComment {
   @@map("post_comments")
 }
 
-model password_reset_tokens {
-  id        Int       @id @default(autoincrement())
-  token     String    @unique
-  id_user   Int
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-  users     User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-
-  @@index([token], map: "idx_reset_token")
-  @@index([id_user], map: "idx_reset_user")
+// =================== Enums ====================
+enum Role { 
+  MAHASISWA 
+  DOSEN 
+  ADMIN 
 }
 
-model refresh_tokens {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  id_user   Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  users     User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-
-  @@index([expiresAt], map: "idx_refresh_expires")
-  @@index([token], map: "idx_refresh_token")
-  @@index([id_user], map: "idx_refresh_user")
+enum TypeAbsensi { 
+  REMOTE_ABSENSI 
+  LOKAL_ABSENSI 
 }
 
-model semesters {
-  id_semester     Int       @id @default(autoincrement())
-  nama_semester   String
-  tanggal_mulai   DateTime
-  tanggal_selesai DateTime
-  drop_deadline   DateTime
-  is_active       Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime
-  deletedAt       DateTime?
-  kelas           Kelas[]
-}
-
-enum Role {
-  MAHASISWA
-  DOSEN
-  ADMIN
-}
-
-enum TypeAbsensi {
-  REMOTE_ABSENSI
-  LOKAL_ABSENSI
-}
-
-enum TypeAnomali {
-  KEHADIRAN_GANDA
-  TIDAK_HADIR_BERULANG
+enum TypeAnomali { 
+  KEHADIRAN_GANDA 
+  TIDAK_HADIR_BERULANG 
   POLA_WAKTU_TIDAK_WAJAR
+}
+
+enum StatusAnomali {
+  OPEN
+  REVIEWED
+  RESOLVED
 }
 
 enum StatusPengajuan {
@@ -384,10 +400,4 @@ enum StatusPengajuan {
 enum ParkingType {
   MASUK
   KELUAR
-}
-
-enum StatusAnomali {
-  OPEN
-  REVIEWED
-  RESOLVED
 }
