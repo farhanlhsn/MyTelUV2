@@ -40,10 +40,21 @@ exports.authLimiter = rateLimit({
 exports.biometrikLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5, // limit each user/IP to 5 requests per minute
-  keyGenerator: (req) => req.user?.id_user || req.ip,
+  keyGenerator: (req) => req.user?.id_user || `${req.ip}`,
   message: {
     status: "error",
     message: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+// Rate limiter for edge device
+exports.edgeLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // limit to 60 requests per minute
+  message: {
+    status: "error",
+    message: 'Too many requests from edge device, please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,

@@ -1,4 +1,4 @@
-import 'package:get/get.dart';
+import 'package:get/get.dart' hide Response;
 import 'package:dio/dio.dart';
 import '../models/anomali_model.dart';
 import '../services/api_client.dart';

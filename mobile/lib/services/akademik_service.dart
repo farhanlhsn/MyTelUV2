@@ -34,7 +34,7 @@ class AkademikService {
             .toList();
         return (list, false);
       }
-      return ([], false);
+      return (<KelasHariIniModel>[], false);
     } on DioException catch (e) {
       final cached = await JadwalCache.loadKelasHariIni();
       if (cached != null) {
@@ -72,7 +72,7 @@ class AkademikService {
 
         return (result, false);
       }
-      return ({}, false);
+      return (<String, List<dynamic>>{}, false);
     } on DioException catch (e) {
       final cached = await JadwalCache.loadJadwalMingguan();
       if (cached != null) {

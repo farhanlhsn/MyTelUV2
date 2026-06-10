@@ -416,13 +416,13 @@ class _HomePageState extends State<HomePage> {
     return GestureDetector(
       onTap: hasActiveAbsensi ? () {
         // Navigate based on require_face setting
+        final idSesi = activeSesi?.idSesiAbsensi ?? 0;
         if (requireFace) {
           // Need face verification
-          Get.to(() => const BiometrikAbsenPage());
+          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
         } else {
           // GPS only - still use BiometrikAbsenPage for now
-          // (it already has location validation)
-          Get.to(() => const BiometrikAbsenPage());
+          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
         }
       } : null,
       child: Card(
@@ -445,51 +445,35 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-          ),
           // Active absensi badge
           if (hasActiveAbsensi)
             Positioned(
               top: 10,
               left: 10,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.green,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            requireFace ? Icons.face : Icons.location_on,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            requireFace ? 'Absen + Selfie' : 'Absen GPS',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    Icon(
+                      requireFace ? Icons.face : Icons.location_on,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      requireFace ? 'Absen + Selfie' : 'Absen GPS',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -508,6 +492,7 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
+            ),
             Positioned(
               top: 15,
               right: 15,
@@ -538,11 +523,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.access_time,
-                      size: 14,
-                      color: Colors.black54,
-                    ),
+                    const Icon(Icons.access_time, size: 14, color: Colors.black54),
                     const SizedBox(width: 4),
                     Text(
                       jadwal,
@@ -556,11 +537,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: Colors.black54,
-                    ),
+                    const Icon(Icons.location_on, size: 14, color: Colors.black54),
                     const SizedBox(width: 4),
                     Text(
                       location,
@@ -571,33 +548,8 @@ class _HomePageState extends State<HomePage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.black54),
-                      const SizedBox(width: 4),
-                      Text(
-                        jadwal,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 14, color: Colors.black54),
-                      const SizedBox(width: 4),
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
+                ),
                 ],
               ),
             ),

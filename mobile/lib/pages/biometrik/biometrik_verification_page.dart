@@ -262,7 +262,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 8),
+          timeLimit: Duration(seconds: 20),
         ),
       );
     } catch (_) {
@@ -281,17 +281,15 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
   List<ChallengeType> _studentChallengeTypes() {
     final random = _challengeRandom();
-    final secondaryChallenges = [
-      ChallengeType.turnLeft,
-      ChallengeType.turnRight,
+    final availableChallenges = [
+      ChallengeType.blink,
       ChallengeType.smile,
-      ChallengeType.nod,
+      ChallengeType.turnRight,
+      ChallengeType.turnLeft,
     ]..shuffle(random);
 
-    final activeChallenges = [ChallengeType.blink, secondaryChallenges.first]
-      ..shuffle(random);
-
-    return [...activeChallenges, ChallengeType.normal];
+    // Hanya menggunakan 1 challenge acak ditambah normal (total 2 langkah)
+    return [availableChallenges.first, ChallengeType.normal];
   }
 
   LivenessConfig _studentLivenessConfig() {
@@ -300,9 +298,17 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       enablePerformanceMonitoring: false,
       sandwichNormalChallenge: false,
       challengeTypes: _studentChallengeTypes(),
-      frameSkipInterval: 2,
-      imageProcessingTimeout: const Duration(milliseconds: 800),
+      frameSkipInterval: 1, // Set ke 1 agar memproses setiap frame tanpa error bagi nol
+      imageProcessingTimeout: const Duration(milliseconds: 5000), // Beri waktu lebih lama
       memoryCleanupInterval: const Duration(seconds: 20),
+      
+      // Hapus threshold yang terbalik/ekstrem agar menggunakan nilai standar ML Kit
+      eyeBlinkThresholdOpen: 0.8, // Probabilitas mata terbuka (default ML Kit)
+      eyeBlinkThresholdClosed: 0.2, // Probabilitas mata tertutup (default ML Kit)
+      enableContourAnalysisOnCentering: false,
+      minFaceSize: 0.2, // Pastikan wajah cukup besar di layar
+      enableMotionCorrelationCheck: false,
+      enableGyroscopeCheck: false,
     );
   }
 

@@ -80,24 +80,7 @@ app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput); // Sanitize all input
 
-// Import routes
-const authRoutes = require('./routes/authRoutes');
-const kendaraanRoutes = require('./routes/kendaraanRoutes');
-const akademikRoutes = require('./routes/akademikRoutes');
-const biometrikRoutes = require('./routes/biometrikRoutes');
-const parkirRoutes = require('./routes/parkirRoutes');
-const postRoutes = require('./routes/postRoutes');
-const anomaliRoutes = require('./routes/anomaliRoutes');
 
-// Import Swagger
-let swaggerSpec;
-try {
-    swaggerSpec = require('./utils/swagger');
-} catch (e) {
-    console.warn('[Warning] Swagger setup failed or swagger.js not found yet');
-}
-
-const port = process.env.PORT || 5050;
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
