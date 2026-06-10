@@ -4,6 +4,7 @@ import '../../services/akademik_service.dart';
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/jadwal_cache.dart';
 
 class JadwalMingguanPage extends StatefulWidget {
   const JadwalMingguanPage({super.key});
@@ -22,6 +23,8 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
   bool _isLoading = true;
   Map<String, List<dynamic>> _jadwalByDay = {};
   String? _errorMessage;
+  bool _isOfflineData = false;
+  DateTime? _cacheTimestamp;
 
   @override
   void initState() {
@@ -44,9 +47,12 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
     });
 
     try {
-      final jadwal = await _akademikService.getJadwalMingguan();
+      final (jadwal, fromCache) = await _akademikService.getJadwalMingguan();
+      final ts = fromCache ? await JadwalCache.getJadwalMingguanTimestamp() : null;
       setState(() {
         _jadwalByDay = jadwal;
+        _isOfflineData = fromCache;
+        _cacheTimestamp = ts;
         _isLoading = false;
       });
     } catch (e) {
@@ -55,6 +61,10 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
         _isLoading = false;
       });
     }
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -75,28 +85,51 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
           tabs: _shortDays.map((day) => Tab(text: day)).toList(),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadJadwal,
-                        child: const Text('Coba Lagi'),
-                      ),
-                    ],
+      body: Column(
+        children: [
+          if (_isOfflineData)
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off, size: 16, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Data offline${_cacheTimestamp != null ? 
+                        " — terakhir diperbarui ${_formatTimestamp(_cacheTimestamp!)}" : ""}',
+                    style: const TextStyle(fontSize: 12, color: Colors.orange),
                   ),
-                )
-              : TabBarView(
-                  controller: _tabController,
-                  children: _dayOrder.map((day) => _buildDaySchedule(day)).toList(),
-                ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadJadwal,
+                              child: const Text('Coba Lagi'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: _dayOrder.map((day) => _buildDaySchedule(day)).toList(),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 

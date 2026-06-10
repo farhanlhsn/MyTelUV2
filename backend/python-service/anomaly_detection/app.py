@@ -22,7 +22,6 @@ def check_api_key():
 def index():
     return "✅ Anomaly Detection Service Running on Port 5003", 200
 
-
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({
@@ -43,7 +42,6 @@ def haversine_vectorized(lat1, lon1, lat2, lon2):
         return c * r
     except Exception:
         return 0.0
-
 
 @app.route('/detect-anomalies', methods=['POST'])
 def detect_anomalies():
@@ -202,7 +200,6 @@ def detect_anomalies():
     except Exception as e:
         traceback.print_exc()  # Log ke stderr (server log)
         return jsonify({'success': False, 'error': 'Internal server error. Please check server logs.'}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5003, debug=True)

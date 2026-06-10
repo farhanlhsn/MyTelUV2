@@ -80,6 +80,24 @@ app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput); // Sanitize all input
 
+// Import routes
+const authRoutes = require('./routes/authRoutes');
+const kendaraanRoutes = require('./routes/kendaraanRoutes');
+const akademikRoutes = require('./routes/akademikRoutes');
+const biometrikRoutes = require('./routes/biometrikRoutes');
+const parkirRoutes = require('./routes/parkirRoutes');
+const postRoutes = require('./routes/postRoutes');
+const anomaliRoutes = require('./routes/anomaliRoutes');
+
+// Import Swagger
+let swaggerSpec;
+try {
+    swaggerSpec = require('./utils/swagger');
+} catch (e) {
+    console.warn('[Warning] Swagger setup failed or swagger.js not found yet');
+}
+
+const port = process.env.PORT || 5050;
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
@@ -159,6 +177,7 @@ io.on('connection', (socket) => {
 
 // Clean up orphaned files in uploads directory
 function cleanupUploads() {
+    const fs = require('fs');
     const uploadsDir = path.join(__dirname, 'uploads');
     if (fs.existsSync(uploadsDir)) {
         const files = fs.readdirSync(uploadsDir);
@@ -207,6 +226,71 @@ server.listen(port, '0.0.0.0', () => {
     if (process.env.NODE_ENV !== 'test') {
         initScheduler();
     }
+});
+// Graceful shutdown
+async function gracefulShutdown(signal) {
+    console.log(`\n[${signal}] Shutting down gracefully...`);
+    
+    server.close(async () => {
+        console.log('[Shutdown] HTTP server closed');
+        
+        try {
+            const prisma = require('./utils/prisma');
+            await prisma.$disconnect();
+            console.log('[Shutdown] Database disconnected');
+        } catch (e) {
+            console.error('[Shutdown] Error disconnecting database:', e);
+        }
+        
+        process.exit(0);
+    });
+
+    // Force shutdown after 10s if graceful fails
+    setTimeout(() => {
+        console.error('[Shutdown] Forced exit after 10s timeout');
+        process.exit(1);
+    }, 10000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        status: "error",
+        message: `Route ${req.method} ${req.originalUrl} not found`
+    });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${err.message}`, err.stack);
+
+    // Multer errors (file too large, wrong type, etc.)
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+            status: "error",
+            message: "File terlalu besar"
+        });
+    }
+
+    if (err.message?.includes('Not allowed by CORS')) {
+        return res.status(403).json({
+            status: "error",
+            message: "CORS not allowed"
+        });
+    }
+
+    // Hide internal details in production
+    const message = process.env.NODE_ENV === 'production'
+        ? 'Internal server error'
+        : err.message;
+
+    res.status(err.statusCode || 500).json({
+        status: "error",
+        message
+    });
 });
 
 // Graceful shutdown

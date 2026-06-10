@@ -5,6 +5,7 @@ import '../models/kelas_hari_ini.dart';
 import '../models/absensi.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
+import '../utils/logger.dart';
 
 class HomeController extends GetxController {
   final AkademikService _akademikService = AkademikService();
@@ -21,6 +22,7 @@ class HomeController extends GetxController {
   final RxList<AbsensiModel> absensiList = <AbsensiModel>[].obs;
   final RxMap<int, AbsensiStatsModel> absensiStats =
       <int, AbsensiStatsModel>{}.obs;
+  final RxBool isKelasHariIniFromCache = false.obs;
 
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
   final RxString errorMessage = ''.obs;
@@ -28,7 +30,6 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    loadUserData();
     loadData();
   }
 
@@ -58,24 +59,47 @@ class HomeController extends GetxController {
     isLoading.value = true;
     errorMessage.value = '';
 
-    try {
-      await Future.wait([loadKelasHariIni(), loadKelas(), loadAbsensi()]);
-    } catch (e) {
-      errorMessage.value = 'Failed to load data: ${e.toString()}';
-    } finally {
-      isLoading.value = false;
+    // First load user data so we have the role
+    await loadUserData();
+
+    final userRole = currentUser.value?.role;
+    final List<Future<dynamic>> tasks = [
+      Future(() => loadKelasHariIni()).catchError((e) {
+        debugLog('⚠️ Error loading kelas hari ini: $e');
+        return null;
+      }),
+    ];
+
+    if (userRole == 'MAHASISWA') {
+      tasks.add(
+        Future(() => loadKelas()).catchError((e) {
+          debugLog('⚠️ Error loading kelas: $e');
+          return null;
+        }),
+      );
+      tasks.add(
+        Future(() => loadAbsensi()).catchError((e) {
+          debugLog('⚠️ Error loading absensi: $e');
+          return null;
+        }),
+      );
     }
+
+    await Future.wait(tasks);
+    isLoading.value = false;
   }
 
   // Load kelas hari ini (classes for today)
   Future<void> loadKelasHariIni() async {
     isLoadingKelasHariIni.value = true;
     try {
-      final List<KelasHariIniModel> kelas = await _akademikService.getKelasHariIni();
+      final (kelas, fromCache) = await _akademikService.getKelasHariIni();
       kelasHariIniList.value = kelas;
+      isKelasHariIniFromCache.value = fromCache;
     } catch (e) {
       errorMessage.value = 'Failed to load kelas hari ini: ${e.toString()}';
       kelasHariIniList.value = [];
+      isKelasHariIniFromCache.value = false;
     } finally {
       isLoadingKelasHariIni.value = false;
     }
@@ -101,11 +125,7 @@ class HomeController extends GetxController {
     try {
       final List<AbsensiModel> absensi = await _akademikService.getAbsensiKu();
       absensiList.value = absensi;
-
-      // Load absensi stats
-      final Map<int, AbsensiStatsModel> stats = await _akademikService
-          .getAbsensiStats();
-      absensiStats.value = stats;
+      absensiStats.value = _buildAbsensiStats(absensi);
     } catch (e) {
       errorMessage.value = 'Failed to load absensi: ${e.toString()}';
       absensiList.value = [];
@@ -113,6 +133,25 @@ class HomeController extends GetxController {
     } finally {
       isLoadingAbsensi.value = false;
     }
+  }
+
+  Map<int, AbsensiStatsModel> _buildAbsensiStats(
+    List<AbsensiModel> absensiList,
+  ) {
+    final Map<int, Map<String, int>> countsByKelas = {};
+
+    for (final AbsensiModel absensi in absensiList) {
+      final counts = countsByKelas.putIfAbsent(
+        absensi.idKelas,
+        () => {'HADIR': 0, 'IJIN': 0, 'SAKIT': 0, 'ALPHA': 0},
+      );
+      counts[absensi.typeAbsensi] = (counts[absensi.typeAbsensi] ?? 0) + 1;
+    }
+
+    return countsByKelas.map(
+      (int idKelas, Map<String, int> counts) =>
+          MapEntry(idKelas, AbsensiStatsModel.fromJson(counts)),
+    );
   }
 
   // Get next class (kelas terdekat berdasarkan jadwal)

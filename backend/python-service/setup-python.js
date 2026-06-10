@@ -4,12 +4,15 @@ const fs = require('fs');
 
 console.log("🚀 Setting up Python Services for MyTelUV2...\n");
 
-const services = ['face_recognition', 'plate_recognition'];
+const services = ['face_recognition', 'plate_recognition', 'anomaly_detection'];
 
 function runCmd(cmd, args, cwd) {
     const isWindows = process.platform === 'win32';
-    // Use shell on Windows to allow things like `python -m venv` to work properly
-    const result = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: isWindows });
+    let execCmd = cmd;
+    if (isWindows && cmd.includes(' ') && !cmd.startsWith('"')) {
+        execCmd = `"${cmd}"`;
+    }
+    const result = spawnSync(execCmd, args, { cwd, stdio: 'inherit', shell: isWindows });
     if (result.error) {
         console.error(`❌ Error executing ${cmd} ${args.join(' ')} in ${cwd}`);
         console.error(result.error);
@@ -24,12 +27,31 @@ function runCmd(cmd, args, cwd) {
 
 // 1. Check Python installation
 console.log("Checking Python installation...");
-const checkPython = spawnSync('python', ['--version']);
-if (checkPython.error || checkPython.status !== 0) {
-    console.error("❌ Python is not installed or not in PATH. Please install Python 3.8 or higher.");
-    process.exit(1);
+let pythonExecutable = 'python';
+
+const isWindows = process.platform === 'win32';
+if (isWindows) {
+    // Check if stable Python 3.11 is installed via py launcher
+    const checkPy311 = spawnSync('py', ['-3.11', '-c', 'import sys; print(sys.executable)']);
+    if (!checkPy311.error && checkPy311.status === 0) {
+        pythonExecutable = checkPy311.stdout.toString().trim();
+        console.log(`✓ Detected stable Python 3.11 on Windows. Using: ${pythonExecutable}\n`);
+    } else {
+        const checkPython = spawnSync('python', ['--version']);
+        if (checkPython.error || checkPython.status !== 0) {
+            console.error("❌ Python is not installed or not in PATH. Please install Python 3.8 or higher.");
+            process.exit(1);
+        }
+        console.log(`✓ Using default Python: ${checkPython.stdout ? checkPython.stdout.toString().trim() : checkPython.stderr.toString().trim()}\n`);
+    }
+} else {
+    const checkPython = spawnSync('python', ['--version']);
+    if (checkPython.error || checkPython.status !== 0) {
+        console.error("❌ Python is not installed or not in PATH. Please install Python 3.8 or higher.");
+        process.exit(1);
+    }
+    console.log(`✓ Found ${checkPython.stdout ? checkPython.stdout.toString().trim() : checkPython.stderr.toString().trim()}\n`);
 }
-console.log(`✓ Found ${checkPython.stdout ? checkPython.stdout.toString().trim() : checkPython.stderr.toString().trim()}\n`);
 
 // 2. Setup each service
 for (const service of services) {
@@ -42,7 +64,7 @@ for (const service of services) {
     }
 
     console.log("  Creating virtual environment...");
-    if (!runCmd('python', ['-m', 'venv', 'venv'], serviceDir)) continue;
+    if (!runCmd(pythonExecutable, ['-m', 'venv', 'venv'], serviceDir)) continue;
 
     console.log("  Installing dependencies...");
     const isWindows = process.platform === 'win32';

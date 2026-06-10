@@ -12,7 +12,7 @@ class PostService {
   Future<List<PostModel>> getAllPosts({int page = 1, int limit = 10}) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/posts',
+        '/api/v1/posts',
         queryParameters: {'page': page, 'limit': limit},
       );
 
@@ -34,7 +34,7 @@ class PostService {
   Future<PostModel?> getPostById(int id) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/posts/$id',
+        '/api/v1/posts/$id',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -91,7 +91,7 @@ class PostService {
       }
 
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/posts',
+        '/api/v1/posts',
         data: formData,
       );
 
@@ -114,7 +114,7 @@ class PostService {
   Future<bool> deletePost(int id) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/posts/$id',
+        '/api/v1/posts/$id',
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -126,7 +126,7 @@ class PostService {
   Future<Map<String, dynamic>> toggleLike(int postId) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/posts/$postId/like',
+        '/api/v1/posts/$postId/like',
       );
 
       if (response.data is Map<String, dynamic>) {
@@ -143,7 +143,7 @@ class PostService {
   Future<List<CommentModel>> getComments(int postId, {int page = 1, int limit = 20}) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/posts/$postId/comments',
+        '/api/v1/posts/$postId/comments',
         queryParameters: {'page': page, 'limit': limit},
       );
 
@@ -165,7 +165,7 @@ class PostService {
   Future<CommentModel?> addComment(int postId, String content) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        '/api/posts/$postId/comments',
+        '/api/v1/posts/$postId/comments',
         data: {'content': content},
       );
 
@@ -185,7 +185,7 @@ class PostService {
   Future<bool> deleteComment(int postId, int commentId) async {
     try {
       final Response<dynamic> response = await _dio.delete<dynamic>(
-        '/api/posts/$postId/comments/$commentId',
+        '/api/v1/posts/$postId/comments/$commentId',
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
@@ -197,7 +197,7 @@ class PostService {
   Future<List<PostModel>> getMyPosts({int page = 1, int limit = 10}) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
-        '/api/posts/me',
+        '/api/v1/posts/me',
         queryParameters: {'page': page, 'limit': limit},
       );
 

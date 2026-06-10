@@ -148,7 +148,7 @@ class NotificationService {
   static Future<void> _registerTokenWithBackend(String token) async {
     try {
       await ApiClient.dio.post<dynamic>(
-        '/api/auth/fcm-token',
+        '/api/v1/auth/fcm-token',
         data: <String, String>{'fcm_token': token},
       );
       debugPrint('✅ FCM token registered with backend');
@@ -171,16 +171,10 @@ class NotificationService {
   }
 
   /// Unregister token (call on logout)
+  /// Note: FCM token dibersihkan oleh backend saat POST /auth/logout.
+  /// Method ini hanya membersihkan state lokal.
   static Future<void> unregisterToken() async {
-    try {
-      // Clear token on backend by sending empty/null
-      await ApiClient.dio.post<dynamic>(
-        '/api/auth/fcm-token',
-        data: <String, String?>{'fcm_token': null},
-      );
-      debugPrint('✅ FCM token unregistered');
-    } catch (e) {
-      debugPrint('❌ Failed to unregister FCM token: $e');
-    }
+    _fcmToken = null;
+    debugPrint('✅ FCM token cleared locally (backend clears on /logout)');
   }
 }

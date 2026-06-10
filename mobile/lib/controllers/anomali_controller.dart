@@ -4,6 +4,8 @@ import '../models/anomali_model.dart';
 import '../services/api_client.dart';
 import 'package:mobile/utils/logger.dart';
 
+
+
 class AnomaliController extends GetxController {
   final RxBool isLoading = false.obs;
   final RxList<AnomaliModel> anomaliList = <AnomaliModel>[].obs;
@@ -48,3 +50,4 @@ class AnomaliController extends GetxController {
     }
   }
 }
+

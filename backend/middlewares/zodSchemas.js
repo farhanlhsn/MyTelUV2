@@ -10,12 +10,19 @@ const registerSchema = z.object({
     password: z.string()
         .min(6, "Password must be at least 6 characters")
         .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password must contain at least one letter and one number"),
-    role: z.enum(['MAHASISWA', 'DOSEN']).optional()
+    role: z.enum(['MAHASISWA', 'DOSEN']).optional(),
+    nim_nip: z.string()
+        .regex(/^\d{11,12}$/, "NIM/NIP must be 11 or 12 digits")
+        .optional()
 });
 
 const loginSchema = z.object({
     username: z.string().min(1, "Username is required"),
     password: z.string().min(1, "Password is required")
+});
+
+const refreshTokenSchema = z.object({
+    refresh_token: z.string().min(1, "Refresh token is required")
 });
 
 const updateProfileSchema = z.object({
@@ -39,6 +46,17 @@ const fcmTokenSchema = z.object({
         .min(100, "FCM token too short")
         .max(300, "FCM token too long")
         .regex(/^[a-zA-Z0-9:_\-]+$/, "Invalid FCM token format")
+});
+
+const forgotPasswordSchema = z.object({
+    username: z.string().min(1, "Username is required")
+});
+
+const resetPasswordSchema = z.object({
+    token: z.string().min(1, "Token is required"),
+    newPassword: z.string()
+        .min(6, "New password must be at least 6 characters")
+        .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password must contain at least one letter and one number")
 });
 
 // Kendaraan Schemas
@@ -67,7 +85,9 @@ const addBiometrikSchema = z.object({
 const biometrikAbsenSchema = z.object({
     latitude: z.union([z.number(), z.string()]),
     longitude: z.union([z.number(), z.string()]),
-    id_sesi_absensi: z.union([z.number(), z.string()]).optional()
+    id_sesi_absensi: z.union([z.number(), z.string()]).optional(),
+    liveness_verified: z.union([z.boolean(), z.string()]).optional(),
+    is_mock_location: z.union([z.boolean(), z.string()]).optional()
 });
 
 // Akademik Schemas
@@ -129,9 +149,12 @@ const createAbsensiSchema = z.object({
 module.exports = {
     registerSchema,
     loginSchema,
+    refreshTokenSchema,
     updateProfileSchema,
     changePasswordSchema,
     adminResetPasswordSchema,
+    forgotPasswordSchema,
+    resetPasswordSchema,
     fcmTokenSchema,
     registerKendaraanSchema,
     verifyKendaraanSchema,

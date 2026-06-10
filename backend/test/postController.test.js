@@ -10,6 +10,7 @@ jest.mock('../utils/prisma', () => ({
     post: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
     postLike: { findUnique: jest.fn(), create: jest.fn(), delete: jest.fn(), count: jest.fn() },
     postComment: { findMany: jest.fn(), count: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+    user: { findUnique: jest.fn() },
     $transaction: jest.fn(),
 }));
 
@@ -116,10 +117,11 @@ describe('Post Controller Tests', () => {
             const req = createMockReq({}, { id_user: 1 }, { id: 1 });
             const res = createMockRes();
 
-            prisma.post.findFirst.mockResolvedValue({ id_post: 1 });
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1, id_user: 2, content: 'Hello' });
             prisma.postLike.findUnique.mockResolvedValue(null); // Not liked yet
             prisma.postLike.create.mockResolvedValue({});
             prisma.postLike.count.mockResolvedValue(1);
+            prisma.user.findUnique.mockResolvedValue({ nama: 'Alice' });
 
             await postController.toggleLike(req, res);
 
@@ -192,8 +194,8 @@ describe('Post Controller Tests', () => {
             const req = createMockReq({ content: 'Nice' }, { id_user: 1 }, { id: 1 });
             const res = createMockRes();
 
-            prisma.post.findFirst.mockResolvedValue({ id_post: 1 });
-            prisma.postComment.create.mockResolvedValue({ id_comment: 1, content: 'Nice' });
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1, id_user: 2, content: 'Hello' });
+            prisma.postComment.create.mockResolvedValue({ id_comment: 1, content: 'Nice', user: { nama: 'Alice' } });
 
             await postController.addComment(req, res);
 

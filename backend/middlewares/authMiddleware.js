@@ -33,7 +33,8 @@ exports.protect = asyncHandler(async (req, res, next) => {
         id_user: true,
         username: true,
         nama: true,
-        role: true
+        role: true,
+        nim_nip: true
       }
     });
 

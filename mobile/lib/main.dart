@@ -6,7 +6,7 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize date formatting for Indonesian locale
   await initializeDateFormatting('id_ID', null);
   

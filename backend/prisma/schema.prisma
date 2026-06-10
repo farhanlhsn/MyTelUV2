@@ -8,33 +8,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =================== Enums ====================
+enum Role { 
+  MAHASISWA 
+  DOSEN 
+  ADMIN 
+}
+enum TypeAbsensi { 
+  REMOTE_ABSENSI 
+  LOKAL_ABSENSI 
+}
+enum TypeAnomali { 
+  KEHADIRAN_GANDA 
+  TIDAK_HADIR_BERULANG 
+  POLA_WAKTU_TIDAK_WAJAR
+}
+enum StatusAnomali {
+  OPEN
+  REVIEWED
+  RESOLVED
+}
+enum StatusPengajuan {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
+}
+enum ParkingType {
+  MASUK
+  KELUAR
+}
+
+// =================== Models ===================
 model User {
-  id_user                    Int                     @id @default(autoincrement())
-  nama                       String
-  username                   String                  @unique
-  password                   String
-  role                       Role
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt
-  deletedAt                  DateTime?
-  email                      String?                 @unique
-  fcm_token                  String?
-  nim_nip                    String?                 @unique @db.VarChar(20)
-  profile_picture            String?
-  push_notifications_enabled Boolean                 @default(true)
-  absensi                    Absensi[]
-  dataBiometrik              DataBiometrik?
-  refreshTokens              RefreshToken[]
-  passwordResetTokens        PasswordResetToken[]
-  kendaraan                  Kendaraan[]
-  laporanAnomali             LaporanAnomali[]
-  logParkir                  LogParkir[]
-  kelasDiampu                Kelas[]                 @relation("DosenKelas")
-  pesertaKelas               PesertaKelas[]
-  posts                      Post[]
-  postLikes                  PostLike[]
-  postComments               PostComment[]
-  jadwalPengganti            JadwalPengganti[]       @relation("DosenJadwalPengganti")
+  id_user        Int              @id @default(autoincrement())
+  nama           String
+  username       String           @unique
+  password       String
+  role           Role
+  nim_nip        String?          @unique @db.VarChar(20)
+  email          String?          @unique
+  fcm_token      String?          // Firebase Cloud Messaging device token
+  push_notifications_enabled Boolean @default(true)
+  profile_picture String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  dataBiometrik  DataBiometrik?
+  refreshTokens  RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  kendaraan      Kendaraan[]
+  absensi        Absensi[]
+  laporanAnomali LaporanAnomali[]
+  logParkir      LogParkir[]
+  kelasDiampu    Kelas[]          @relation("DosenKelas")
+  pesertaKelas   PesertaKelas[]
+  posts          Post[]
+  postLikes      PostLike[]
+  postComments   PostComment[]
+  jadwalPengganti JadwalPengganti[] @relation("DosenJadwalPengganti")
 
   @@index([role], map: "idx_user_role")
   @@index([createdAt], map: "idx_user_created")
@@ -43,14 +75,14 @@ model User {
 }
 
 model RefreshToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  id_user   Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
-
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  id_user     Int
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  
   @@index([token], map: "idx_refresh_token")
   @@index([id_user], map: "idx_refresh_user")
   @@index([expiresAt], map: "idx_refresh_expires")
@@ -58,14 +90,14 @@ model RefreshToken {
 }
 
 model PasswordResetToken {
-  id        Int       @id @default(autoincrement())
-  token     String    @unique
-  id_user   Int
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  id_user     Int
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime @default(now())
 
-  user      User      @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
+  user        User     @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
 
   @@index([token], map: "idx_reset_token")
   @@index([id_user], map: "idx_reset_user")
@@ -164,42 +196,43 @@ model Matakuliah {
 }
 
 model Semester {
-  id_semester     Int       @id @default(autoincrement())
-  nama_semester   String
-  tanggal_mulai   DateTime
+  id_semester   Int       @id @default(autoincrement())
+  nama_semester String
+  tanggal_mulai DateTime
   tanggal_selesai DateTime
-  drop_deadline   DateTime
-  is_active       Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
-  kelas           Kelas[]
+  drop_deadline DateTime
+  is_active     Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  kelas         Kelas[]
 
   @@map("semesters")
 }
 
 model Kelas {
-  id_kelas        Int               @id @default(autoincrement())
-  id_matakuliah   Int
-  id_dosen        Int
-  id_semester     Int
-  hari            Int?
-  jam_mulai       DateTime          @db.Time(6)
-  jam_berakhir    DateTime          @db.Time(6)
-  nama_kelas      String
-  ruangan         String
-  kapasitas       Int               @default(50)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  deletedAt       DateTime?
+  id_kelas       Int       @id @default(autoincrement())
+  id_matakuliah  Int
+  id_dosen       Int
+  id_semester    Int       // Wajib — setiap kelas harus terhubung ke semester
+  hari           Int?      // 1=Senin, 2=Selasa, 3=Rabu, 4=Kamis, 5=Jumat, 6=Sabtu, 7=Minggu
+  jam_mulai      Unsupported("time")
+  jam_berakhir   Unsupported("time")
+  nama_kelas     String
+  ruangan        String
+  kapasitas      Int       @default(50)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
-  matakuliah      Matakuliah        @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
-  dosen           User              @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
-  semester        Semester          @relation(fields: [id_semester], references: [id_semester], onDelete: Restrict)
-  peserta         PesertaKelas[]
-  absensi         Absensi[]
-  laporan         LaporanAnomali[]
-  sesiAbsensi     SesiAbsensi[]
+  matakuliah Matakuliah @relation(fields: [id_matakuliah], references: [id_matakuliah], onDelete: Restrict)
+  dosen      User       @relation("DosenKelas", fields: [id_dosen], references: [id_user], onDelete: Restrict)
+  semester   Semester   @relation(fields: [id_semester], references: [id_semester], onDelete: Restrict)
+  peserta    PesertaKelas[]
+  absensi    Absensi[]
+  laporan    LaporanAnomali[]
+  sesiAbsensi  SesiAbsensi[]
   jadwalPengganti JadwalPengganti[]
 
   @@index([id_matakuliah, id_dosen], map: "idx_kelas_mk_dosen")
@@ -267,17 +300,17 @@ model SesiAbsensi {
 }
 
 model Absensi {
-  id_absensi       Int                  @id @default(autoincrement())
-  id_user          Int
-  id_kelas         Int
-  id_sesi_absensi  Int
-  type_absensi     TypeAbsensi
-  is_mock_location Boolean              @default(false)
-  photo_url        String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  deletedAt        DateTime?
-  koordinat        Unsupported("point")
+  id_absensi   Int       @id @default(autoincrement())
+  id_user      Int
+  id_kelas     Int
+  id_sesi_absensi Int
+  type_absensi TypeAbsensi
+  is_mock_location Boolean @default(false)
+  photo_url    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  koordinat    Unsupported("point")
 
   user             User                 @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   kelas            Kelas                @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
@@ -292,18 +325,18 @@ model Absensi {
 }
 
 model LaporanAnomali {
-  id_anomali    Int           @id @default(autoincrement())
-  id_user       Int
-  id_kelas      Int?
-  type_anomali  TypeAnomali
-  status        StatusAnomali @default(OPEN)
-  catatan_dosen String?       @db.Text
-  resolved_at   DateTime?
-  deskripsi     String?       @db.Text
-  confidence    Float?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id_anomali   Int           @id @default(autoincrement())
+  id_user      Int
+  id_kelas     Int?
+  type_anomali TypeAnomali
+  status       StatusAnomali @default(OPEN)
+  catatan_dosen String?      @db.Text
+  resolved_at  DateTime?
+  deskripsi    String?       @db.Text
+  confidence   Float?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 
   user          User          @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   kelas         Kelas?        @relation(fields: [id_kelas], references: [id_kelas])

@@ -17,8 +17,9 @@ class DetailUserHistoriPengajuan extends StatelessWidget {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
       home: DetailPengajuanPlat(
+        idKendaraan: 1,
         licensePlate: "DD 0000 KE",
-        status: "Ditolak",
+        status: "DITOLAK",
         statusColor: Color(0xFFF85E55),
         feedback: dummyFeedback,
       ),
@@ -28,6 +29,7 @@ class DetailUserHistoriPengajuan extends StatelessWidget {
 
 // Ini adalah class baru yang Anda minta: DetailPengajuanPlat
 class DetailPengajuanPlat extends StatelessWidget {
+  final int idKendaraan;
   final String licensePlate;
   final String status;
   final Color statusColor;
@@ -35,6 +37,7 @@ class DetailPengajuanPlat extends StatelessWidget {
 
   const DetailPengajuanPlat({
     super.key,
+    required this.idKendaraan,
     required this.licensePlate,
     required this.status,
     required this.statusColor,
@@ -163,6 +166,36 @@ class DetailPengajuanPlat extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 30),
+                      if (status.toUpperCase() == 'DITOLAK')
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              // Navigate to resubmit page
+                              Navigator.pushNamed(
+                                context, 
+                                '/resubmit-kendaraan',
+                                arguments: {'id_kendaraan': idKendaraan},
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE63946),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: const Text(
+                              'AJUKAN ULANG',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 20),
                     ],
                   ),

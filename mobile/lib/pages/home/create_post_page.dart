@@ -18,13 +18,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
   final PostService _postService = PostService();
   final ImagePicker _picker = ImagePicker();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
-  
-  List<File> _selectedMedia = [];
+
+  final List<File> _selectedMedia = [];
   bool _isLoading = false;
   String? _locationName;
   String? _userName;
 
   static const Color primaryColor = Color(0xFFE63946);
+  static const int _maxMediaCount = 4;
+  static const int _maxVideoBytes = 25 * 1024 * 1024;
 
   @override
   void initState() {
@@ -49,16 +51,29 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   Future<void> _pickImages() async {
     if (_isLoading) return;
+    final remainingSlots = _maxMediaCount - _selectedMedia.length;
+    if (remainingSlots <= 0) {
+      _showError('Maksimal $_maxMediaCount media per postingan');
+      return;
+    }
+
     try {
       final List<XFile> images = await _picker.pickMultiImage(
-        imageQuality: 80,
-        maxWidth: 1200,
+        imageQuality: 72,
+        maxWidth: 1080,
+        maxHeight: 1080,
       );
-      
+
       if (images.isNotEmpty) {
+        final selectedImages = images.take(remainingSlots);
         setState(() {
-          _selectedMedia.addAll(images.map((img) => File(img.path)));
+          _selectedMedia.addAll(selectedImages.map((img) => File(img.path)));
         });
+        if (images.length > remainingSlots) {
+          _showError(
+            'Sebagian gambar dilewati karena batas $_maxMediaCount media',
+          );
+        }
       }
     } catch (e) {
       _showError('Gagal memilih gambar');
@@ -67,15 +82,25 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   Future<void> _pickVideo() async {
     if (_isLoading) return;
+    if (_selectedMedia.length >= _maxMediaCount) {
+      _showError('Maksimal $_maxMediaCount media per postingan');
+      return;
+    }
+
     try {
       final XFile? video = await _picker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration: const Duration(seconds: 60),
+        maxDuration: const Duration(seconds: 30),
       );
-      
+
       if (video != null) {
+        final videoFile = File(video.path);
+        if (await videoFile.length() > _maxVideoBytes) {
+          _showError('Video maksimal 25 MB');
+          return;
+        }
         setState(() {
-          _selectedMedia.add(File(video.path));
+          _selectedMedia.add(videoFile);
         });
       }
     } catch (e) {
@@ -129,10 +154,12 @@ class _CreatePostPageState extends State<CreatePostPage> {
             ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
-        
+
         Get.back(result: true);
       }
     } catch (e) {
@@ -146,16 +173,15 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   Future<void> _setLocation() async {
     if (_isLoading) return;
-    
+
     final result = await Navigator.push<LocationData>(
       context,
       MaterialPageRoute(
-        builder: (context) => LocationPickerPage(
-          initialLocation: _locationName,
-        ),
+        builder: (context) =>
+            LocationPickerPage(initialLocation: _locationName),
       ),
     );
-    
+
     if (result != null && mounted) {
       setState(() {
         _locationName = result.name;
@@ -196,25 +222,33 @@ class _CreatePostPageState extends State<CreatePostPage> {
               valueListenable: _contentController,
               builder: (context, value, child) {
                 return ElevatedButton(
-                  onPressed: _isLoading || value.text.trim().isEmpty 
-                      ? null 
+                  onPressed: _isLoading || value.text.trim().isEmpty
+                      ? null
                       : _submitPost,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                     disabledBackgroundColor: primaryColor.withOpacity(0.5),
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                   ),
                   child: _isLoading
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text(
                           'Posting',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                 );
               },
@@ -238,14 +272,19 @@ class _CreatePostPageState extends State<CreatePostPage> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
-                            colors: [primaryColor, primaryColor.withOpacity(0.7)],
+                            colors: [
+                              primaryColor,
+                              primaryColor.withOpacity(0.7),
+                            ],
                           ),
                         ),
                         child: CircleAvatar(
                           radius: 22,
                           backgroundColor: Colors.transparent,
                           child: Text(
-                            _userName?.isNotEmpty == true ? _userName![0].toUpperCase() : 'U',
+                            _userName?.isNotEmpty == true
+                                ? _userName![0].toUpperCase()
+                                : 'U',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -260,17 +299,23 @@ class _CreatePostPageState extends State<CreatePostPage> {
                         children: [
                           Text(
                             _userName ?? 'User',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
                           Text(
                             'Posting ke publik',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 20),
 
                   // Content Input
@@ -285,7 +330,10 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       hintText: 'Apa yang sedang Anda pikirkan?',
-                      hintStyle: TextStyle(fontSize: 17, color: Colors.grey[400]),
+                      hintStyle: TextStyle(
+                        fontSize: 17,
+                        color: Colors.grey[400],
+                      ),
                     ),
                   ),
 
@@ -293,7 +341,10 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   if (_locationName != null) ...[
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
@@ -301,22 +352,35 @@ class _CreatePostPageState extends State<CreatePostPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.location_on, size: 16, color: Colors.blue),
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             _locationName!,
-                            style: const TextStyle(color: Colors.blue, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: _isLoading ? null : () => setState(() => _locationName = null),
+                            onTap: _isLoading
+                                ? null
+                                : () => setState(() => _locationName = null),
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
                                 color: Colors.blue.withOpacity(0.2),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close, size: 14, color: Colors.blue),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.blue,
+                              ),
                             ),
                           ),
                         ],
@@ -355,21 +419,25 @@ class _CreatePostPageState extends State<CreatePostPage> {
                                 ),
                               ),
                               if (!_isLoading)
-                              Positioned(
-                                top: 6,
-                                right: 16,
-                                child: GestureDetector(
-                                  onTap: () => _removeMedia(index),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black54,
-                                      shape: BoxShape.circle,
+                                Positioned(
+                                  top: 6,
+                                  right: 16,
+                                  child: GestureDetector(
+                                    onTap: () => _removeMedia(index),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                    child: const Icon(Icons.close, size: 16, color: Colors.white),
                                   ),
                                 ),
-                              ),
                             ],
                           );
                         },
@@ -391,7 +459,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
             child: SafeArea(
               child: Row(
                 children: [
-                   _buildAttachmentButton(
+                  _buildAttachmentButton(
                     icon: Icons.photo_library,
                     color: Colors.green,
                     onTap: _pickImages,
@@ -414,7 +482,10 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     builder: (context, value, child) {
                       return Text(
                         '${value.text.length} karakter',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 12,
+                        ),
                       );
                     },
                   ),

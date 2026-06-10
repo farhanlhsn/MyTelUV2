@@ -1,5 +1,5 @@
 const express = require('express');
-const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas } = require('../controllers/parkirController');
+const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas, exportParkirLogs, manualOverride } = require('../controllers/parkirController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { edgeLimiter } = require('../middlewares/rateLimiterMiddleware');
 const multer = require('multer');
@@ -69,6 +69,21 @@ router.post('/:id/reconcile',
     protect,
     authorize('ADMIN'),
     reconcileKapasitas
+);
+
+// Export log parkir sebagai CSV (Admin only)
+// Query: ?parkiran_id=&from=2024-01-01&to=2024-12-31
+router.get('/export',
+    protect,
+    authorize('ADMIN'),
+    exportParkirLogs
+);
+
+// Manual gate override (Admin only) — force entry/exit for a vehicle
+router.post('/:id/override',
+    protect,
+    authorize('ADMIN'),
+    manualOverride
 );
 
 module.exports = router;

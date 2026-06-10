@@ -1,0 +1,40 @@
+# ============================================================
+# docker-compose.test.yml — Test Environment Services
+# ============================================================
+# Menjalankan layanan yang dibutuhkan untuk E2E testing.
+# Backend, mobile, dan AI services dijalankan secara lokal
+# (bukan via Docker) agar proses debugging lebih mudah.
+#
+# Jalankan: docker compose -f docker-compose.test.yml up -d db-test
+# Hentikan: docker compose -f docker-compose.test.yml down -v
+# ============================================================
+
+version: "3.8"
+
+services:
+  db-test:
+    image: postgres:15-alpine
+    container_name: myteluv2-postgres-test
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: myteluv2_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-test:/var/lib/postgresql/data
+    networks:
+      - myteluv2-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d myteluv2_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+networks:
+  myteluv2-test-network:
+    driver: bridge
+
+volumes:
+  pgdata-test:
