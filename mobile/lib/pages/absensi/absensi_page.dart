@@ -17,12 +17,73 @@ class _AbsensiPageState extends State<AbsensiPage> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Filter states
+  String? _filterQuery;
+  DateTime? _filterDate;
+  String? _filterType; // null, 'AMAN', 'KRITIS'
+  final TextEditingController _searchController = TextEditingController();
+
   final Color primaryRed = const Color(0xFFE63946);
 
   @override
   void initState() {
     super.initState();
     _loadHistory();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filteredHistoryData {
+    return _historyData.where((item) {
+      final kelas = item['kelas'] as Map<String, dynamic>?;
+      final stats = item['stats'] as Map<String, dynamic>?;
+      final sessions = item['sessions'] as List<dynamic>? ?? [];
+      final matakuliah = kelas?['matakuliah'] as Map<String, dynamic>?;
+      final dosen = kelas?['dosen'] as Map<String, dynamic>?;
+
+      bool matchSearch = true;
+      if (_filterQuery != null && _filterQuery!.isNotEmpty) {
+        final query = _filterQuery!.toLowerCase();
+        final subjectName = matakuliah?['nama_matakuliah']?.toString().toLowerCase() ?? '';
+        final subjectCode = matakuliah?['kode_matakuliah']?.toString().toLowerCase() ?? '';
+        final className = kelas?['nama_kelas']?.toString().toLowerCase() ?? '';
+        final lecturerName = dosen?['nama']?.toString().toLowerCase() ?? '';
+        matchSearch = subjectName.contains(query) ||
+            subjectCode.contains(query) ||
+            className.contains(query) ||
+            lecturerName.contains(query);
+      }
+
+      bool matchStatus = true;
+      if (_filterType != null) {
+        final double persentase = double.tryParse(stats?['persentase']?.toString() ?? '0') ?? 0;
+        if (_filterType == 'AMAN') {
+          matchStatus = persentase >= 75;
+        } else if (_filterType == 'KRITIS') {
+          matchStatus = persentase < 75;
+        }
+      }
+
+      bool matchDate = true;
+      if (_filterDate != null) {
+        matchDate = sessions.any((session) {
+          try {
+            final sessionDate = DateTime.parse(session['tanggal'].toString()).toLocal();
+            return sessionDate.year == _filterDate!.year &&
+                sessionDate.month == _filterDate!.month &&
+                sessionDate.day == _filterDate!.day;
+          } catch (_) {
+            return false;
+          }
+        });
+      }
+
+      return matchSearch && matchStatus && matchDate;
+    }).toList();
   }
 
   Future<void> _loadHistory() async {
@@ -84,15 +145,314 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ),
                 ),
                 padding: const EdgeInsets.all(20),
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _errorMessage != null
-                        ? Center(child: Text(_errorMessage!))
-                        : _historyData.isEmpty
-                            ? _buildEmptyState()
-                            : _buildHistoryList(),
+                child: _buildContent(primaryRed),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(Color primaryColor) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 60, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'Gagal memuat data',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _loadHistory, child: const Text('Coba Lagi')),
+          ],
+        ),
+      );
+    }
+
+    if (_historyData.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    final filteredHistory = _filteredHistoryData;
+
+    return Column(
+      children: [
+        _buildFilterBar(primaryColor),
+        const SizedBox(height: 16),
+        Expanded(
+          child: filteredHistory.isEmpty
+              ? Center(
+                  child: Text(
+                    'Tidak ada histori yang sesuai filter',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadHistory,
+                  child: ListView.separated(
+                    itemCount: filteredHistory.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final item = filteredHistory[index];
+                      return _buildKelasCard(item);
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterBar(Color primaryColor) {
+    final bool hasFilter =
+        _filterDate != null ||
+        _filterType != null ||
+        (_filterQuery != null && _filterQuery!.isNotEmpty);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cari Kelas / Mata Kuliah
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Cari mata kuliah, kelas, atau dosen...',
+              hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
+              suffixIcon: _filterQuery != null && _filterQuery!.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: Colors.grey.shade500,
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                          _filterQuery = null;
+                        });
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 16,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: primaryColor.withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _filterQuery = value;
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Filter Chips Row
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              // Filter Tanggal Sesi
+              _buildModernChip(
+                label: _filterDate == null
+                    ? 'Tanggal Sesi'
+                    : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
+                icon: Icons.calendar_today_outlined,
+                isActive: _filterDate != null,
+                primaryColor: primaryColor,
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _filterDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: ColorScheme.light(primary: primaryColor),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _filterDate = picked;
+                    });
+                  }
+                },
+                onClear: _filterDate != null
+                    ? () {
+                        setState(() {
+                          _filterDate = null;
+                        });
+                      }
+                    : null,
+              ),
+              const SizedBox(width: 8),
+
+              // Filter Status Kehadiran
+              PopupMenuButton<String>(
+                initialValue: _filterType ?? 'Semua',
+                offset: const Offset(0, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onSelected: (String value) {
+                  setState(() {
+                    _filterType = value == 'Semua' ? null : value;
+                  });
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    value: 'Semua',
+                    child: Text(
+                      'Semua Status',
+                      style: TextStyle(
+                        color: _filterType == null
+                            ? primaryColor
+                            : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'AMAN',
+                    child: Text(
+                      'Kehadiran Aman (>= 75%)',
+                      style: TextStyle(
+                        color: _filterType == 'AMAN'
+                            ? primaryColor
+                            : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'KRITIS',
+                    child: Text(
+                      'Kehadiran Kritis (< 75%)',
+                      style: TextStyle(
+                        color: _filterType == 'KRITIS'
+                            ? primaryColor
+                            : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+                child: _buildModernChip(
+                  label: _filterType == null
+                      ? 'Status'
+                      : (_filterType == 'AMAN' ? 'Aman' : 'Kritis'),
+                  icon: Icons.filter_list_rounded,
+                  isActive: _filterType != null,
+                  primaryColor: primaryColor,
+                  onTap: null, // Handled by PopupMenuButton
+                  onClear: _filterType != null
+                      ? () {
+                          setState(() {
+                            _filterType = null;
+                          });
+                        }
+                      : null,
+                ),
+              ),
+
+              if (hasFilter) ...[
+                const SizedBox(width: 12),
+                Container(height: 24, width: 1, color: Colors.grey.shade300),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _searchController.clear();
+                      _filterDate = null;
+                      _filterType = null;
+                      _filterQuery = null;
+                    });
+                  },
+                  child: Text(
+                    'Reset',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModernChip({
+    required String label,
+    required IconData icon,
+    required bool isActive,
+    required Color primaryColor,
+    VoidCallback? onTap,
+    VoidCallback? onClear,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? primaryColor.withOpacity(0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? primaryColor.withOpacity(0.5)
+                : Colors.grey.shade300,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? primaryColor : Colors.grey.shade500,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                color: isActive ? primaryColor : Colors.grey.shade700,
+              ),
+            ),
+            if (isActive && onClear != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(Icons.close, size: 14, color: primaryColor),
+              ),
+            ],
           ],
         ),
       ),
@@ -116,20 +476,6 @@ class _AbsensiPageState extends State<AbsensiPage> {
             style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryList() {
-    return RefreshIndicator(
-      onRefresh: _loadHistory,
-      child: ListView.separated(
-        itemCount: _historyData.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 16),
-        itemBuilder: (context, index) {
-          final item = _historyData[index];
-          return _buildKelasCard(item);
-        },
       ),
     );
   }
