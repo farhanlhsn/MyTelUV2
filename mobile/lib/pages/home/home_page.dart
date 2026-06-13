@@ -595,13 +595,13 @@ class _HomePageState extends State<HomePage> {
               if (userRole == 'ADMIN') {
                 filteredMenuItems.add({
                   'icon': Icons.school,
-                  'label': 'Academic',
+                  'label': 'Akademik',
                   'color': const Color(0xFFE63946),
                   'route': AppRoutes.adminAkademik,
                 });
                 filteredMenuItems.add({
                   'icon': Icons.manage_accounts,
-                  'label': 'Users',
+                  'label': 'Pengguna',
                   'color': const Color(0xFFE63946),
                   'route': AppRoutes.adminUserManagement,
                 });
@@ -611,7 +611,7 @@ class _HomePageState extends State<HomePage> {
               if (userRole == 'ADMIN' || userRole == 'DOSEN') {
                 filteredMenuItems.add({
                   'icon': Icons.warning_amber_rounded,
-                  'label': 'Anomaly',
+                  'label': 'Anomali',
                   'color': const Color(0xFFE63946),
                   'route': AppRoutes.anomaliDashboard,
                 });
@@ -742,9 +742,9 @@ class _HomePageState extends State<HomePage> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildNavItem(Icons.home, "Home", 0),
-            _buildNavItem(Icons.location_on_outlined, "Maps", 1),
-            _buildNavItem(Icons.post_add_rounded, "Post", 2),
-            _buildNavItem(Icons.settings_outlined, "Settings", 3),
+            _buildNavItem(Icons.location_on_outlined, "Peta", 1),
+            _buildNavItem(Icons.post_add_rounded, "Kiriman", 2),
+            _buildNavItem(Icons.settings_outlined, "Pengaturan", 3),
           ],
         ),
       ),

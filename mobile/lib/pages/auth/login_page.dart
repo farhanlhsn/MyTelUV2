@@ -87,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Welcome Back',
+                            'Selamat Datang Kembali',
                             style: TextStyle(
                               color: Color(0xFFE63946),
                               fontWeight: FontWeight.bold,
@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           const Text(
-                            'Hello there, sign in to continue',
+                            'Halo, masuk untuk melanjutkan',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 30),
@@ -255,7 +255,7 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                                 children: <TextSpan>[
                                   const TextSpan(
-                                    text: "Don't have an account? ",
+                                    text: "Belum punya akun? ",
                                   ),
                                   TextSpan(
                                     text: 'Sign Up',

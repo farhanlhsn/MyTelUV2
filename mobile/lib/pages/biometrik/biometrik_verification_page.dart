@@ -309,6 +309,33 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       minFaceSize: 0.2, // Pastikan wajah cukup besar di layar
       enableMotionCorrelationCheck: false,
       enableGyroscopeCheck: false,
+      challengeInstructions: {
+        ChallengeType.blink: 'Silakan berkedip',
+        ChallengeType.smile: 'Silakan tersenyum',
+        ChallengeType.turnRight: 'Tengok ke kanan',
+        ChallengeType.turnLeft: 'Tengok ke kiri',
+        ChallengeType.normal: 'Posisikan wajah lurus ke depan',
+      },
+      messages: const LivenessMessages(
+        moveFartherAway: 'Jauhkan wajah dari kamera',
+        moveCloser: 'Dekatkan wajah ke kamera',
+        moveRight: 'Geser wajah ke kanan',
+        moveLeft: 'Geser wajah ke kiri',
+        moveUp: 'Geser wajah ke atas',
+        moveDown: 'Geser wajah ke bawah',
+        perfectHoldStill: 'Sempurna! Tahan posisi Anda',
+        noFaceDetected: 'Wajah tidak terdeteksi',
+        errorCheckingFacePosition: 'Gagal mendeteksi posisi wajah',
+        initializing: 'Menyiapkan...',
+        initializingCamera: 'Menghubungkan kamera...',
+        errorInitializingCamera: 'Kamera gagal dimulai. Silakan mulai ulang aplikasi.',
+        initialInstruction: 'Posisikan wajah Anda di dalam oval',
+        poorLighting: 'Pindah ke area yang lebih terang',
+        processingVerification: 'Memproses verifikasi...',
+        verificationComplete: 'Verifikasi wajah selesai!',
+        spoofingDetected: 'Terdeteksi potensi manipulasi (spoofing).',
+        errorProcessing: 'Terjadi kesalahan pemrosesan',
+      ),
     );
   }
 

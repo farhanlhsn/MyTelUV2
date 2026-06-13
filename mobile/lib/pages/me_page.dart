@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'dosen/dosen_manage_absensi_page.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -19,7 +18,7 @@ class MePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text('Profil'),
         backgroundColor: const Color(0xFFE63946),
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -40,7 +39,7 @@ class MePage extends StatelessWidget {
               }
 
               if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
+                return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
               }
 
               final Map<String, String?> data = snapshot.data ?? {};

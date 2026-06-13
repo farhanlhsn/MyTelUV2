@@ -117,7 +117,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Welcome to us,',
+                            'Selamat bergabung,',
                             style: TextStyle(
                               color: Color(0xFFE63946),
                               fontWeight: FontWeight.bold,
@@ -125,7 +125,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                           const Text(
-                            'Hello there, create new account',
+                            'Halo, buat akun baru Anda',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 20),
@@ -322,11 +322,11 @@ class _RegisterPageState extends State<RegisterPage> {
                                       children: <TextSpan>[
                                         const TextSpan(
                                           text:
-                                              'By creating an account you agree to our ',
+                                              'Dengan membuat akun, Anda menyetujui ',
                                           style: TextStyle(color: Colors.black),
                                         ),
                                         TextSpan(
-                                          text: 'Terms and Conditions',
+                                          text: 'Syarat dan Ketentuan',
                                           style: const TextStyle(
                                             color: Color(0xFFE63946),
                                             fontWeight: FontWeight.bold,
@@ -335,7 +335,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                             ..onTap = () {
                                               // TODO: Navigate to terms page
                                               ErrorHelper.showInfo(
-                                                'Terms and Conditions page',
+                                                'Halaman Syarat dan Ketentuan',
                                               );
                                             },
                                         ),
@@ -400,7 +400,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   fontWeight: FontWeight.w600,
                                 ),
                                 children: <TextSpan>[
-                                  const TextSpan(text: 'Have an account? '),
+                                  const TextSpan(text: 'Sudah punya akun? '),
                                   TextSpan(
                                     text: 'Sign In',
                                     style: const TextStyle(
