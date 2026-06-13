@@ -79,19 +79,8 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 } 
             }
         }),
-        // Ambil record absensi valid dengan koordinat
-        prisma.absensi.findMany({
-            where: { 
-                id_kelas: parseInt(id_kelas), 
-                deletedAt: null 
-            },
-            select: {
-                id_user: true,
-                id_sesi_absensi: true,
-                koordinat: true,
-                createdAt: true // Timestamp penting untuk analisis waktu
-            }
-        }),
+        // Ambil record absensi valid dengan koordinat (Gunakan $queryRaw karena field point tidak di-support Prisma findMany)
+        prisma.$queryRaw`SELECT id_user, id_sesi_absensi, koordinat, "createdAt" FROM absensi WHERE id_kelas = ${parseInt(id_kelas)} AND "deletedAt" IS NULL`,
         // Ambil list semua sesi yang valid dengan koordinat
         prisma.sesiAbsensi.findMany({
             where: { 
