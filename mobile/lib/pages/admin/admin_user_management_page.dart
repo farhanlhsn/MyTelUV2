@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/error_helper.dart';
@@ -8,34 +9,84 @@ class AdminUserManagementPage extends StatefulWidget {
   const AdminUserManagementPage({super.key});
 
   @override
-  State<AdminUserManagementPage> createState() => _AdminUserManagementPageState();
+  State<AdminUserManagementPage> createState() =>
+      _AdminUserManagementPageState();
 }
 
 class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   final Dio _dio = ApiClient.dio;
+  final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
 
   List<Map<String, dynamic>> _userList = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasNextPage = false;
+  int _currentPage = 1;
+  int _totalUsers = 0;
   String? _error;
   String _searchQuery = '';
   String _filterRole = 'ALL';
+  static const int _pageSize = 20;
 
   @override
   void initState() {
     super.initState();
     _loadUsers();
+    _scrollController.addListener(_onScroll);
   }
 
-  Future<void> _loadUsers() async {
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || _isLoadingMore || !_hasNextPage) {
+      return;
+    }
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      _loadUsers(page: _currentPage + 1, append: true);
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchQuery = value.trim();
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 450), _loadUsers);
+  }
+
+  Future<void> _loadUsers({int page = 1, bool append = false}) async {
+    if (append) {
+      setState(() => _isLoadingMore = true);
+    } else {
+      _currentPage = 1;
+      _hasNextPage = false;
+      _totalUsers = 0;
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+
     setState(() {
-      _isLoading = true;
       _error = null;
     });
 
     try {
-      final Map<String, dynamic> queryParams = {'limit': 100};
+      final Map<String, dynamic> queryParams = {
+        'page': page,
+        'limit': _pageSize,
+      };
       if (_filterRole != 'ALL') {
         queryParams['role'] = _filterRole;
+      }
+      if (_searchQuery.isNotEmpty) {
+        queryParams['search'] = _searchQuery;
       }
 
       final response = await _dio.get<dynamic>(
@@ -46,33 +97,35 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
       if (response.data is Map<String, dynamic>) {
         final dataMap = response.data['data'] as Map<String, dynamic>?;
         if (dataMap != null && dataMap['users'] is List) {
+          final users = (dataMap['users'] as List).cast<Map<String, dynamic>>();
+          final pagination =
+              dataMap['pagination'] as Map<String, dynamic>? ?? {};
           setState(() {
-            _userList = (dataMap['users'] as List).cast<Map<String, dynamic>>();
+            _userList = append ? [..._userList, ...users] : users;
+            _currentPage = pagination['currentPage'] as int? ?? page;
+            _hasNextPage = pagination['hasNextPage'] as bool? ?? false;
+            _totalUsers = pagination['totalUsers'] as int? ?? _userList.length;
             _isLoading = false;
+            _isLoadingMore = false;
           });
           return;
         }
       }
       setState(() {
-        _userList = [];
+        if (!append) {
+          _userList = [];
+        }
         _isLoading = false;
+        _isLoadingMore = false;
+        _hasNextPage = false;
       });
     } catch (e) {
       setState(() {
         _error = ErrorHelper.parseError(e);
         _isLoading = false;
+        _isLoadingMore = false;
       });
     }
-  }
-
-  List<Map<String, dynamic>> get _filteredUsers {
-    if (_searchQuery.isEmpty) return _userList;
-    return _userList.where((user) {
-      final nama = (user['nama'] as String? ?? '').toLowerCase();
-      final username = (user['username'] as String? ?? '').toLowerCase();
-      final query = _searchQuery.toLowerCase();
-      return nama.contains(query) || username.contains(query);
-    }).toList();
   }
 
   void _showRegisterDialog() {
@@ -89,8 +142,13 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Daftar Akun Baru', style: TextStyle(fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Daftar Akun Baru',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: SingleChildScrollView(
             child: Form(
               key: formKey,
@@ -101,7 +159,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     controller: namaController,
                     decoration: InputDecoration(
                       labelText: 'Nama Lengkap *',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       errorMaxLines: 2,
                     ),
                     textCapitalization: TextCapitalization.words,
@@ -121,7 +181,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     decoration: InputDecoration(
                       labelText: 'Username *',
                       hintText: 'Contoh: john.doe',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       errorMaxLines: 2,
                     ),
                     validator: (value) {
@@ -144,15 +206,21 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     decoration: InputDecoration(
                       labelText: 'Password *',
                       hintText: 'Minimal 6 karakter',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       errorMaxLines: 2,
                       suffixIcon: IconButton(
                         icon: Icon(
-                          obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                           color: Colors.grey,
                         ),
                         onPressed: () {
-                          setDialogState(() => obscurePassword = !obscurePassword);
+                          setDialogState(
+                            () => obscurePassword = !obscurePassword,
+                          );
                         },
                       ),
                     ),
@@ -171,14 +239,20 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     value: selectedRole,
                     decoration: InputDecoration(
                       labelText: 'Role *',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'MAHASISWA', child: Text('Mahasiswa')),
+                      DropdownMenuItem(
+                        value: 'MAHASISWA',
+                        child: Text('Mahasiswa'),
+                      ),
                       DropdownMenuItem(value: 'DOSEN', child: Text('Dosen')),
                       DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
                     ],
-                    onChanged: (value) => setDialogState(() => selectedRole = value!),
+                    onChanged: (value) =>
+                        setDialogState(() => selectedRole = value!),
                   ),
                 ],
               ),
@@ -189,7 +263,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               onPressed: isSubmitting ? null : () => Navigator.pop(context),
               child: Text(
                 'BATAL',
-                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+                style: TextStyle(
+                  color: isSubmitting ? Colors.grey.shade300 : Colors.grey,
+                ),
               ),
             ),
             ElevatedButton(
@@ -213,7 +289,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: isSubmitting
                   ? const SizedBox(
@@ -275,15 +353,24 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Reset Password',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 4),
               Text(
                 nama,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.normal),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
             ],
           ),
@@ -295,7 +382,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               decoration: InputDecoration(
                 labelText: 'Password Baru *',
                 hintText: 'Minimal 6 karakter',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 errorMaxLines: 2,
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -323,7 +412,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               onPressed: isSubmitting ? null : () => Navigator.pop(context),
               child: Text(
                 'BATAL',
-                style: TextStyle(color: isSubmitting ? Colors.grey.shade300 : Colors.grey),
+                style: TextStyle(
+                  color: isSubmitting ? Colors.grey.shade300 : Colors.grey,
+                ),
               ),
             ),
             ElevatedButton(
@@ -332,7 +423,11 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                   : () async {
                       if (formKey.currentState!.validate()) {
                         setDialogState(() => isSubmitting = true);
-                        final success = await _resetPassword(idUser, passwordController.text, nama);
+                        final success = await _resetPassword(
+                          idUser,
+                          passwordController.text,
+                          nama,
+                        );
                         if (success && context.mounted) {
                           Navigator.pop(context);
                         } else {
@@ -342,7 +437,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE63946),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: isSubmitting
                   ? const SizedBox(
@@ -361,14 +458,15 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
     );
   }
 
-  Future<bool> _resetPassword(int idUser, String newPassword, String nama) async {
+  Future<bool> _resetPassword(
+    int idUser,
+    String newPassword,
+    String nama,
+  ) async {
     try {
       final response = await _dio.put<dynamic>(
         '/api/auth/admin/reset-password',
-        data: {
-          'id_user': idUser,
-          'new_password': newPassword,
-        },
+        data: {'id_user': idUser, 'new_password': newPassword},
       );
 
       if (response.data['status'] == 'success') {
@@ -439,16 +537,23 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                             child: TextField(
                               decoration: InputDecoration(
                                 hintText: 'Cari user...',
-                                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                prefixIcon: const Icon(
+                                  Icons.search,
+                                  color: Colors.grey,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
-                                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 0,
+                                ),
                                 filled: true,
                                 fillColor: Colors.grey.shade50,
                               ),
-                              onChanged: (value) => setState(() => _searchQuery = value),
+                              onChanged: _onSearchChanged,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -463,10 +568,22 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                               child: DropdownButton<String>(
                                 value: _filterRole,
                                 items: const [
-                                  DropdownMenuItem(value: 'ALL', child: Text('All')),
-                                  DropdownMenuItem(value: 'MAHASISWA', child: Text('MHS')),
-                                  DropdownMenuItem(value: 'DOSEN', child: Text('DSN')),
-                                  DropdownMenuItem(value: 'ADMIN', child: Text('ADM')),
+                                  DropdownMenuItem(
+                                    value: 'ALL',
+                                    child: Text('All'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'MAHASISWA',
+                                    child: Text('MHS'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'DOSEN',
+                                    child: Text('DSN'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'ADMIN',
+                                    child: Text('ADM'),
+                                  ),
                                 ],
                                 onChanged: (value) {
                                   setState(() => _filterRole = value!);
@@ -493,7 +610,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                             const Icon(Icons.people, color: Color(0xFFE63946)),
                             const SizedBox(width: 12),
                             Text(
-                              'Total User: ${_filteredUsers.length}',
+                              'Total User: $_totalUsers',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFFE63946),
@@ -509,99 +626,127 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     Expanded(
                       child: _isLoading
                           ? const Center(
-                              child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFE63946),
+                              ),
                             )
                           : _error != null
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            Icons.error_outline,
-                                            size: 48,
-                                            color: Colors.red.shade400,
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        Icons.error_outline,
+                                        size: 48,
+                                        color: Colors.red.shade400,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Gagal Memuat Data',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _error!,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    ElevatedButton.icon(
+                                      onPressed: _loadUsers,
+                                      icon: const Icon(
+                                        Icons.refresh,
+                                        color: Colors.white,
+                                      ),
+                                      label: const Text(
+                                        'Coba Lagi',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFFE63946,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
                                           ),
                                         ),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'Gagal Memuat Data',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.grey.shade800,
-                                          ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 12,
                                         ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          _error!,
-                                          style: TextStyle(color: Colors.grey.shade600),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                        const SizedBox(height: 20),
-                                        ElevatedButton.icon(
-                                          onPressed: _loadUsers,
-                                          icon: const Icon(Icons.refresh, color: Colors.white),
-                                          label: const Text(
-                                            'Coba Lagi',
-                                            style: TextStyle(color: Colors.white),
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFFE63946),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 24,
-                                              vertical: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : _userList.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.person_search,
+                                    size: 64,
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchQuery.isNotEmpty
+                                        ? 'User tidak ditemukan'
+                                        : 'Belum ada user',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 16,
                                     ),
                                   ),
-                                )
-                              : _filteredUsers.isEmpty
-                                  ? Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.person_search,
-                                            size: 64,
-                                            color: Colors.grey.shade300,
-                                          ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            _searchQuery.isNotEmpty
-                                                ? 'User tidak ditemukan'
-                                                : 'Belum ada user',
-                                            style: TextStyle(
-                                              color: Colors.grey.shade500,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ],
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadUsers,
+                              child: ListView.separated(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                itemCount:
+                                    _userList.length + (_hasNextPage ? 1 : 0),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  if (index >= _userList.length) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 16,
                                       ),
-                                    )
-                                  : RefreshIndicator(
-                                      onRefresh: _loadUsers,
-                                      child: ListView.separated(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                                        itemCount: _filteredUsers.length,
-                                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                                        itemBuilder: (context, index) {
-                                          return _buildUserCard(_filteredUsers[index]);
-                                        },
+                                      child: Center(
+                                        child: CircularProgressIndicator(
+                                          color: Color(0xFFE63946),
+                                        ),
                                       ),
-                                    ),
+                                    );
+                                  }
+                                  return _buildUserCard(_userList[index]);
+                                },
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -656,8 +801,10 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              role == 'ADMIN' ? Icons.admin_panel_settings 
-                  : role == 'DOSEN' ? Icons.school 
+              role == 'ADMIN'
+                  ? Icons.admin_panel_settings
+                  : role == 'DOSEN'
+                  ? Icons.school
                   : Icons.person,
               color: roleColor,
             ),
@@ -674,19 +821,29 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     Expanded(
                       child: Text(
                         nama,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: roleColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         role,
-                        style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: roleColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     if (hasBiometric) ...[

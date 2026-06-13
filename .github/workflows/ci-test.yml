@@ -1,0 +1,286 @@
+# ==============================================================================
+# CI/CD: Backend Unit Tests & AI Contract Tests — MyTelU V2
+# ==============================================================================
+# Berjalan otomatis pada setiap push ke main/develop/staging dan pada PR.
+#
+# Pipeline terdiri dari 3 job:
+#   1. backend-unit-tests  — Jest unit tests + coverage (cepat, isolated)
+#   2. ai-contract-tests   — Python AI contract tests (paralel dengan job 1)
+#   3. backend-e2e-tests   — Full stack E2E (butuh unit tests lulus lebih dulu)
+#
+# Mobile E2E (Flutter) tidak dijalankan di CI otomatis karena memerlukan
+# emulator fisik yang resource-intensif. Jalankan manual sebelum release.
+# ==============================================================================
+
+name: CI — Backend & AI Tests
+
+on:
+  push:
+    branches: [main, develop, staging]
+    paths:
+      - "backend/**"
+      - "backend/python-service/**"
+      - "docker-compose.test.yml"
+      - ".github/workflows/ci-test.yml"
+  pull_request:
+    branches: [main, develop, staging]
+    paths:
+      - "backend/**"
+      - "backend/python-service/**"
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  # ============================================================
+  # JOB 1: Backend Unit Tests (Jest) — tidak butuh external services
+  # ============================================================
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: myteluv2_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: "postgresql://test_user:test_password@localhost:5433/myteluv2_test?schema=public"
+      JWT_SECRET: "ci-testing-jwt-secret-minimum-32-characters"
+      JWT_REFRESH_SECRET: "ci-testing-refresh-secret-minimum-32-chars"
+      NODE_ENV: "test"
+      PORT: "5050"
+      EDGE_DEVICE_SECRET: "ci-testing-edge-device-secret-32-chars"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: npx prisma generate --schema prisma/schema.prisma
+
+      - name: Run Prisma Migrations
+        working-directory: backend
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
+
+      - name: Run Backend Unit Tests (with coverage)
+        working-directory: backend
+        run: npx jest --testPathPattern=test/ --coverage --ci --forceExit
+
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-${{ github.run_id }}
+          path: backend/coverage/
+          retention-days: 7
+
+  # ============================================================
+  # JOB 2: AI Microservice Contract Tests (Python)
+  # Berjalan paralel dengan backend-unit-tests
+  # ============================================================
+  ai-contract-tests:
+    name: AI Service Contract Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install AI service dependencies
+        run: |
+          pip install --upgrade pip
+          # Face recognition (tanpa model berat — hanya dependency Flask)
+          pip install flask flask-cors numpy pillow opencv-python-headless || true
+          # Anomaly detection
+          pip install pandas scikit-learn || true
+          # Shared
+          pip install requests python-dotenv || true
+          # Test runner
+          pip install pytest || true
+
+      - name: Start Face Recognition Service (TEST_MODE=true)
+        env:
+          TEST_MODE: "true"
+          FACE_API_KEY: ""
+        run: |
+          python backend/python-service/face_recognition/app.py > /tmp/face.log 2>&1 &
+          echo "Waiting for Face service..."
+          for i in $(seq 1 25); do
+            curl -sf http://localhost:5051/health > /dev/null 2>&1 && echo "Face service ready!" && break
+            sleep 1
+          done
+
+      - name: Start Anomaly Detection Service
+        env:
+          TEST_MODE: "true"
+        run: |
+          python backend/python-service/anomaly_detection/app.py > /tmp/anomaly.log 2>&1 &
+          echo "Waiting for Anomaly service..."
+          for i in $(seq 1 25); do
+            curl -sf http://localhost:5003/health > /dev/null 2>&1 && echo "Anomaly service ready!" && break
+            sleep 1
+          done
+
+      - name: Start Plate Recognition Service (TEST_MODE=true)
+        env:
+          TEST_MODE: "true"
+          NODEJS_BACKEND_URL: "http://localhost:5050"
+        run: |
+          python backend/python-service/plate_recognition/app.py > /tmp/plate.log 2>&1 &
+          echo "Waiting for Plate service..."
+          for i in $(seq 1 25); do
+            curl -sf http://localhost:5001/health > /dev/null 2>&1 && echo "Plate service ready!" && break
+            sleep 1
+          done
+
+      - name: Run AI Contract Tests
+        run: |
+          python -m pytest backend/python-service/tests/test_ai_contract.py -v --tb=short 2>/dev/null || \
+          python -m unittest discover -s backend/python-service/tests -v
+
+      - name: Upload service logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-service-logs-${{ github.run_id }}
+          path: /tmp/*.log
+          retention-days: 3
+
+  # ============================================================
+  # JOB 3: Backend E2E API Tests — butuh full stack
+  # Hanya berjalan setelah backend-unit-tests lulus
+  # ============================================================
+  backend-e2e-tests:
+    name: Backend E2E Tests
+    runs-on: ubuntu-latest
+    needs: [backend-unit-tests]
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: myteluv2_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: "postgresql://test_user:test_password@localhost:5433/myteluv2_test?schema=public"
+      JWT_SECRET: "ci-testing-jwt-secret-minimum-32-characters"
+      JWT_REFRESH_SECRET: "ci-testing-refresh-secret-minimum-32-chars"
+      NODE_ENV: "test"
+      PORT: "5050"
+      EDGE_DEVICE_SECRET: "ci-testing-edge-device-secret-32-chars"
+      FACE_API_URL: "http://localhost:5051"
+      PLATE_API_URL: "http://localhost:5001"
+      ANOMALY_SERVICE_URL: "http://localhost:5003"
+      TEST_MODE: "true"
+      NODEJS_BACKEND_URL: "http://localhost:5050"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install AI service dependencies
+        run: |
+          pip install --upgrade pip
+          pip install flask flask-cors numpy pillow opencv-python-headless pandas scikit-learn requests python-dotenv || true
+
+      - name: Prisma setup (generate + migrate)
+        working-directory: backend
+        run: |
+          npx prisma generate --schema prisma/schema.prisma
+          npx prisma migrate deploy --schema prisma/schema.prisma
+
+      - name: Seed test data
+        run: node backend/prisma/seed-test-data.js
+
+      - name: Start AI Services (TEST_MODE)
+        run: |
+          python backend/python-service/face_recognition/app.py > /tmp/face.log 2>&1 &
+          python backend/python-service/plate_recognition/app.py > /tmp/plate.log 2>&1 &
+          python backend/python-service/anomaly_detection/app.py > /tmp/anomaly.log 2>&1 &
+
+          echo "Waiting for AI services..."
+          for svc_url in "http://localhost:5051/health" "http://localhost:5001/health" "http://localhost:5003/health"; do
+            for i in $(seq 1 25); do
+              curl -sf "$svc_url" > /dev/null 2>&1 && echo "$svc_url ready" && break
+              sleep 1
+            done
+          done
+
+      - name: Start Backend Server
+        run: |
+          node backend/server.js > /tmp/backend.log 2>&1 &
+          echo "Waiting for backend..."
+          for i in $(seq 1 25); do
+            curl -sf http://localhost:5050/health > /dev/null 2>&1 && echo "Backend ready!" && break
+            sleep 1
+          done
+
+      - name: Run Backend E2E Tests
+        working-directory: backend
+        run: npx jest test-e2e/api_e2e.test.js --runInBand --detectOpenHandles --forceExit --verbose --ci
+
+      - name: Save service logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-logs-${{ github.run_id }}
+          path: |
+            /tmp/backend.log
+            /tmp/face.log
+            /tmp/plate.log
+            /tmp/anomaly.log
+          retention-days: 3

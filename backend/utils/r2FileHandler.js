@@ -5,22 +5,29 @@ const { v4: uuidv4 } = require('uuid');
 
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-const uploadFile = async (fileBuffer, fileName, mimeType, folder) => {
+const getConfiguredAcl = (options = {}) => {
+    const acl = options.acl || process.env.R2_OBJECT_ACL;
+    if (!acl || acl.toLowerCase() === 'private') {
+        return undefined;
+    }
+    return acl;
+};
+
+const uploadFile = async (fileBuffer, fileName, mimeType, folder, options = {}) => {
     try {
         // Generate unique file name
         const fileExtension = path.extname(fileName);
         const uniqueFileName = `${uuidv4()}${fileExtension}`;
         const fileKey = `${folder}/${uniqueFileName}`;
+        const configuredAcl = getConfiguredAcl(options);
 
         const uploadParams = {
             Bucket: BUCKET_NAME,
             Key: fileKey,
             Body: fileBuffer,
             ContentType: mimeType,
-            // Make file publicly readable
-            ACL: 'public-read',
             // Set cache control
-            CacheControl: 'max-age=31536000', // 1 year
+            CacheControl: options.cacheControl || 'max-age=31536000', // 1 year
             // Add metadata
             Metadata: {
                 'original-name': fileName,
@@ -28,6 +35,10 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder) => {
                 'folder': folder
             }
         };
+
+        if (configuredAcl) {
+            uploadParams.ACL = configuredAcl;
+        }
 
         const command = new PutObjectCommand(uploadParams);
         await r2Client.send(command);
@@ -39,8 +50,11 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder) => {
         if (publicUrl && !publicUrl.startsWith('http://') && !publicUrl.startsWith('https://')) {
             publicUrl = `https://${publicUrl}`;
         }
-        
-        const fileUrl = `${publicUrl}/${fileKey}`;
+
+        // Existing call sites persist `fileUrl` in DB fields that expect strings.
+        // For private buckets without a public base URL, store the object key so
+        // the file can later be served through an authenticated/signed-url route.
+        const fileUrl = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${fileKey}` : fileKey;
 
         return {
             success: true,

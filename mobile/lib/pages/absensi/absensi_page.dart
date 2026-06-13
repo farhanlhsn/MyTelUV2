@@ -346,31 +346,6 @@ class AbsensiDetailPage extends StatelessWidget {
                         ),
                       ),
 
-                    const SizedBox(height: 12),
-
-                    // Tombol Verifikasi Wajah
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Get.to(() => const BiometrikAbsenPage());
-                        },
-                        icon: const Icon(Icons.face_retouching_natural, size: 20),
-                        label: const Text(
-                          'Absen Biometrik',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryRed,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 15),
 
                     // Sessions List
@@ -425,6 +400,8 @@ class AbsensiDetailPage extends StatelessWidget {
     final bool hadir = session['hadir'] == true;
     final Color statusColor = hadir ? Colors.green : Colors.red;
     final String statusText = hadir ? 'Hadir' : 'Tidak Hadir';
+    final int? idSesiAbsensi = _readSessionId(session);
+    final bool isActiveSession = session['is_active'] == true;
 
     DateTime? tanggal;
     try {
@@ -461,24 +438,91 @@ class AbsensiDetailPage extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              statusText,
-              style: TextStyle(
-                color: statusColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
+          _buildSessionAction(
+            hadir: hadir,
+            isActiveSession: isActiveSession,
+            statusColor: statusColor,
+            statusText: statusText,
+            idSesiAbsensi: idSesiAbsensi,
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildSessionAction({
+    required bool hadir,
+    required bool isActiveSession,
+    required Color statusColor,
+    required String statusText,
+    required int? idSesiAbsensi,
+  }) {
+    final Color primaryRed = const Color(0xFFE63946);
+    final statusBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        statusText,
+        style: TextStyle(
+          color: statusColor,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+
+    if (hadir || !isActiveSession || idSesiAbsensi == null) {
+      return statusBadge;
+    }
+
+    final selectedSesiId = idSesiAbsensi;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        statusBadge,
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 32,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Get.to(
+                () => BiometrikAbsenPage(idSesiAbsensi: selectedSesiId),
+                arguments: {'id_sesi_absensi': selectedSesiId},
+              );
+            },
+            icon: const Icon(Icons.face_retouching_natural, size: 16),
+            label: const Text('Absen'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryRed,
+              side: BorderSide(color: primaryRed.withValues(alpha: 0.6)),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              textStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int? _readSessionId(Map<String, dynamic> session) {
+    final value = session['id_sesi_absensi'] ?? session['id_sesi'];
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return null;
   }
 
   String _formatDate(DateTime date) {

@@ -19,7 +19,7 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({
     storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
         // Allow images, videos, gifs
         const allowedMimes = [
@@ -39,7 +39,7 @@ router.get('/', protect, getAllPosts);
 router.get('/me', protect, getMyPosts);
 router.get('/:id', protect, getPostById);
 router.post('/', protect, upload.fields([{ name: 'media', maxCount: 10 }]), createPost);
-router.put('/:id', protect, updatePost);
+router.put('/:id', protect, upload.fields([{ name: 'media', maxCount: 10 }]), updatePost);
 router.delete('/:id', protect, deletePost);
 
 // Likes

@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
 const { sendPushNotification } = require('../utils/firebase');
+const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
     const { plat_nomor, nama_kendaraan } = req.body;
@@ -38,6 +39,19 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         return res.status(409).json({
             status: "error",
             message: "Plat nomor already registered"
+        });
+    }
+
+    // Cek batas maksimal kendaraan per user
+    const maxKendaraan = parseInt(process.env.MAX_KENDARAAN_PER_USER) || 3;
+    const userKendaraanCount = await prisma.kendaraan.count({
+        where: { id_user, deletedAt: null }
+    });
+
+    if (userKendaraanCount >= maxKendaraan) {
+        return res.status(400).json({
+            status: "error",
+            message: `User has reached the maximum limit of ${maxKendaraan} vehicles`
         });
     }
 
@@ -148,10 +162,10 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
     const kendaraan = await prisma.kendaraan.findUnique({
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user, deletedAt: null }
     });
-    if (!kendaraan) {
+    if (!kendaraan || kendaraan.deletedAt) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
     }
-    // Soft delete kendaraan (preserves LogParkir history)
+    // Soft delete kendaraan from database (preserve R2 files for audit)
     await prisma.kendaraan.update({
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user },
         data: { deletedAt: new Date() }
@@ -202,10 +216,8 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 });
 
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query);
     const total = await prisma.kendaraan.count({ where: { statusVerif: false, deletedAt: null } });
-    const totalPages = Math.ceil(total / parseInt(limit));
 
     const unverifiedKendaraan = await prisma.kendaraan.findMany({
         where: { statusVerif: false, deletedAt: null },
@@ -218,8 +230,8 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
                 }
             }
         },
-        skip: offset,
-        take: parseInt(limit),
+        skip: skip,
+        take: limit,
         orderBy: [
             { status_pengajuan: 'asc' }, // MENUNGGU comes before DITOLAK/DISETUJUI alphabetically
             { createdAt: 'desc' }
@@ -230,30 +242,25 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
         status: "success",
         message: "All unverified kendaraan retrieved successfully",
         data: unverifiedKendaraan,
-        totalPages: totalPages,
-        total: total,
-        currentPage: parseInt(page)
+        pagination: buildPaginationMeta(total, page, limit)
     });
 });
 
 exports.getAllKendaraan = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query);
     const total = await prisma.kendaraan.count({ where: { deletedAt: null } });
-    const totalPages = Math.ceil(total / parseInt(limit));
+
     const kendaraan = await prisma.kendaraan.findMany({
         where: { deletedAt: null },
-        skip: offset,
-        take: parseInt(limit),
+        skip: skip,
+        take: limit,
         orderBy: { createdAt: 'desc' }
     });
     res.status(200).json({
         status: "success",
         message: "All kendaraan retrieved successfully",
         data: kendaraan,
-        totalPages: totalPages,
-        total: total,
-        currentPage: parseInt(page)
+        pagination: buildPaginationMeta(total, page, limit)
     });
 });
 
@@ -350,4 +357,64 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     });
 });
 
-// Note: Use getKendaraan instead - this function was removed to avoid duplication
+exports.resubmitKendaraan = asyncHandler(async (req, res) => {
+    const { id_kendaraan } = req.params;
+    const id_user = req.user.id_user;
+    
+    const kendaraan = await prisma.kendaraan.findUnique({
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user, deletedAt: null }
+    });
+
+    if (!kendaraan) {
+        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+    }
+
+    if (kendaraan.status_pengajuan !== 'DITOLAK') {
+        return res.status(400).json({ status: "error", message: "Only rejected vehicles can be resubmitted" });
+    }
+
+    const fotoKendaraanFiles = req.files?.fotoKendaraan || [];
+    const fotoSTNKFiles = req.files?.fotoSTNK || [];
+    const fotoSTNKFile = fotoSTNKFiles[0];
+
+    const dataToUpdate = {
+        status_pengajuan: 'MENUNGGU',
+        statusVerif: false,
+        feedback: null
+    };
+
+    if (fotoKendaraanFiles.length > 0) {
+        if (fotoKendaraanFiles.length < 3) {
+            return res.status(400).json({ status: "error", message: "If updating vehicle photos, you must provide exactly 3 photos" });
+        }
+        
+        const uploadedFotoKendaraan = [];
+        for (const file of fotoKendaraanFiles) {
+            const result = await uploadFile(file.buffer, file.originalname, file.mimetype, 'kendaraan');
+            uploadedFotoKendaraan.push(result.fileUrl);
+        }
+        dataToUpdate.fotoKendaraan = uploadedFotoKendaraan;
+        
+        // Delete old photos (async, non-blocking)
+        kendaraan.fotoKendaraan.forEach(url => deleteFile(url).catch(e => console.error(e)));
+    }
+
+    if (fotoSTNKFile) {
+        const result = await uploadFile(fotoSTNKFile.buffer, fotoSTNKFile.originalname, fotoSTNKFile.mimetype, 'stnk');
+        dataToUpdate.fotoSTNK = result.fileUrl;
+        
+        // Delete old stnk
+        deleteFile(kendaraan.fotoSTNK).catch(e => console.error(e));
+    }
+
+    const updatedKendaraan = await prisma.kendaraan.update({
+        where: { id_kendaraan: parseInt(id_kendaraan) },
+        data: dataToUpdate
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: "Kendaraan resubmitted successfully",
+        data: updatedKendaraan
+    });
+});

@@ -9,8 +9,15 @@
 jest.mock('../utils/prisma', () => ({
     user: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+    },
+    refreshToken: {
+        create: jest.fn(),
+        deleteMany: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
     }
 }));
 
@@ -23,8 +30,18 @@ jest.mock('jsonwebtoken', () => ({
     sign: jest.fn(),
 }));
 
+jest.mock('uuid', () => ({
+    v4: () => 'mocked-uuid-token',
+}));
+
 jest.mock('../utils/auditLogger', () => ({
     logAudit: jest.fn(),
+}));
+
+jest.mock('../utils/r2FileHandler', () => ({
+    uploadFile: jest.fn(),
+    deleteFile: jest.fn(),
+    fileExists: jest.fn(),
 }));
 
 // Import mocked modules
@@ -135,7 +152,7 @@ describe('Auth Controller Tests', () => {
 
             await authController.login(req, res);
 
-            expect(prisma.user.findUnique).toHaveBeenCalled();
+            expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { username: 'testu', deletedAt: null } });
             expect(bcrypt.compare).toHaveBeenCalledWith('password123', 'hashed_password');
             expect(jwt.sign).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);

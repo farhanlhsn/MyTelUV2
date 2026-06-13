@@ -1,221 +1,126 @@
 # Python Services
 
-Layanan Python untuk MyTelUV2 yang terdiri dari dua service terpisah:
-1. **Face Recognition** - Deteksi dan pengenalan wajah menggunakan InsightFace
-2. **License Plate Recognition** - Pengenalan plat nomor kendaraan menggunakan YOLOv8
+Folder ini berisi AI microservices untuk MyTelUV2.
 
-## Struktur Folder
+## Services
 
-```
-python-service/
-├── face_recognition/          # Service face recognition
-│   ├── __init__.py
-│   ├── app.py                # Flask server (port 5051)
-│   ├── face_processor.py     # Logika face detection & embedding
-│   ├── requirements.txt      # Dependencies untuk face recognition
-│   └── models/               # Face recognition models (if any)
-│
-├── plate_recognition/         # Service license plate recognition
-│   ├── __init__.py
-│   ├── app.py                # Flask server (port 5001)
-│   ├── requirements.txt      # Dependencies untuk plate recognition
-│   └── models/               # Plate recognition models
-│       ├── license_plate_recognition.pt
-│       ├── license_plate_recognition.onnx
-│       └── classes.names
-│
-├── shared/                    # Utilities bersama (bila ada)
-│   └── __init__.py
-│
-├── README.md                  # Dokumentasi ini
-└── setup.sh                   # Script setup otomatis
-```
+| Service | Folder | Port | Fungsi |
+| --- | --- | --- | --- |
+| Face Recognition | `face_recognition/` | `5051` | Deteksi wajah, ekstraksi embedding, dan face matching |
+| Plate Recognition | `plate_recognition/` | `5001` | OCR plat kendaraan dan forwarding parking flow |
+| Anomaly Detection | `anomaly_detection/` | `5003` | Analisis anomali absensi berbasis rule/statistik/Isolation Forest |
 
-## Service 1: Face Recognition
-
-### Port: 5051
-
-### Endpoints:
-- `GET /health` - Health check
-- `POST /detect-face` - Deteksi single face dan ekstrak embedding
-- `POST /detect-multiple` - Deteksi multiple faces (untuk CCTV)
-- `POST /compare` - Bandingkan dua embeddings
-- `POST /find-match` - Cari match terbaik dari list embeddings
-
-### Cara Menjalankan:
+## Face Recognition
 
 ```bash
-cd face_recognition
-
-# Install dependencies
+cd backend/python-service/face_recognition
 pip install -r requirements.txt
-
-# Jalankan server
 python app.py
 ```
 
-Server akan berjalan di `http://localhost:5051`
+Endpoints:
 
-### Contoh Penggunaan:
+- `GET /health`
+- `POST /detect-face`
+- `POST /detect-multiple`
+- `POST /compare`
+- `POST /find-match`
 
-```bash
-# Detect single face
-curl -X POST http://localhost:5051/detect-face \
-  -F "image=@path/to/face.jpg"
+Service dapat dilindungi dengan `FACE_API_KEY`; backend mengirim header `X-API-Key`.
 
-# Compare embeddings
-curl -X POST http://localhost:5051/compare \
-  -H "Content-Type: application/json" \
-  -d '{"embedding1": [...], "embedding2": [...]}'
-```
-
-## Service 2: License Plate Recognition
-
-### Port: 5001
-
-### Model Requirements:
-This service requires trained YOLO models in `plate_recognition/models/`:
-- `license_plate_recognition.pt` - YOLOv8 PyTorch model
-- `license_plate_recognition.onnx` - ONNX format (optional)
-- `classes.names` - Character class names (0-9, A-Z)
-
-**To get the models:**
-1. Train using `license-plate-recognition-training.ipynb` in project root
-2. Copy trained models:
-   ```bash
-   cp /path/to/models/recognition/* backend/python-service/plate_recognition/models/
-   ```
-
-### Endpoints:
-- `GET /health` - Health check
-- `POST /api/recognize-plate` - Recognize characters dari gambar plat
-- `POST /api/parking/entry` - Log parking entry dengan plate recognition
-
-### Cara Menjalankan:
+## Plate Recognition
 
 ```bash
-cd plate_recognition
-
-# Install dependencies
+cd backend/python-service/plate_recognition
 pip install -r requirements.txt
-
-# Jalankan server
 python app.py
 ```
 
-Server akan berjalan di `http://localhost:5001`
+Endpoints:
 
-### Model Requirements:
-Service ini membutuhkan model YOLOv8 di lokasi:
-- `../models/recognition/license_plate_recognition.pt`
-- `../models/recognition/classes.names`
+- `GET /health`
+- `POST /api/recognize-plate`
+- `POST /api/parking/process`
+- `POST /api/parking/entry` legacy alias
 
-### Contoh Penggunaan:
+Model yang dibutuhkan ada di `plate_recognition/models/`:
 
-```bash
-# Recognize plate
-curl -X POST http://localhost:5001/api/recognize-plate \
-  -F "image=@path/to/plate.jpg"
+- `license_plate_recognition.pt`
+- `license_plate_recognition.onnx`
+- `classes.names`
 
-# Parking entry
-curl -X POST http://localhost:5001/api/parking/entry \
-  -F "image=@path/to/plate.jpg"
-```
+Set `NODEJS_BACKEND_URL` dan `EDGE_DEVICE_SECRET` agar forwarding ke backend parkir aman.
 
-## Setup Otomatis
-
-Gunakan script `setup.sh` untuk setup kedua service sekaligus:
+## Anomaly Detection
 
 ```bash
-bash setup.sh
-```
-
-Script akan:
-1. Membuat virtual environment untuk masing-masing service
-2. Install dependencies yang diperlukan
-3. Memberikan instruksi cara menjalankan service
-
-## Development
-
-### Menjalankan Kedua Service Secara Bersamaan
-
-Untuk development, Anda bisa menjalankan kedua service di terminal terpisah:
-
-**Terminal 1 (Face Recognition):**
-```bash
-cd face_recognition
-source venv/bin/activate  # jika pakai venv
+cd backend/python-service/anomaly_detection
+pip install -r requirements.txt
 python app.py
 ```
 
-**Terminal 2 (Plate Recognition):**
+Endpoints:
+
+- `GET /health`
+- `POST /detect-anomalies`
+
+Payload utama:
+
+```json
+{
+  "students": [{ "id_user": 1, "nama": "User" }],
+  "attendance": [
+    {
+      "id_user": 1,
+      "id_sesi": 10,
+      "timestamp": "2026-05-25T08:05:00Z",
+      "latitude": -6.97,
+      "longitude": 107.63
+    }
+  ],
+  "sessions": [
+    {
+      "id_sesi": 10,
+      "mulai": "2026-05-25T08:00:00Z",
+      "selesai": "2026-05-25T09:00:00Z",
+      "latitude": -6.97,
+      "longitude": 107.63
+    }
+  ],
+  "total_sessions": 1,
+  "threshold": 0.5,
+  "contamination": 0.1
+}
+```
+
+## Docker
+
+Semua service dapat dijalankan via compose dari root repository:
+
 ```bash
-cd plate_recognition
-source venv/bin/activate  # jika pakai venv
-python app.py
+docker compose up --build
+docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-### Running dengan Docker (Optional)
+Production compose menjalankan ketiga AI service dan backend menggunakan service URL:
 
-Setiap service bisa dijalankan dengan Docker container terpisah untuk isolasi yang lebih baik.
+- `FACE_API_URL=http://face-recognition:5051`
+- `PLATE_API_URL=http://plate-recognition:5001`
+- `ANOMALY_SERVICE_URL=http://anomaly-detection:5003`
 
-## Integration dengan Backend
+## Test Mode
 
-Backend Node.js memanggil service-service ini via HTTP:
+Untuk contract/E2E tests, beberapa service mendukung `TEST_MODE=true` agar model berat tidak perlu dimuat.
 
-### Face Recognition Integration:
-```javascript
-const faceApiUrl = 'http://localhost:5051';
-
-// Detect face
-const formData = new FormData();
-formData.append('image', imageFile);
-const response = await axios.post(`${faceApiUrl}/detect-face`, formData);
+```bash
+set TEST_MODE=true
+python backend/python-service/face_recognition/app.py
+python backend/python-service/plate_recognition/app.py
+python backend/python-service/anomaly_detection/app.py
 ```
 
-### Plate Recognition Integration:
-```javascript
-const plateApiUrl = 'http://localhost:5001';
+## Notes
 
-// Recognize plate
-const formData = new FormData();
-formData.append('image', plateImage);
-const response = await axios.post(`${plateApiUrl}/api/recognize-plate`, formData);
-```
-
-## Troubleshooting
-
-### InsightFace Model Download
-Pada run pertama, InsightFace akan download model `buffalo_l` (~300MB). Pastikan koneksi internet stabil.
-
-### YOLOv8 Model Not Found
-Pastikan model `license_plate_recognition.pt` ada di folder `models/recognition/`.
-
-### Port Already in Use
-Jika port sudah digunakan, ubah port di `app.py`:
-```python
-app.run(host='0.0.0.0', port=XXXX, debug=True)
-```
-
-## Dependencies
-
-### Face Recognition
-- Flask & Flask-CORS
-- InsightFace (deep learning face recognition)
-- ONNX Runtime
-- OpenCV
-- NumPy
-- Pillow
-
-### Plate Recognition
-- Flask & Flask-CORS
-- Ultralytics (YOLOv8)
-- ONNX Runtime (alternative)
-- OpenCV
-- NumPy
-- Pillow
-- PyYAML
-
-## License
-
-Part of MyTelUV2 Project
+- Face recognition akan mengunduh InsightFace model `buffalo_l` pada run pertama.
+- Jangan commit model/secret baru tanpa memastikan `.gitignore` dan ukuran artifact sesuai.
+- Untuk production, jalankan service melalui Gunicorn/Docker, bukan Flask debug server.

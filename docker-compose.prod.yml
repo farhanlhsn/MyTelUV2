@@ -38,8 +38,10 @@ services:
       context: ./backend/python-service/face_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-face-recognition
-    ports:
-      - "5051:5051"
+    expose:
+      - "5051"
+    environment:
+      - FACE_API_KEY=${FACE_API_KEY}
     volumes:
       - insightface-models:/root/.insightface
     networks:
@@ -52,8 +54,8 @@ services:
       context: ./backend/python-service/plate_recognition
       dockerfile: Dockerfile
     container_name: myteluv2-plate-recognition
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"
     environment:
       - NODEJS_BACKEND_URL=http://backend:5050
     env_file:
@@ -64,14 +66,20 @@ services:
       - myteluv2-network
     restart: unless-stopped
 
-  # Anomaly Detection Service (scikit-learn)
+  # Anomaly Detection Service (Isolation Forest)
   anomaly-detection:
     build:
       context: ./backend/python-service/anomaly_detection
       dockerfile: Dockerfile
     container_name: myteluv2-anomaly-detection
-    ports:
-      - "5003:5003"
+    expose:
+      - "5003"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     networks:
       - myteluv2-network
     restart: unless-stopped

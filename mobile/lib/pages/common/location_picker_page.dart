@@ -1,3 +1,4 @@
+import 'package:mobile/utils/logger.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';

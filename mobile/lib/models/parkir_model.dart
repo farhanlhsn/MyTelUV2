@@ -146,6 +146,28 @@ class ParkiranModel {
       longitude: parseDouble(json['longitude']),
     );
   }
+
+  ParkiranModel copyWith({
+    int?    idParkiran,
+    String? namaParkiran,
+    int?    kapasitas,
+    int?    liveKapasitas,
+    int?    slotTersedia,
+    double? persentaseTerisi,
+    double? latitude,
+    double? longitude,
+  }) {
+    return ParkiranModel(
+      idParkiran:      idParkiran      ?? this.idParkiran,
+      namaParkiran:    namaParkiran    ?? this.namaParkiran,
+      kapasitas:       kapasitas       ?? this.kapasitas,
+      liveKapasitas:   liveKapasitas   ?? this.liveKapasitas,
+      slotTersedia:    slotTersedia    ?? this.slotTersedia,
+      persentaseTerisi: persentaseTerisi ?? this.persentaseTerisi,
+      latitude:        latitude        ?? this.latitude,
+      longitude:       longitude       ?? this.longitude,
+    );
+  }
 }
 
 class ParkirAnalitikModel {
@@ -163,6 +185,16 @@ class ParkirAnalitikModel {
           .map((e) => ParkiranModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       summary: ParkirSummary.fromJson(json['summary'] as Map<String, dynamic>),
+    );
+  }
+
+  ParkirAnalitikModel copyWith({
+    List<ParkiranModel>? parkiran,
+    ParkirSummary?       summary,
+  }) {
+    return ParkirAnalitikModel(
+      parkiran: parkiran ?? this.parkiran,
+      summary:  summary  ?? this.summary,
     );
   }
 }

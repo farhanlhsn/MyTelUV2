@@ -99,6 +99,7 @@ class MockAuthService extends _i1.Mock implements _i3.AuthService {
     required String? password,
     required String? nama,
     required String? role,
+    String? nimNip,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#register, [], {
@@ -106,6 +107,7 @@ class MockAuthService extends _i1.Mock implements _i3.AuthService {
               #password: password,
               #nama: nama,
               #role: role,
+              #nimNip: nimNip,
             }),
             returnValue: _i4.Future<Map<String, dynamic>>.value(
               <String, dynamic>{},
@@ -149,13 +151,45 @@ class MockAuthService extends _i1.Mock implements _i3.AuthService {
           as _i4.Future<Map<String, dynamic>>);
 
   @override
-  _i4.Future<void> logout() =>
+  _i4.Future<void> logout({String? refreshToken}) =>
       (super.noSuchMethod(
-            Invocation.method(#logout, []),
+            Invocation.method(#logout, [], {#refreshToken: refreshToken}),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
           as _i4.Future<void>);
+
+  @override
+  _i4.Future<Map<String, dynamic>> forgotPassword(String? username) =>
+      (super.noSuchMethod(
+            Invocation.method(#forgotPassword, [username]),
+            returnValue: _i4.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+            returnValueForMissingStub: _i4.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+          )
+          as _i4.Future<Map<String, dynamic>>);
+
+  @override
+  _i4.Future<Map<String, dynamic>> resetPassword({
+    required String? token,
+    required String? newPassword,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#resetPassword, [], {
+              #token: token,
+              #newPassword: newPassword,
+            }),
+            returnValue: _i4.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+            returnValueForMissingStub: _i4.Future<Map<String, dynamic>>.value(
+              <String, dynamic>{},
+            ),
+          )
+          as _i4.Future<Map<String, dynamic>>);
 }
 
 /// A class which mocks [FlutterSecureStorage].

@@ -84,7 +84,7 @@ class BiometrikStatusWidget extends StatelessWidget {
           if (showAction)
             GestureDetector(
               onTap: () {
-                Get.to(() => const BiometrikVerificationPage());
+                Get.to(() => const BiometrikAbsenPage());
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

@@ -279,8 +279,15 @@ exports.createKelas = asyncHandler(async (req, res) => {
         });
     }
 
-    const kelas = await prisma.$executeRaw`
-        INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, "createdAt", "updatedAt")
+    // Find active semester
+    const activeSemester = await prisma.semester.findFirst({
+        where: { is_active: true, deletedAt: null }
+    });
+    const activeSemesterId = activeSemester ? activeSemester.id_semester : null;
+    const targetKapasitas = req.body.kapasitas ? parseInt(req.body.kapasitas) : 50;
+
+    const insertResult = await prisma.$executeRaw`
+        INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, kapasitas, id_semester, "createdAt", "updatedAt")
         VALUES (
             ${parseInt(id_matakuliah)}, 
             ${parseInt(id_dosen)}, 
@@ -289,10 +296,11 @@ exports.createKelas = asyncHandler(async (req, res) => {
             ${nama_kelas.trim()}, 
             ${ruangan.trim()},
             ${req.body.hari ? parseInt(req.body.hari) : null},
+            ${targetKapasitas},
+            ${activeSemesterId},
             NOW(),
             NOW()
         )
-        RETURNING *
     `;
 
     // Fetch the created kelas with relations
@@ -717,6 +725,14 @@ exports.getKelasById = asyncHandler(async (req, res) => {
         });
     }
 
+    // Enforce Dosen isolation (BF22)
+    if (req.user.role === 'DOSEN' && kelas.id_dosen !== req.user.id_user) {
+        return res.status(403).json({
+            status: "error",
+            message: "You are not authorized to view this class details"
+        });
+    }
+
     res.status(200).json({
         status: "success",
         data: kelas
@@ -979,6 +995,58 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
         });
     }
 
+    // 1. Class Capacity Check (BF20)
+    const currentEnrolledCount = await prisma.pesertaKelas.count({
+        where: {
+            id_kelas: parseInt(id_kelas),
+            deletedAt: null
+        }
+    });
+
+    if (currentEnrolledCount >= kelas.kapasitas) {
+        return res.status(400).json({
+            status: "error",
+            message: "Kelas sudah penuh. Kapasitas maksimum tercapai."
+        });
+    }
+
+    // 2. Schedule Conflict Check (BF18)
+    if (kelas.hari) {
+        // Fetch target class times
+        const targetTimeData = await prisma.$queryRaw`
+            SELECT jam_mulai::text, jam_berakhir::text 
+            FROM kelas 
+            WHERE id_kelas = ${parseInt(id_kelas)}
+        `;
+        const targetJamMulai = targetTimeData[0]?.jam_mulai;
+        const targetJamBerakhir = targetTimeData[0]?.jam_berakhir;
+
+        if (targetJamMulai && targetJamBerakhir) {
+            const conflictingClasses = await prisma.$queryRaw`
+                SELECT k.id_kelas, k.nama_kelas 
+                FROM kelas k
+                INNER JOIN peserta_kelas pk ON k.id_kelas = pk.id_kelas
+                WHERE pk.id_mahasiswa = ${id_mahasiswa}
+                AND pk."deletedAt" IS NULL
+                AND k."deletedAt" IS NULL
+                AND k.hari = ${kelas.hari}
+                AND k.id_kelas != ${parseInt(id_kelas)}
+                AND (
+                    (k.jam_mulai <= ${targetJamMulai}::time AND k.jam_berakhir > ${targetJamMulai}::time)
+                    OR (k.jam_mulai < ${targetJamBerakhir}::time AND k.jam_berakhir >= ${targetJamBerakhir}::time)
+                    OR (k.jam_mulai >= ${targetJamMulai}::time AND k.jam_berakhir <= ${targetJamBerakhir}::time)
+                )
+            `;
+
+            if (conflictingClasses.length > 0) {
+                return res.status(409).json({
+                    status: "error",
+                    message: `Jadwal bentrok dengan kelas yang sudah Anda ambil: ${conflictingClasses[0].nama_kelas}`
+                });
+            }
+        }
+    }
+
     // Check if already enrolled
     const existingPeserta = await prisma.pesertaKelas.findUnique({
         where: {
@@ -1070,6 +1138,24 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
 exports.dropKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const id_mahasiswa = req.user.id_user;
+
+    // Check drop deadline for active semester
+    const activeSemester = await prisma.semester.findFirst({
+        where: {
+            is_active: true,
+            deletedAt: null
+        }
+    });
+
+    if (activeSemester) {
+        const now = new Date();
+        if (now > activeSemester.drop_deadline) {
+            return res.status(400).json({
+                status: "error",
+                message: "Batas waktu (drop deadline) untuk membatalkan kelas di semester ini telah berakhir."
+            });
+        }
+    }
 
     const peserta = await prisma.pesertaKelas.findUnique({
         where: {
@@ -1409,6 +1495,14 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
 exports.createAbsensi = asyncHandler(async (req, res) => {
     const { id_kelas, id_sesi_absensi, latitude, longitude } = req.body;
     const id_user = req.user.id_user;
+    const isMock = req.body.is_mock_location === true || req.body.is_mock_location === 'true';
+
+    if (isMock) {
+        return res.status(400).json({
+            status: "error",
+            message: "Mock location / GPS spoofing terdeteksi. Absensi ditolak."
+        });
+    }
 
     const kelas = await prisma.kelas.findFirst({
         where: {
@@ -1518,17 +1612,74 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         }
     }
 
+    // Step 6: Server-Side Heuristics & Impossible Travel Check
+    const prevAbsensi = await prisma.$queryRaw`
+        SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
+        FROM absensi 
+        WHERE id_user = ${id_user} 
+        AND "deletedAt" IS NULL 
+        ORDER BY "createdAt" DESC 
+        LIMIT 1
+    `;
+
+    let credibilityScore = 100;
+    let suspensionReason = "";
+    let calculatedSpeedKmh = 0;
+    let calculatedDistanceMeters = 0;
+
+    if (prevAbsensi && prevAbsensi.length > 0) {
+        const prevLat = parseFloat(prevAbsensi[0].lat);
+        const prevLng = parseFloat(prevAbsensi[0].lng);
+        const prevTime = new Date(prevAbsensi[0].createdAt);
+        
+        const timeDiffSeconds = Math.abs(now.getTime() - prevTime.getTime()) / 1000;
+        
+        if (timeDiffSeconds > 0) {
+            const distMeters = haversineDistance(prevLat, prevLng, lat, lng);
+            const speedMps = distMeters / timeDiffSeconds;
+            calculatedSpeedKmh = Math.round(speedMps * 3.6);
+            calculatedDistanceMeters = Math.round(distMeters);
+
+            // Heuristic 1: Impossible travel (speed > 120 km/h and distance > 1000m)
+            if (calculatedSpeedKmh > 120 && distMeters > 1000) {
+                credibilityScore = 0;
+                suspensionReason = `Impossible travel detected. Speed: ${calculatedSpeedKmh} km/h.`;
+            }
+            // Heuristic 2: Suspicious speed (speed > 80 km/h and distance > 1000m)
+            else if (calculatedSpeedKmh > 80 && distMeters > 1000) {
+                credibilityScore -= 50;
+                suspensionReason = `Suspicious high travel speed: ${calculatedSpeedKmh} km/h.`;
+            }
+            // Heuristic 3: Teleportation / GPS Jump (moving > 100m in < 10 seconds)
+            else if (timeDiffSeconds < 10 && distMeters > 100) {
+                credibilityScore -= 80;
+                suspensionReason = "GPS jump detected (teleportation).";
+            }
+        }
+    }
+
+    if (credibilityScore < 50) {
+        return res.status(400).json({
+            status: "error",
+            message: "Aktivitas absensi mencurigakan terdeteksi (mock location / spoofing).",
+            details: suspensionReason || `Skor kredibilitas lokasi rendah: ${credibilityScore}`,
+            speed_kmh: calculatedSpeedKmh,
+            distance_meters: calculatedDistanceMeters
+        });
+    }
+
     await prisma.$executeRaw`
-    INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, "updatedAt")
-    VALUES (
-      ${id_user},
-      ${parseInt(id_kelas)},
-      ${sesi.id_sesi_absensi},
-      ${sesi.type_absensi}::"TypeAbsensi",
-      POINT(${lng}, ${lat}),
-      NOW()
-    )
-  `;
+        INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
+        VALUES (
+          ${id_user},
+          ${parseInt(id_kelas)},
+          ${sesi.id_sesi_absensi},
+          ${sesi.type_absensi}::"TypeAbsensi",
+          POINT(${lng}, ${lat}),
+          ${isMock},
+          NOW()
+        )
+    `;
 
     const absensi = await prisma.absensi.findFirst({
         where: {
@@ -2022,7 +2173,7 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
     const id_user = req.user.id_user;
     const { id_kelas } = req.query;
 
-    // Get enrolled classes
+    // 1. Get enrolled classes (unchanged)
     const enrolledClasses = await prisma.pesertaKelas.findMany({
         where: {
             id_mahasiswa: id_user,
@@ -2034,52 +2185,75 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
             kelas: {
                 include: {
                     matakuliah: true,
-                    dosen: {
-                        select: { id_user: true, nama: true }
-                    }
+                    dosen: { select: { id_user: true, nama: true } }
                 }
             }
         }
     });
 
-    // For each enrolled class, get all sesi and user's attendance
-    const result = await Promise.all(enrolledClasses.map(async (pk) => {
-        // Get all sesi for this kelas
-        const allSesi = await prisma.sesiAbsensi.findMany({
-            where: {
-                id_kelas: pk.id_kelas,
-                deletedAt: null
-            },
-            orderBy: { mulai: 'desc' }
-        });
+    // 2. Extract all kelas IDs
+    const kelasIds = enrolledClasses.map(pk => pk.id_kelas);
 
-        // Get user's absensi for this kelas
-        const userAbsensi = await prisma.absensi.findMany({
-            where: {
-                id_user,
-                id_kelas: pk.id_kelas,
-                deletedAt: null
-            },
-            select: {
-                id_sesi_absensi: true,
-                createdAt: true,
-                type_absensi: true
-            }
-        });
+    // 3. BULK fetch all sesi for ALL enrolled kelas (1 query instead of N)
+    const allSesi = await prisma.sesiAbsensi.findMany({
+        where: {
+            id_kelas: { in: kelasIds },
+            deletedAt: null
+        },
+        orderBy: { mulai: 'desc' }
+    });
 
-        // Create map for quick lookup
+    // 4. BULK fetch all user absensi for ALL enrolled kelas (1 query instead of N)
+    const allAbsensi = await prisma.absensi.findMany({
+        where: {
+            id_user,
+            id_kelas: { in: kelasIds },
+            deletedAt: null
+        },
+        select: {
+            id_sesi_absensi: true,
+            id_kelas: true,
+            createdAt: true,
+            type_absensi: true
+        }
+    });
+
+    // 5. Group data in-memory (O(N) operations, no DB calls)
+    const sesiByKelas = new Map();
+    allSesi.forEach(s => {
+        if (!sesiByKelas.has(s.id_kelas)) sesiByKelas.set(s.id_kelas, []);
+        sesiByKelas.get(s.id_kelas).push(s);
+    });
+
+    const absensiByKelas = new Map();
+    allAbsensi.forEach(a => {
+        if (!absensiByKelas.has(a.id_kelas)) absensiByKelas.set(a.id_kelas, []);
+        absensiByKelas.get(a.id_kelas).push(a);
+    });
+
+    const now = new Date();
+
+    // 6. Build result (pure in-memory mapping, no async)
+    const result = enrolledClasses.map(pk => {
+        const kelasSesi = sesiByKelas.get(pk.id_kelas) || [];
+        const kelasAbsensi = absensiByKelas.get(pk.id_kelas) || [];
+
         const absensiMap = new Map();
-        userAbsensi.forEach(a => {
+        kelasAbsensi.forEach(a => {
             absensiMap.set(a.id_sesi_absensi, {
                 waktu: a.createdAt,
                 type: a.type_absensi
             });
         });
 
-        // Build sessions with hadir status
-        const sessions = allSesi.map(sesi => ({
+        const sessions = kelasSesi.map(sesi => ({
             id_sesi: sesi.id_sesi_absensi,
+            id_sesi_absensi: sesi.id_sesi_absensi,
             tanggal: sesi.mulai,
+            mulai: sesi.mulai,
+            selesai: sesi.selesai,
+            status: sesi.status,
+            is_active: sesi.status === true && sesi.mulai <= now && sesi.selesai >= now,
             hadir: absensiMap.has(sesi.id_sesi_absensi),
             type_absensi: absensiMap.get(sesi.id_sesi_absensi)?.type || null,
             waktu_absen: absensiMap.get(sesi.id_sesi_absensi)?.waktu || null
@@ -2091,20 +2265,17 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
             kelas: pk.kelas,
             sessions,
             stats: {
-                total_sesi: allSesi.length,
+                total_sesi: kelasSesi.length,
                 total_hadir: totalHadir,
-                total_tidak_hadir: allSesi.length - totalHadir,
-                persentase: allSesi.length > 0
-                    ? ((totalHadir / allSesi.length) * 100).toFixed(1)
+                total_tidak_hadir: kelasSesi.length - totalHadir,
+                persentase: kelasSesi.length > 0
+                    ? ((totalHadir / kelasSesi.length) * 100).toFixed(1)
                     : 0
             }
         };
-    }));
-
-    res.status(200).json({
-        status: "success",
-        data: result
     });
+
+    res.status(200).json({ status: "success", data: result });
 });
 
 // ==================== JADWAL PENGGANTI CONTROLLERS ====================
@@ -2414,4 +2585,22 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
         status: "success",
         data: grouped
     });
+});
+
+// GET /api/v1/akademik/absensi/ku/stats
+exports.getAbsensiKuStats = asyncHandler(async (req, res) => {
+    const userId = req.user.id_user;
+    const { id_kelas } = req.query;
+
+    const where = { id_user: userId, deletedAt: null };
+    if (id_kelas) where.id_kelas = parseInt(id_kelas);
+
+    // Aggregasi di database level
+    const stats = await prisma.absensi.groupBy({
+        by: ['id_kelas', 'type_absensi'],
+        where,
+        _count: { type_absensi: true }
+    });
+
+    res.status(200).json({ status: 'success', data: stats });
 });

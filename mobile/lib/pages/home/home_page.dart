@@ -8,7 +8,6 @@ import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
 import 'package:mobile/pages/home/notification_list_page.dart';
-import 'package:mobile/utils/error_helper.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
@@ -48,10 +47,13 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              
+
               // Opsi 1: Analitik Ketersediaan Parkir
               ListTile(
-                leading: const Icon(Icons.pie_chart, color: Color(0xFFE63946)), // Icon Chart untuk Analitik
+                leading: const Icon(
+                  Icons.pie_chart,
+                  color: Color(0xFFE63946),
+                ), // Icon Chart untuk Analitik
                 title: const Text('Analitik Ketersediaan Parkir'),
                 subtitle: const Text('Cek slot parkir yang tersedia'),
                 onTap: () {
@@ -60,7 +62,7 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
               const Divider(),
-              
+
               // Opsi 2: Histori Parkir
               ListTile(
                 leading: const Icon(Icons.history, color: Color(0xFFE63946)),
@@ -77,177 +79,7 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-  void _showBiometricDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // User tidak bisa tap di luar untuk menutup (opsional)
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent, // Transparan agar rounded corner terlihat rapi
-          insetPadding: const EdgeInsets.all(20), // Jarak dari tepi layar
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE63946), // Merah gelap sesuai gambar background
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Agar tinggi menyesuaikan konten
-              children: [
-                const Text(
-                  "Apa Benar Anda sudah berada pada Lokasi?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Tombol TIDAK
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context); // Tutup dialog
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFFE63946), // Warna Teks Merah
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "TIDAK",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 16
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16), // Jarak antar tombol
-                    // Tombol BETUL
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _showSelfieDialog();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF5252), // Merah muda
-                          foregroundColor: Colors.white, // Warna Teks Putih
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          "BETUL",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 16
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-  void _showSelfieDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
-          child: Container(
-            // Background Merah Besar
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE63946), // Warna merah background utama
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // --- KOTAK KAMERA (Placeholder Gambar) ---
-                Container(
-                  height: 250, 
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.black12,
-                    borderRadius: BorderRadius.circular(20),
-                    image: const DecorationImage(
-                      // Menggunakan gambar placeholder orang selfie
-                      image: NetworkImage('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80'),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  // Jika internet mati, tampilkan icon kamera
-                  child: const Align(
-                    alignment: Alignment.topRight,
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.camera_alt, color: Colors.white54),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
 
-                // --- TOMBOL AMBIL ---
-                SizedBox(
-                  width: 200, // Lebar tombol agak panjang
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context); // Tutup dialog
-                      
-                      // LOGIKA ABSENSI FINISH DI SINI
-                      ErrorHelper.showSuccess(
-                        "Data Biometrik & Lokasi tercatat!",
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF5252), // Warna Salmon/Merah Muda
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      "Ambil",
-                      style: TextStyle(
-                        fontSize: 18, 
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
   @override
   void initState() {
     super.initState();
@@ -280,25 +112,25 @@ class _HomePageState extends State<HomePage> {
   final List<Map<String, dynamic>> gridMenuItems = [
     {
       'icon': Icons.badge_outlined,
-      'label': 'Lisence Plate',
+      'label': 'Kendaraan',
       'color': const Color(0xFFE63946),
       'route': AppRoutes.userHistoriPengajuan,
     },
     {
       'icon': Icons.assignment_ind_outlined,
-      'label': 'Absence',
+      'label': 'Absensi',
       'color': const Color(0xFFE63946),
       'route': AppRoutes.absensi,
     },
     {
       'icon': Icons.qr_code_scanner,
-      'label': 'Biometric',
+      'label': 'Biometrik',
       'color': const Color(0xFFE63946),
       'route': null,
     },
     {
       'icon': Icons.local_parking,
-      'label': 'Parking',
+      'label': 'Parkir',
       'color': const Color(0xFFE63946),
       'route': null,
     },
@@ -322,20 +154,14 @@ class _HomePageState extends State<HomePage> {
           });
         }
 
-        return RefreshIndicator(
-          onRefresh: _homeController.refreshData,
-          child: Stack(
-            children: [
-              // Konten Halaman Utama
-              IndexedStack(index: _selectedIndex, children: _pages),
+        return Stack(
+          children: [
+            // Konten Halaman Utama
+            IndexedStack(index: _selectedIndex, children: _pages),
 
-              // Navigasi di bagian bawah
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: _buildBottomNav(),
-              ),
-            ],
-          ),
+            // Navigasi di bagian bawah
+            Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
+          ],
         );
       }),
     );
@@ -437,7 +263,11 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white.withOpacity(0.2),
                   ),
-                  child: const Icon(Icons.notifications, color: Colors.white, size: 30),
+                  child: const Icon(
+                    Icons.notifications,
+                    color: Colors.white,
+                    size: 30,
+                  ),
                 ),
               ),
             ],
@@ -474,12 +304,19 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.event_available, size: 40, color: Colors.grey),
+                    const Icon(
+                      Icons.event_available,
+                      size: 40,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
                       'Tidak ada kelas hari ini',
@@ -494,12 +331,18 @@ class _HomePageState extends State<HomePage> {
                       onPressed: () => Get.toNamed(AppRoutes.jadwalMingguan),
                       style: TextButton.styleFrom(
                         minimumSize: Size.zero,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       child: const Text(
                         'Lihat jadwal mingguan →',
-                        style: TextStyle(fontSize: 12, color: Color(0xFFE63946)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFE63946),
+                        ),
                       ),
                     ),
                   ],
@@ -573,13 +416,13 @@ class _HomePageState extends State<HomePage> {
     return GestureDetector(
       onTap: hasActiveAbsensi ? () {
         // Navigate based on require_face setting
+        final idSesi = activeSesi?.idSesiAbsensi ?? 0;
         if (requireFace) {
           // Need face verification
-          Get.to(() => const BiometrikAbsenPage());
+          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
         } else {
           // GPS only - still use BiometrikAbsenPage for now
-          // (it already has location validation)
-          Get.to(() => const BiometrikAbsenPage());
+          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
         }
       } : null,
       child: Card(
@@ -602,41 +445,35 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            // Active absensi badge with mode indicator
-            if (hasActiveAbsensi)
-              Positioned(
-                top: 10,
-                left: 10,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          // Active absensi badge
+          if (hasActiveAbsensi)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            requireFace ? Icons.face : Icons.location_on,
-                            color: Colors.white,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            requireFace ? 'Absen + Selfie' : 'Absen GPS',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    Icon(
+                      requireFace ? Icons.face : Icons.location_on,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      requireFace ? 'Absen + Selfie' : 'Absen GPS',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -655,6 +492,7 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
+            ),
             Positioned(
               top: 15,
               right: 15,
@@ -678,19 +516,31 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   if (hasActiveAbsensi) const SizedBox(height: 50),
                   Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
-                    maxLines: 2,
+                    'Dosen: ${dosen.nama}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
-                  if (dosen != null)
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 14, color: Colors.black54),
+                    const SizedBox(width: 4),
                     Text(
-                      'Dosen: ${dosen.nama}',
+                      jadwal,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on, size: 14, color: Colors.black54),
+                    const SizedBox(width: 4),
+                    Text(
+                      location,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -698,181 +548,13 @@ class _HomePageState extends State<HomePage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.black54),
-                      const SizedBox(width: 4),
-                      Text(
-                        jadwal,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      const Icon(Icons.location_on, size: 14, color: Colors.black54),
-                      const SizedBox(width: 4),
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
+                ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(dynamic pesertaKelas) {
-    final kelas = pesertaKelas.kelas;
-    final matakuliah = kelas?.matakuliah;
-    final dosen = kelas?.dosen;
-
-    // Get absensi stats for this class
-    final absensiStats = kelas != null
-        ? _homeController.getAbsensiStatsForKelas(kelas.idKelas)
-        : null;
-
-    final String title = matakuliah != null
-        ? '${matakuliah.namaMatakuliah} (${matakuliah.kodeMatakuliah})'
-        : 'Kelas';
-    final String jadwal = kelas?.jadwal ?? 'Jadwal belum tersedia';
-    final String location = kelas?.ruangan ?? 'Ruangan belum ditentukan';
-    final String kehadiran = absensiStats != null
-        ? 'Kehadiran: ${absensiStats.persentaseKehadiran.toStringAsFixed(1)}%'
-        : 'Kehadiran: 0%';
-
-    // Determine warning color based on attendance
-    final double percentage = absensiStats?.persentaseKehadiran ?? 0.0;
-    final Color warningColor = percentage < 75 ? Colors.red : Colors.green;
-    final IconData warningIcon = percentage < 75
-        ? Icons.warning_amber_rounded
-        : Icons.check_circle_outline;
-
-    return Card(
-      elevation: 8,
-      shadowColor: Colors.black.withOpacity(0.3),
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 20),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned(
-            bottom: -80,
-            right: -80,
-            child: Container(
-              height: 200,
-              width: 200,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE63946).withOpacity(0.8),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 15,
-            right: 15,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE63946).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.class_outlined,
-                color: Color(0xFFE63946),
-                size: 32,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: Colors.black87,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                if (dosen != null)
-                  Text(
-                    'Dosen: ${dosen.nama}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                Text(
-                  jadwal,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  location,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: warningColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(warningIcon, color: warningColor, size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        kehadiran,
-                        style: TextStyle(
-                          color: warningColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -886,71 +568,77 @@ class _HomePageState extends State<HomePage> {
           topRight: Radius.circular(30),
         ),
       ),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            20.0,
-            20.0,
-            20.0,
-            100.0,
-          ), // Padding atas 20, bawah 100
-          child: Obx(() {
-            // Filter menu items based on role (hide Biometric for DOSEN)
-            final userRole = _homeController.currentUser.value?.role;
-            final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems.where((item) {
-              if (item['label'] == 'Biometric' && userRole == 'DOSEN') {
-                return false;
+      child: RefreshIndicator(
+        onRefresh: _homeController.refreshData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              20.0,
+              20.0,
+              20.0,
+              100.0,
+            ), // Padding atas 20, bawah 100
+            child: Obx(() {
+              // Filter menu items based on role (hide Biometric for DOSEN)
+              final userRole = _homeController.currentUser.value?.role;
+              final List<Map<String, dynamic>> filteredMenuItems = gridMenuItems
+                  .where((item) {
+                    if (item['label'] == 'Biometrik' && userRole == 'DOSEN') {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .toList();
+
+              // Add Academic menu for ADMIN
+              if (userRole == 'ADMIN') {
+                filteredMenuItems.add({
+                  'icon': Icons.school,
+                  'label': 'Academic',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.adminAkademik,
+                });
+                filteredMenuItems.add({
+                  'icon': Icons.manage_accounts,
+                  'label': 'Users',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.adminUserManagement,
+                });
               }
-              return true;
-            }).toList();
 
-            // Add Academic menu for ADMIN
-            if (userRole == 'ADMIN') {
-              filteredMenuItems.add({
-                'icon': Icons.school,
-                'label': 'Academic',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.adminAkademik,
-              });
-              filteredMenuItems.add({
-                'icon': Icons.manage_accounts,
-                'label': 'Users',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.adminUserManagement,
-              });
-            }
+              // Add Anomaly menu for ADMIN and DOSEN
+              if (userRole == 'ADMIN' || userRole == 'DOSEN') {
+                filteredMenuItems.add({
+                  'icon': Icons.warning_amber_rounded,
+                  'label': 'Anomaly',
+                  'color': const Color(0xFFE63946),
+                  'route': AppRoutes.anomaliDashboard,
+                });
+              }
 
-            // Add Anomaly menu for ADMIN and DOSEN
-            if (userRole == 'ADMIN' || userRole == 'DOSEN') {
-              filteredMenuItems.add({
-                'icon': Icons.warning_amber_rounded,
-                'label': 'Anomaly',
-                'color': const Color(0xFFE63946),
-                'route': AppRoutes.anomaliDashboard,
-              });
-            }
-
-            return GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: filteredMenuItems.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, index) {
-                final item = filteredMenuItems[index];
-                return _buildGridItem(
-                  item['icon'],
-                  item['label'],
-                  item['color'],
-                  item['route'],
-                );
-              },
-            );
-          }),
+              return GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: filteredMenuItems.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final item = filteredMenuItems[index];
+                  return _buildGridItem(
+                    item['icon'],
+                    item['label'],
+                    item['color'],
+                    item['route'],
+                  );
+                },
+              );
+            }),
+          ),
         ),
       ),
     );
@@ -964,17 +652,16 @@ class _HomePageState extends State<HomePage> {
   ) {
     return InkWell(
       onTap: () {
-        if (label == 'Biometric'){
-          // Role-based navigation for Biometric
+        if (label == 'Biometrik') {
+          // Role-based navigation for Biometrik
           final userRole = _homeController.currentUser.value?.role;
           if (userRole == 'ADMIN') {
             Get.toNamed(AppRoutes.adminBiometrik);
           } else {
             Get.to(() => const BiometrikAbsenPage());
           }
-        }
-        else if (label == 'Absence'){
-          // Role-based navigation for Absence
+        } else if (label == 'Absensi') {
+          // Role-based navigation for Absensi
           final userRole = _homeController.currentUser.value?.role;
           if (userRole == 'ADMIN') {
             Get.toNamed(AppRoutes.adminAbsensiMonitoring);
@@ -983,11 +670,9 @@ class _HomePageState extends State<HomePage> {
           } else {
             Get.to(() => const AbsensiPage());
           }
-        }
-        else if (label == 'Parking'){
+        } else if (label == 'Parkir') {
           _showParkingOptions();
-        }
-        else if (route != null) {
+        } else if (route != null) {
           // Special handling for License Plate - show options dialog
           if (route == AppRoutes.userHistoriPengajuan) {
             _showLicensePlateOptions();
@@ -1067,66 +752,66 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildNavItem(IconData icon, String label, int index) {
-  final bool isSelected = _selectedIndex == index;
+    final bool isSelected = _selectedIndex == index;
 
-  return Expanded(
-    child: InkWell(
-      onTap: () {
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
-      borderRadius: BorderRadius.circular(20),
-      splashColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOutBack,
-        // 👉 merahnya selalu setinggi navbar
-        height: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.grey[600],
-              size: 28,
-            ),
-            const SizedBox(height: 4),
-            // 👉 tingginya yg dianimasikan, bukan background-nya
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              height: isSelected ? 16 : 0, // cukup buat fontSize 12
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: isSelected ? 1.0 : 0.0,
-                child: Center(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOutBack,
+          // 👉 merahnya selalu setinggi navbar
+          height: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey[600],
+                size: 28,
+              ),
+              const SizedBox(height: 4),
+              // 👉 tingginya yg dianimasikan, bukan background-nya
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                height: isSelected ? 16 : 0, // cukup buat fontSize 12
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: isSelected ? 1.0 : 0.0,
+                  child: Center(
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      softWrap: false,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                    softWrap: false,
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // Show options for License Plate menu
   void _showLicensePlateOptions() {
@@ -1153,7 +838,10 @@ class _HomePageState extends State<HomePage> {
               // Admin only: Persetujuan Kendaraan
               if (isAdmin) ...[
                 ListTile(
-                  leading: const Icon(Icons.verified_user, color: Color(0xFFE63946)),
+                  leading: const Icon(
+                    Icons.verified_user,
+                    color: Color(0xFFE63946),
+                  ),
                   title: const Text('Persetujuan Kendaraan'),
                   subtitle: const Text('Setujui atau tolak pengajuan'),
                   onTap: () {
@@ -1189,5 +877,4 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-
 }

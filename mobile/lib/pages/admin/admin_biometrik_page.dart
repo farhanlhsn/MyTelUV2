@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
+import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/biometrik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
@@ -16,7 +17,6 @@ class AdminBiometrikPage extends StatefulWidget {
 class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
   final AkademikService _akademikService = AkademikService();
   final BiometrikService _biometrikService = BiometrikService();
-  final ImagePicker _picker = ImagePicker();
 
   List<Map<String, dynamic>> _userList = [];
   bool _isLoading = true;
@@ -67,51 +67,63 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
     final nama = user['nama'] as String? ?? 'Unknown';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
 
-    // Pick image
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.front,
-      imageQuality: 85,
-    );
-
-    if (image == null) return;
-
-    // Show loading
-    Get.dialog(
-      const Center(child: CircularProgressIndicator(color: Colors.white)),
-      barrierDismissible: false,
-    );
-
-    try {
-      Map<String, dynamic> result;
-      
-      // Use edit endpoint if biometric already exists, otherwise add
-      if (hasBiometric) {
-        result = await _biometrikService.editBiometrik(
-          idUser: idUser,
-          imageFile: File(image.path),
-        );
-      } else {
-        result = await _biometrikService.addBiometrik(
-          idUser: idUser,
-          imageFile: File(image.path),
-        );
-      }
-
-      Get.back(); // Close loading
-
-      if (result['status'] == 'success') {
-        ErrorHelper.showSuccess(
-          hasBiometric ? 'Biometrik $nama berhasil diupdate' : 'Biometrik $nama berhasil ditambahkan',
-        );
-        _loadUsers();
-      } else {
-        throw Exception(result['message'] ?? 'Unknown error');
-      }
-    } catch (e) {
-      Get.back(); // Close loading
-      ErrorHelper.showError(e, title: 'Gagal Menyimpan Biometrik');
+    // Get available cameras
+    final List<CameraDescription> cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      ErrorHelper.showError(Exception('Tidak ada kamera tersedia untuk Liveness Check'), title: 'Gagal Membuka Kamera');
+      return;
     }
+
+    // Launch active liveness screen
+    Get.to(() => LivenessDetectionScreen(
+      cameras: cameras,
+      config: LivenessConfig(
+        enableScreenGlareDetection: true,
+      ),
+      captureFinalImage: true,
+      onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) async {
+        final String imagePath = imageFile.path;
+        Get.back(); // Return from LivenessDetectionScreen
+        
+        // Show loading dialog
+        Get.dialog(
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+          barrierDismissible: false,
+        );
+
+        try {
+          Map<String, dynamic> result;
+          
+          if (hasBiometric) {
+            result = await _biometrikService.editBiometrik(
+              idUser: idUser,
+              imageFile: File(imagePath),
+              isLivenessVerified: true,
+            );
+          } else {
+            result = await _biometrikService.addBiometrik(
+              idUser: idUser,
+              imageFile: File(imagePath),
+              isLivenessVerified: true,
+            );
+          }
+
+          Get.back(); // Close loading dialog
+
+          if (result['status'] == 'success') {
+            ErrorHelper.showSuccess(
+              hasBiometric ? 'Biometrik $nama berhasil diupdate' : 'Biometrik $nama berhasil ditambahkan',
+            );
+            _loadUsers();
+          } else {
+            throw Exception(result['message'] ?? 'Unknown error');
+          }
+        } catch (e) {
+          Get.back(); // Close loading dialog
+          ErrorHelper.showError(e, title: 'Gagal Menyimpan Biometrik');
+        }
+      },
+    ));
   }
 
   Future<void> _deleteBiometrik(Map<String, dynamic> user) async {

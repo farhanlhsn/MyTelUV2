@@ -9,7 +9,8 @@ model:
 
 # Server Configuration
 server:
-  url: "http://213.210.37.132:5001"  # Replace with your server URL
+  url: "http://localhost:5050"  # Direct backend URL
+  secret: "e2e-testing-edge-device-secret-32-chars"  # Edge device secret key
   timeout: 10  # Request timeout in seconds
 
 # Camera Configuration
@@ -41,10 +42,10 @@ gpio:
   enabled: false  # Set to true when using real GPIO on Raspberry Pi
   relay_pin: 17   # GPIO pin for relay/servo control
 
-# Face Detection Configuration (lightweight Haar Cascade)
+# Face Detection Configuration (lightweight YuNet)
 # Used to capture face image at gate entry for display in mobile app
 face_detection:
   enabled: true                              # Set to false to disable face capture
-  min_face_size: 80                          # Minimum face size in pixels
-  scale_factor: 1.1                          # Detection scale factor
-  min_neighbors: 5                           # Min neighbors for robust detection
+  model_path: "models/face_detection_yunet_2023mar.onnx"
+  score_threshold: 0.6                       # Confidence threshold for face detection
+  nms_threshold: 0.3                         # NMS threshold

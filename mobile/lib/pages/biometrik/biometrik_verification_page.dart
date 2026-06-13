@@ -1,14 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import '../../services/biometrik_service.dart';
 
 class BiometrikAbsenPage extends StatefulWidget {
-  const BiometrikAbsenPage({super.key});
+  final int? idSesiAbsensi;
+
+  const BiometrikAbsenPage({super.key, this.idSesiAbsensi});
 
   @override
   State<BiometrikAbsenPage> createState() => _BiometrikAbsenPageState();
@@ -18,11 +22,6 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     with WidgetsBindingObserver {
   final BiometrikService _biometrikService = BiometrikService();
 
-  CameraController? _cameraController;
-  bool _isCameraInitialized = false;
-  bool _isCameraError = false;
-  String? _cameraErrorMessage;
-
   File? _capturedImage;
   bool _isLoading = false;
   bool _isSuccess = false;
@@ -30,85 +29,57 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   Map<String, dynamic>? _result;
   Position? _currentPosition;
   bool _isGettingLocation = false;
+  Future<List<CameraDescription>>? _camerasFuture;
+  Future<Position?>? _locationFuture;
+  Future<String?>? _livenessTokenFuture;
+  String? _livenessToken;
+  DateTime? _livenessTokenFetchedAt;
+  int? _idSesiAbsensi;
 
   final Color primaryRed = const Color(0xFFE63946);
+  static const Duration _livenessTokenMaxAge = Duration(minutes: 4);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
-    _getCurrentLocation();
+    _idSesiAbsensi =
+        widget.idSesiAbsensi ?? _readIdSesiAbsensiFromArguments();
+    if (_idSesiAbsensi == null) {
+      _errorMessage = _missingSessionContextMessage;
+    }
+    _camerasFuture = availableCameras();
+    if (_idSesiAbsensi != null) {
+      _prefetchLivenessToken();
+    }
+    unawaited(_getCurrentLocation());
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
-      _cameraController?.dispose();
-    } else if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
-    }
-  }
-
-  Future<void> _initializeCamera() async {
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        setState(() {
-          _isCameraError = true;
-          _cameraErrorMessage = 'Tidak ada kamera tersedia';
-        });
-        return;
-      }
-
-      // Find front camera
-      final frontCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
-
-      _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
-      );
-
-      await _cameraController!.initialize();
-
-      if (mounted) {
-        setState(() {
-          _isCameraInitialized = true;
-          _isCameraError = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isCameraError = true;
-        _cameraErrorMessage = 'Gagal membuka kamera: ${e.toString()}';
-      });
-    }
   }
 
   /// Map API error messages to user-friendly Indonesian text
   String _mapErrorMessage(String? message) {
     if (message == null) return 'Terjadi kesalahan';
 
+    final messageLower = message.toLowerCase();
+
+    // Preserve detailed distance info if present in location errors
+    if (messageLower.contains('lokasi anda di luar area absensi')) {
+      if (messageLower.contains('jarak') || messageLower.contains('radius')) {
+        return message;
+      }
+      return 'Lokasi Anda di luar area absensi. Silakan mendekat ke area kelas.';
+    }
+
     final errorMap = {
+      'Layanan pengenalan wajah sedang tidak tersedia':
+          'Layanan sedang sibuk atau tidak tersedia. Silakan coba beberapa saat lagi.',
       'Face recognition service unavailable':
           'Layanan pengenalan wajah tidak tersedia. Coba lagi nanti.',
-      'No face detected': 'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
+      'No face detected':
+          'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
       'Face detection failed': 'Gagal mendeteksi wajah. Coba ambil foto ulang.',
       'Wajah tidak cocok': 'Wajah tidak cocok dengan data terdaftar.',
       'Image file is required': 'Silakan ambil foto terlebih dahulu.',
@@ -116,110 +87,298 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       'Anda belum terdaftar biometrik':
           'Anda belum terdaftar biometrik. Hubungi admin.',
       'Tidak ada sesi absensi': 'Tidak ada kelas yang sedang berlangsung.',
-      'Lokasi Anda di luar area absensi': 'Anda berada di luar area kampus.',
+      'id_sesi_absensi wajib diisi':
+          'Konteks sesi absensi tidak tersedia. Silakan pilih sesi absensi dari daftar absensi.',
+      'Sesi absensi yang dipilih tidak valid':
+          'Sesi absensi tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar.',
+      'Anda sudah melakukan absensi':
+          'Anda sudah melakukan absensi pada sesi ini.',
     };
 
     for (final entry in errorMap.entries) {
-      if (message.toLowerCase().contains(entry.key.toLowerCase())) {
+      if (messageLower.contains(entry.key.toLowerCase())) {
         return entry.value;
       }
     }
     return message;
   }
 
-  Future<void> _getCurrentLocation() async {
+  String get _missingSessionContextMessage =>
+      'Konteks sesi absensi tidak tersedia. Silakan pilih sesi absensi dari daftar absensi.';
+
+  int? _parsePositiveInt(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return null;
+  }
+
+  int? _readIdSesiAbsensiFromArguments() {
+    final arguments = Get.arguments;
+    if (arguments is Map) {
+      return _parsePositiveInt(
+        arguments['idSesiAbsensi'] ??
+            arguments['id_sesi_absensi'] ??
+            arguments['id_sesi'],
+      );
+    }
+    return _parsePositiveInt(arguments);
+  }
+
+  bool _ensureSessionContext() {
+    if (_idSesiAbsensi != null) return true;
+    setState(() {
+      _isLoading = false;
+      _errorMessage = _missingSessionContextMessage;
+    });
+    return false;
+  }
+
+  bool get _hasFreshLivenessToken {
+    final fetchedAt = _livenessTokenFetchedAt;
+    return _livenessToken != null &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < _livenessTokenMaxAge;
+  }
+
+  void _prefetchLivenessToken() {
+    if (_hasFreshLivenessToken || _livenessTokenFuture != null) return;
+
+    _livenessTokenFuture = _biometrikService
+        .requestLivenessToken()
+        .then<String?>((token) {
+          _livenessToken = token;
+          _livenessTokenFetchedAt = DateTime.now();
+          return token;
+        })
+        .catchError((_) {
+          return null;
+        })
+        .whenComplete(() {
+          _livenessTokenFuture = null;
+        });
+  }
+
+  Future<String> _consumeLivenessToken() async {
+    if (_hasFreshLivenessToken) {
+      final token = _livenessToken!;
+      _livenessToken = null;
+      _livenessTokenFetchedAt = null;
+      return token;
+    }
+
+    final pendingToken = _livenessTokenFuture;
+    if (pendingToken != null) {
+      final token = await pendingToken;
+      if (token != null) {
+        _livenessToken = null;
+        _livenessTokenFetchedAt = null;
+        return token;
+      }
+    }
+
+    return _biometrikService.requestLivenessToken();
+  }
+
+  Future<List<CameraDescription>> _getAvailableCameras() async {
+    try {
+      return await (_camerasFuture ??= availableCameras());
+    } catch (_) {
+      _camerasFuture = null;
+      rethrow;
+    }
+  }
+
+  Future<Position?> _getCurrentLocation() async {
+    if (_locationFuture != null) return _locationFuture!;
+
     setState(() => _isGettingLocation = true);
+    _locationFuture = _resolveCurrentLocation();
 
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() {
-          _errorMessage = 'Lokasi tidak aktif. Silakan aktifkan GPS.';
-          _isGettingLocation = false;
-        });
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() {
-            _errorMessage = 'Izin lokasi ditolak';
-            _isGettingLocation = false;
-          });
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _errorMessage = 'Izin lokasi diblokir. Aktifkan di pengaturan.';
-          _isGettingLocation = false;
-        });
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+      final position = await _locationFuture!;
+      if (!mounted) return position;
 
       setState(() {
         _currentPosition = position;
         _isGettingLocation = false;
-        _errorMessage = null;
+        if (_idSesiAbsensi != null) {
+          _errorMessage = null;
+        }
       });
+      return position;
     } catch (e) {
+      if (!mounted) return _currentPosition;
+
+      if (_currentPosition != null) {
+        setState(() => _isGettingLocation = false);
+        return _currentPosition;
+      }
+
       setState(() {
-        _errorMessage = 'Gagal mendapatkan lokasi: ${e.toString()}';
+        _errorMessage = _idSesiAbsensi == null
+            ? _missingSessionContextMessage
+            : 'Gagal mendapatkan lokasi: ${e.toString()}';
         _isGettingLocation = false;
       });
+      return null;
+    } finally {
+      _locationFuture = null;
     }
   }
 
-  Future<void> _capturePhoto() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
+  Future<Position?> _resolveCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Lokasi tidak aktif. Silakan aktifkan GPS.');
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw Exception('Izin lokasi ditolak');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Izin lokasi diblokir. Aktifkan di pengaturan.');
+    }
+
+    final lastKnown = await Geolocator.getLastKnownPosition();
+    if (lastKnown != null && mounted) {
+      setState(() {
+        _currentPosition = lastKnown;
+        if (_idSesiAbsensi != null) {
+          _errorMessage = null;
+        }
+      });
     }
 
     try {
-      final XFile photo = await _cameraController!.takePicture();
-      setState(() {
-        _capturedImage = File(photo.path);
-        _errorMessage = null;
-        _isSuccess = false;
-        _result = null;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Gagal mengambil foto: ${e.toString()}';
-      });
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+    } catch (_) {
+      if (_currentPosition != null) return _currentPosition;
+      rethrow;
     }
   }
 
-  void _retakePhoto() {
+  math.Random _challengeRandom() {
+    try {
+      return math.Random.secure();
+    } catch (_) {
+      return math.Random();
+    }
+  }
+
+  List<ChallengeType> _studentChallengeTypes() {
+    final random = _challengeRandom();
+    final availableChallenges = [
+      ChallengeType.blink,
+      ChallengeType.smile,
+      ChallengeType.turnRight,
+      ChallengeType.turnLeft,
+    ]..shuffle(random);
+
+    // Hanya menggunakan 1 challenge acak ditambah normal (total 2 langkah)
+    return [availableChallenges.first, ChallengeType.normal];
+  }
+
+  LivenessConfig _studentLivenessConfig() {
+    return LivenessConfig.performance().copyWith(
+      enableScreenGlareDetection: false,
+      enablePerformanceMonitoring: false,
+      sandwichNormalChallenge: false,
+      challengeTypes: _studentChallengeTypes(),
+      frameSkipInterval: 1, // Set ke 1 agar memproses setiap frame tanpa error bagi nol
+      imageProcessingTimeout: const Duration(milliseconds: 5000), // Beri waktu lebih lama
+      memoryCleanupInterval: const Duration(seconds: 20),
+      
+      // Hapus threshold yang terbalik/ekstrem agar menggunakan nilai standar ML Kit
+      eyeBlinkThresholdOpen: 0.8, // Probabilitas mata terbuka (default ML Kit)
+      eyeBlinkThresholdClosed: 0.2, // Probabilitas mata tertutup (default ML Kit)
+      enableContourAnalysisOnCentering: false,
+      minFaceSize: 0.2, // Pastikan wajah cukup besar di layar
+      enableMotionCorrelationCheck: false,
+      enableGyroscopeCheck: false,
+    );
+  }
+
+  Future<void> _startLivenessCheck() async {
+    if (!_ensureSessionContext()) return;
+
     setState(() {
-      _capturedImage = null;
       _errorMessage = null;
       _isSuccess = false;
       _result = null;
+      _capturedImage = null;
     });
+
+    _prefetchLivenessToken();
+    if (_currentPosition == null && !_isGettingLocation) {
+      unawaited(_getCurrentLocation());
+    }
+
+    try {
+      final List<CameraDescription> cameras = await _getAvailableCameras();
+      if (!mounted) return;
+
+      if (cameras.isEmpty) {
+        setState(() {
+          _errorMessage = 'Tidak ada kamera tersedia untuk Liveness Check';
+        });
+        return;
+      }
+
+      await Get.to(
+        () => LivenessDetectionScreen(
+          cameras: cameras,
+          config: _studentLivenessConfig(),
+          showAppBar: false,
+          captureFinalImage: true,
+          customSuccessOverlay: const SizedBox.shrink(),
+          onFinalImageCaptured:
+              (
+                String sessionId,
+                XFile imageFile,
+                Map<String, dynamic> metadata,
+              ) {
+                _capturedImage = File(imageFile.path);
+
+                if (Get.currentRoute != '/BiometrikAbsenPage') {
+                  Get.back();
+                }
+
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  unawaited(_submitAbsen());
+                });
+              },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Gagal memuat Liveness Check: ${e.toString()}';
+      });
+    }
   }
 
   Future<void> _submitAbsen() async {
-    if (_capturedImage == null) {
-      setState(() => _errorMessage = 'Silakan ambil foto wajah terlebih dahulu');
-      return;
-    }
+    if (!_ensureSessionContext()) return;
 
-    if (_currentPosition == null) {
-      await _getCurrentLocation();
-      if (_currentPosition == null) {
-        setState(() => _errorMessage = 'Tidak dapat mengambil lokasi');
-        return;
-      }
+    if (_capturedImage == null) {
+      setState(
+        () => _errorMessage = 'Silakan lakukan Liveness Check terlebih dahulu',
+      );
+      return;
     }
 
     setState(() {
@@ -228,10 +387,29 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     });
 
     try {
+      final tokenFuture = _consumeLivenessToken();
+      final locationFuture = _currentPosition == null
+          ? _getCurrentLocation()
+          : Future<Position?>.value(_currentPosition);
+
+      final position = await locationFuture;
+      if (position == null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Tidak dapat mengambil lokasi';
+        });
+        return;
+      }
+
+      final String token = await tokenFuture;
+
       final result = await _biometrikService.biometrikAbsen(
         imageFile: _capturedImage!,
-        latitude: _currentPosition!.latitude,
-        longitude: _currentPosition!.longitude,
+        idSesiAbsensi: _idSesiAbsensi!,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        livenessToken: token,
+        isMockLocation: position.isMocked,
       );
 
       setState(() {
@@ -248,9 +426,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            _mapErrorMessage(e.toString().replaceFirst('Exception: ', ''));
+        _errorMessage = _mapErrorMessage(
+          e.toString().replaceFirst('Exception: ', ''),
+        );
       });
+      _prefetchLivenessToken();
     }
   }
 
@@ -264,14 +444,19 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           children: [
             // Header
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 20.0,
+              ),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios,
-                        color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.arrow_back_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -311,8 +496,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
                       const SizedBox(height: 24),
 
-                      // Capture/Retake button
-                      if (!_isSuccess) _buildCaptureButton(),
+                      // Action buttons area
+                      if (!_isSuccess && !_isLoading) _buildCaptureButton(),
 
                       const SizedBox(height: 24),
 
@@ -322,51 +507,6 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
                       // Success result
                       if (_isSuccess && _result != null) _buildSuccessResult(),
-
-                      const SizedBox(height: 16),
-
-                      // Submit button
-                      if (_capturedImage != null)
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton.icon(
-                            onPressed:
-                                (_isLoading || _isSuccess) ? null : _submitAbsen,
-                            icon: _isLoading
-                                ? const SizedBox.shrink()
-                                : Icon(
-                                    _isSuccess ? Icons.check : Icons.fingerprint,
-                                    color: Colors.white,
-                                  ),
-                            label: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : Text(
-                                    _isSuccess ? 'Berhasil!' : 'Absen Sekarang',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  _isSuccess ? Colors.green : primaryRed,
-                              disabledBackgroundColor:
-                                  _isSuccess ? Colors.green : Colors.grey.shade300,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
 
                       const SizedBox(height: 20),
                     ],
@@ -406,7 +546,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                   _currentPosition != null
                       ? Icons.location_on
                       : Icons.location_off,
-                  color: _currentPosition != null ? Colors.green : Colors.orange,
+                  color: _currentPosition != null
+                      ? Colors.green
+                      : Colors.orange,
                   size: 20,
                 ),
           const SizedBox(width: 10),
@@ -415,8 +557,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
               _isGettingLocation
                   ? 'Mendapatkan lokasi...'
                   : _currentPosition != null
-                      ? 'Lokasi: ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}'
-                      : 'Lokasi tidak tersedia',
+                  ? 'Lokasi: ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}'
+                  : 'Lokasi tidak tersedia',
               style: TextStyle(
                 fontSize: 12,
                 color: _currentPosition != null
@@ -428,8 +570,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           if (_currentPosition == null && !_isGettingLocation)
             GestureDetector(
               onTap: _getCurrentLocation,
-              child:
-                  Icon(Icons.refresh, color: Colors.orange.shade700, size: 20),
+              child: Icon(
+                Icons.refresh,
+                color: Colors.orange.shade700,
+                size: 20,
+              ),
             ),
         ],
       ),
@@ -463,7 +608,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Widget _buildCameraContent() {
-    // Show captured image
+    // Show captured image (loading or success state)
     if (_capturedImage != null) {
       return Stack(
         fit: StackFit.expand,
@@ -485,7 +630,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                     Text(
                       'Absensi Berhasil',
                       style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -501,7 +648,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 12),
                     Text(
-                      'Memverifikasi wajah...',
+                      'Mencatat absensi...',
                       style: TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
@@ -512,129 +659,82 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       );
     }
 
-    // Camera error
-    if (_isCameraError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.videocam_off, size: 48, color: Colors.grey.shade400),
-            const SizedBox(height: 12),
-            Text(
-              _cameraErrorMessage ?? 'Kamera tidak tersedia',
+    // Default placeholder before liveness verification
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.face, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'Tekan tombol di bawah untuk memulai verifikasi wajah dan absensi otomatis.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Camera loading
-    if (!_isCameraInitialized) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 12),
-            Text(
-              'Memuat kamera...',
-              style: TextStyle(color: Colors.white, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Live camera preview with face guide
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Camera preview
-        Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()..scale(-1.0, 1.0), // Mirror for selfie
-          child: CameraPreview(_cameraController!),
-        ),
-        // Face oval guide overlay
-        CustomPaint(
-          size: const Size(180, 240),
-          painter: FaceOvalPainter(
-            color: Colors.white.withOpacity(0.7),
-          ),
-        ),
-        // Instructions
-        Positioned(
-          bottom: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Posisikan wajah dalam bingkai',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildCaptureButton() {
-    if (_capturedImage == null) {
-      // Capture button
-      return GestureDetector(
-        onTap: _isCameraInitialized ? _capturePhoto : null,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: primaryRed, width: 4),
+    // After an error, show retry button
+    if (_errorMessage != null && _capturedImage != null) {
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _startLivenessCheck,
+          icon: const Icon(Icons.refresh, color: Colors.white),
+          label: const Text(
+            'Coba Lagi',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-          child: Center(
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _isCameraInitialized ? primaryRed : Colors.grey,
-              ),
-              child: const Icon(Icons.camera_alt, color: Colors.white, size: 28),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryRed,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
           ),
         ),
       );
-    } else {
-      // Retake button
-      return GestureDetector(
-        onTap: _retakePhoto,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(30),
+    }
+
+    // Initial state — start the one-tap flow
+    if (_capturedImage == null) {
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _startLivenessCheck,
+          icon: const Icon(Icons.fingerprint, color: Colors.white),
+          label: const Text(
+            'Mulai Absen',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.refresh, color: Colors.grey.shade700),
-              const SizedBox(width: 8),
-              Text(
-                'Ambil Ulang',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryRed,
+            disabledBackgroundColor: Colors.grey.shade300,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
         ),
       );
     }
+
+    // Captured but no error (shouldn't normally be visible since auto-submit runs)
+    return const SizedBox.shrink();
   }
 
   Widget _buildErrorMessage() {
@@ -652,8 +752,10 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(_errorMessage!,
-                style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -691,10 +793,21 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           ),
           if (data != null) ...[
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.class_, 'Kelas', data['kelas']?.toString() ?? '-'),
-            _buildInfoRow(Icons.room, 'Ruangan', data['ruangan']?.toString() ?? '-'),
             _buildInfoRow(
-                Icons.access_time, 'Waktu', _formatTime(data['waktu']?.toString())),
+              Icons.class_,
+              'Kelas',
+              data['kelas']?.toString() ?? '-',
+            ),
+            _buildInfoRow(
+              Icons.room,
+              'Ruangan',
+              data['ruangan']?.toString() ?? '-',
+            ),
+            _buildInfoRow(
+              Icons.access_time,
+              'Waktu',
+              _formatTime(data['waktu']?.toString()),
+            ),
           ],
         ],
       ),
@@ -708,12 +821,15 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         children: [
           Icon(icon, size: 16, color: Colors.grey.shade600),
           const SizedBox(width: 8),
-          Text('$label: ',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+          Text(
+            '$label: ',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
           Expanded(
-            child: Text(value,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ),
         ],
       ),
@@ -760,8 +876,7 @@ class FaceOvalPainter extends CustomPainter {
     for (final metric in pathMetrics) {
       double distance = 0;
       while (distance < metric.length) {
-        final extractPath =
-            metric.extractPath(distance, distance + dashLength);
+        final extractPath = metric.extractPath(distance, distance + dashLength);
         canvas.drawPath(extractPath, dashPaint);
         distance += dashLength + dashSpace;
       }

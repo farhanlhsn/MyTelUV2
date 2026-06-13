@@ -2,10 +2,19 @@ const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const axios = require('axios');
 const { logAudit } = require('../utils/auditLogger'); // Opsional, jika Anda menggunakan logger
+const CircuitBreaker = require('../utils/CircuitBreaker');
+const { globalAnomalyQueue } = require('../utils/TaskQueue');
 
 // URL Service Python (Port 5003 sesuai setup anomaly_detection)
 // Gunakan environment variable atau fallback ke localhost
-const PYTHON_SERVICE_URL = process.env.ANOMALY_SERVICE_URL || 'http://localhost:5003';
+const ANOMALY_SERVICE_URL = (process.env.ANOMALY_SERVICE_URL || 'http://localhost:5003').replace(/\/+$/, '');
+const ANOMALY_SERVICE_TIMEOUT_MS = Number.parseInt(process.env.ANOMALY_SERVICE_TIMEOUT_MS, 10) || 10000;
+
+// Initialize Circuit Breaker for Anomaly Detection API
+const anomalyApiBreaker = new CircuitBreaker("AnomalyAPI", {
+    failureThreshold: parseInt(process.env.ANOMALY_CB_FAILURE_THRESHOLD || '3'),
+    recoveryTimeout: parseInt(process.env.ANOMALY_CB_RECOVERY_TIMEOUT || '30000')
+});
 
 /**
  * @desc    Memicu analisis AI untuk mendeteksi anomali pada kelas tertentu
@@ -14,10 +23,28 @@ const PYTHON_SERVICE_URL = process.env.ANOMALY_SERVICE_URL || 'http://localhost:
  */
 exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     const { id_kelas } = req.params;
+    const { threshold = 0.5, contamination = 0.1 } = req.body;
     const userId = req.user.id_user;
     const userRole = req.user.role;
 
-    // 1. Validasi Keberadaan Kelas
+    // 1. Validasi Input Threshold & Contamination
+    const parsedThreshold = parseFloat(threshold);
+    if (isNaN(parsedThreshold) || parsedThreshold < 0.1 || parsedThreshold > 1.0) {
+        return res.status(400).json({
+            status: "error",
+            message: "Threshold harus berupa angka antara 0.1 dan 1.0"
+        });
+    }
+
+    const parsedContamination = parseFloat(contamination);
+    if (isNaN(parsedContamination) || parsedContamination < 0.01 || parsedContamination > 0.5) {
+        return res.status(400).json({
+            status: "error",
+            message: "Contamination harus berupa angka antara 0.01 dan 0.5"
+        });
+    }
+
+    // 2. Validasi Keberadaan Kelas
     const kelas = await prisma.kelas.findUnique({
         where: { id_kelas: parseInt(id_kelas) },
         include: { matakuliah: true }
@@ -30,7 +57,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         });
     }
 
-    // 2. Validasi Otorisasi (Hanya Admin atau Dosen Pengampu)
+    // 3. Validasi Otorisasi (Hanya Admin atau Dosen Pengampu)
     if (userRole === 'DOSEN' && kelas.id_dosen !== userId) {
         return res.status(403).json({
             status: "error",
@@ -38,9 +65,8 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         });
     }
 
-    // 3. Mengambil Data Mentah dari Database (Parallel Fetching)
-    // Kita butuh: Data Peserta, Riwayat Absensi, dan Jumlah Sesi yang sudah berlalu
-    const [peserta, absensi, totalSesi] = await prisma.$transaction([
+    // 4. Mengambil Data Mentah dari Database (Parallel Fetching)
+    const [peserta, absensi, sesiList] = await prisma.$transaction([
         // Ambil daftar peserta aktif
         prisma.pesertaKelas.findMany({
             where: { 
@@ -53,7 +79,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 } 
             }
         }),
-        // Ambil record absensi valid
+        // Ambil record absensi valid dengan koordinat
         prisma.absensi.findMany({
             where: { 
                 id_kelas: parseInt(id_kelas), 
@@ -62,16 +88,23 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
             select: {
                 id_user: true,
                 id_sesi_absensi: true,
+                koordinat: true,
                 createdAt: true // Timestamp penting untuk analisis waktu
             }
         }),
-        // Hitung sesi yang sudah selesai/lewat tanggalnya
-        prisma.sesiAbsensi.count({
+        // Ambil list semua sesi yang valid dengan koordinat
+        prisma.sesiAbsensi.findMany({
             where: { 
                 id_kelas: parseInt(id_kelas), 
                 deletedAt: null,
-                // Kita anggap sesi valid untuk dihitung jika waktu mulai sudah lewat
-                mulai: { lte: new Date() } 
+                mulai: { lte: new Date() }
+            },
+            select: {
+                id_sesi_absensi: true,
+                mulai: true,
+                selesai: true,
+                latitude: true,
+                longitude: true
             }
         })
     ]);
@@ -84,31 +117,75 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         });
     }
 
-    // 4. Siapkan Payload untuk dikirim ke Python Service
+    const totalSesi = sesiList.length;
+
+    // 5. Siapkan Payload untuk dikirim ke Python Service
     const payload = {
         total_sessions: totalSesi === 0 ? 1 : totalSesi, // Hindari division by zero
+        threshold: parsedThreshold,
+        contamination: parsedContamination,
         students: peserta.map(p => ({
             id_user: p.mahasiswa.id_user,
             nama: p.mahasiswa.nama
         })),
-        attendance: absensi.map(a => ({
-            id_user: a.id_user,
-            id_sesi: a.id_sesi_absensi,
-            timestamp: a.createdAt.toISOString()
-        }))
+        sessions: sesiList.map(s => ({
+            id_sesi: s.id_sesi_absensi,
+            mulai: s.mulai.toISOString(),
+            selesai: s.selesai.toISOString(),
+            latitude: s.latitude,
+            longitude: s.longitude
+        })),
+        attendance: absensi.map(a => {
+            // koordinat is of type Point in Postgres/Prisma.
+            // Safe parse object {x, y} or array [x, y]
+            let lat = null;
+            let lng = null;
+            if (a.koordinat) {
+                if (typeof a.koordinat === 'object') {
+                    lat = a.koordinat.y !== undefined ? a.koordinat.y : a.koordinat[1];
+                    lng = a.koordinat.x !== undefined ? a.koordinat.x : a.koordinat[0];
+                } else if (Array.isArray(a.koordinat)) {
+                    lng = a.koordinat[0];
+                    lat = a.koordinat[1];
+                }
+            }
+            return {
+                id_user: a.id_user,
+                id_sesi: a.id_sesi_absensi,
+                timestamp: a.createdAt.toISOString(),
+                latitude: lat,
+                longitude: lng
+            };
+        })
     };
 
-    try {
-        // 5. Request ke Python Microservice
-        console.log(`[Anomali] Sending data to ${PYTHON_SERVICE_URL}/detect-anomalies...`);
-        const pythonResponse = await axios.post(`${PYTHON_SERVICE_URL}/detect-anomalies`, payload);
-        
-        const { anomalies } = pythonResponse.data;
+    const isAsync = req.query.async === 'true';
 
-        // 6. Simpan Hasil ke Database
-        // Hapus laporan lama untuk kelas ini agar data selalu fresh (Re-analysis strategy)
-        await prisma.laporanAnomali.deleteMany({
-            where: { id_kelas: parseInt(id_kelas) }
+    const runAnalysisTask = async () => {
+        // 6. Request ke Python Microservice
+        console.log(`[Anomali] Sending data to ${ANOMALY_SERVICE_URL}/detect-anomalies...`);
+        const pythonResponse = await anomalyApiBreaker.fire(async () => {
+            return await axios.post(`${ANOMALY_SERVICE_URL}/detect-anomalies`, payload, {
+                timeout: ANOMALY_SERVICE_TIMEOUT_MS,
+                headers: {
+                    'X-API-Key': process.env.ANOMALY_API_KEY || ''
+                }
+            });
+        });
+        
+        const anomalies = Array.isArray(pythonResponse.data?.anomalies)
+            ? pythonResponse.data.anomalies
+            : [];
+
+        // 7. Simpan Hasil ke Database (Soft Delete laporan lama)
+        await prisma.laporanAnomali.updateMany({
+            where: { 
+                id_kelas: parseInt(id_kelas),
+                deletedAt: null
+            },
+            data: {
+                deletedAt: new Date()
+            }
         });
 
         if (anomalies && anomalies.length > 0) {
@@ -117,8 +194,9 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 id_user: item.id_user,
                 id_kelas: parseInt(id_kelas),
                 type_anomali: item.type_anomali, // Pastikan string ini match dengan ENUM di Prisma
-                // Note: Schema saat ini belum ada field 'deskripsi' atau 'confidence', 
-                // jika schema diupdate, tambahkan di sini.
+                deskripsi: item.description || null,
+                confidence: item.confidence !== undefined ? parseFloat(item.confidence) : null,
+                status: 'OPEN'
             }));
 
             await prisma.laporanAnomali.createMany({
@@ -133,9 +211,29 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 performedBy: userId,
                 targetUserId: null,
                 details: `Analisis kelas ${kelas.nama_kelas} (ID: ${id_kelas}). Ditemukan ${anomalies.length} anomali.`,
-                ip: req.ip || req.headers['x-forwarded-for']
+                ip: req.ip || (req.headers && req.headers['x-forwarded-for']) || '127.0.0.1'
             });
         }
+
+        return anomalies;
+    };
+
+    if (isAsync) {
+        const jobId = `anomaly_kelas_${id_kelas}_${Date.now()}`;
+        globalAnomalyQueue.addJob(jobId, runAnalysisTask);
+        
+        return res.status(202).json({
+            status: "success",
+            message: "Analisis anomali telah dijadwalkan di latar belakang.",
+            data: {
+                jobId,
+                status: "QUEUED"
+            }
+        });
+    }
+
+    try {
+        const anomalies = await runAnalysisTask();
 
         // 8. Return Response ke Client (Mobile/Web)
         // Kita kembalikan juga data raw anomalinya agar Frontend bisa langsung menampilkan
@@ -210,5 +308,96 @@ exports.getLaporanAnomali = asyncHandler(async (req, res) => {
     res.status(200).json({
         status: "success",
         data: laporan
+    });
+});
+
+/**
+ * @desc    Dosen/Admin menindaklanjuti laporan anomali (update status & catatan)
+ * @route   PUT /api/v1/anomali/:id_anomali
+ * @access  Private (Dosen/Admin)
+ */
+exports.updateLaporanAnomali = asyncHandler(async (req, res) => {
+    const { id_anomali } = req.params;
+    const { status, catatan_dosen } = req.body;
+    const userId = req.user.id_user;
+    const userRole = req.user.role;
+
+    // Validate status
+    if (status && !['OPEN', 'REVIEWED', 'RESOLVED'].includes(status)) {
+        return res.status(400).json({
+            status: "error",
+            message: "Status tidak valid. Harus OPEN, REVIEWED, atau RESOLVED."
+        });
+    }
+
+    // Find the anomaly report
+    const laporan = await prisma.laporanAnomali.findFirst({
+        where: {
+            id_anomali: parseInt(id_anomali),
+            deletedAt: null
+        },
+        include: {
+            kelas: true
+        }
+    });
+
+    if (!laporan) {
+        return res.status(404).json({
+            status: "error",
+            message: "Laporan anomali tidak ditemukan"
+        });
+    }
+
+    // Verify authorization: Admin or assigned Dosen
+    if (userRole === 'DOSEN' && laporan.kelas?.id_dosen !== userId) {
+        return res.status(403).json({
+            status: "error",
+            message: "Anda tidak memiliki akses untuk mengubah laporan ini"
+        });
+    }
+
+    // Update data
+    const updateData = {};
+    if (status) {
+        updateData.status = status;
+        if (status === 'RESOLVED') {
+            updateData.resolved_at = new Date();
+        }
+    }
+    if (catatan_dosen !== undefined) {
+        updateData.catatan_dosen = catatan_dosen ? catatan_dosen.trim() : null;
+    }
+
+    const updatedLaporan = await prisma.laporanAnomali.update({
+        where: { id_anomali: parseInt(id_anomali) },
+        data: updateData
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: "Laporan anomali berhasil diperbarui",
+        data: updatedLaporan
+    });
+});
+
+/**
+ * @desc    Mengambil status pekerjaan background asinkron
+ * @route   GET /api/anomali/job-status/:jobId
+ * @access  Private (Dosen/Admin)
+ */
+exports.getJobStatus = asyncHandler(async (req, res) => {
+    const { jobId } = req.params;
+    const job = globalAnomalyQueue.getJobStatus(jobId);
+    
+    if (!job) {
+        return res.status(404).json({
+            status: "error",
+            message: "Pekerjaan analisis tidak ditemukan atau sudah dibersihkan dari memori."
+        });
+    }
+    
+    res.status(200).json({
+        status: "success",
+        data: job
     });
 });

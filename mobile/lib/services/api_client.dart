@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -8,32 +9,55 @@ import 'package:mobile/utils/logger.dart';
 
 
 
-/// Environment configuration for API URLs
-/// 
+import 'package:mobile/utils/logger.dart';
+
+/// Environment configuration for API URLs.
+///
 /// Usage:
-/// - Development: `flutter run` (default, uses localhost)
-/// - Production: `flutter run --dart-define=ENV=prod` or `flutter build apk --dart-define=ENV=prod`
+/// - Development:
+///   `flutter run --dart-define=API_URL_DEV=http://10.0.2.2:5050`
+/// - Production:
+///   `flutter build apk --dart-define=ENV=prod --dart-define=API_URL_PROD=https://api.example.com`
 class AppConfig {
   static const String _env = String.fromEnvironment('ENV', defaultValue: 'dev');
-  
+  static const String _apiUrlDev = String.fromEnvironment('API_URL_DEV');
+  static const String _apiUrlDevDefault = String.fromEnvironment(
+    'API_URL_DEV_DEFAULT',
+  );
+  static const String _apiUrlProd = String.fromEnvironment('API_URL_PROD');
+
+  static const String _androidDevFallback = 'http://10.0.2.2:5050';
+  static const String _defaultDevFallback = 'http://localhost:5050';
+
   static bool get isProduction => _env == 'prod';
   static bool get isDevelopment => _env == 'dev';
-  
+
   static String get baseUrl {
     if (isProduction) {
-      // Production URL (dengan HTTPS)
-      return 'http://213.210.37.132:5050';
+      if (_apiUrlProd.trim().isEmpty) {
+        throw StateError('API_URL_PROD must be set when ENV=prod');
+      }
+      return _apiUrlProd.trim();
     }
-    
-    // Development URL
+
+    final String apiUrlDev = _apiUrlDev.trim();
+    final String apiUrlDevDefault = _apiUrlDevDefault.trim();
+
     try {
-      // Android emulator uses 10.0.2.2 to reach host machine
-      return Platform.isAndroid ? 'http://10.0.2.2:5050' : 'http://localhost:5050';
+      if (Platform.isAndroid) {
+        if (apiUrlDev.isNotEmpty) return apiUrlDev;
+        return _androidDevFallback;
+      }
+      if (apiUrlDevDefault.isNotEmpty) return apiUrlDevDefault;
+      if (apiUrlDev.isNotEmpty) return apiUrlDev;
+      return _defaultDevFallback;
     } catch (_) {
-      return 'http://localhost:5050';
+      if (apiUrlDevDefault.isNotEmpty) return apiUrlDevDefault;
+      if (apiUrlDev.isNotEmpty) return apiUrlDev;
+      return _defaultDevFallback;
     }
   }
-  
+
   static String get envName => _env.toUpperCase();
 }
 
@@ -43,10 +67,14 @@ class ApiClient {
       const FlutterSecureStorage();
 
   static Dio? _dioInstance;
+  static Completer<bool>? _refreshCompleter;
+  static bool _isRedirecting = false;
 
   static Dio get dio {
     if (_dioInstance == null) {
-      debugLog('🔧 Initializing Dio with baseUrl: $baseUrl (ENV: ${AppConfig.envName})');
+      debugLog(
+        'Initializing Dio client (ENV: ${AppConfig.envName})',
+      );
 
       _dioInstance = Dio(
         BaseOptions(
@@ -55,77 +83,64 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 30),
           sendTimeout: const Duration(seconds: 30),
           headers: <String, dynamic>{'Content-Type': 'application/json'},
-          validateStatus: (status) {
-            // Accept all status codes to handle them manually
-            return status != null && status < 500;
-          },
         ),
       );
 
-      // Add logging interceptor
       _dioInstance!.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) async {
             debugLog(
-              '🌐 Request: ${options.method} ${options.baseUrl}${options.path}',
+              'Request: ${options.method} ${options.path}',
             );
-            if (AppConfig.isDevelopment) {
-              debugLog('📤 Headers: ${options.headers}');
-            }
 
-            // Get token from secure storage
             try {
               final String? token = await _secureStorage.read(key: 'token');
-              if (AppConfig.isDevelopment) {
-                debugLog(
-                  '🔑 Token: ${token != null ? "EXISTS (${token.substring(0, 20)}...)" : "NULL"}',
-                );
-              }
-
-              // Add token to header if exists
               if (token != null && token.isNotEmpty) {
                 options.headers['Authorization'] = 'Bearer $token';
               }
             } catch (e) {
-              debugLog('❌ Error reading token: $e');
+              debugLog('Error reading token: $e');
             }
 
             return handler.next(options);
           },
           onResponse: (response, handler) async {
             debugLog(
-              '✅ Response: ${response.statusCode} ${response.statusMessage}',
+              'Response: ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
             );
-            if (AppConfig.isDevelopment) {
-              debugLog('📥 Data: ${response.data}');
-            }
-            
-            // Handle 401 Unauthorized in response (because validateStatus accepts < 500)
-            if (response.statusCode == 401) {
-              debugLog('🚪 Token expired (in response), clearing storage and redirecting to login');
-              await _secureStorage.deleteAll();
-              _dioInstance = null; // Reset Dio instance
-              _redirectToLogin();
-            }
-            
+
             return handler.next(response);
           },
           onError: (DioException error, ErrorInterceptorHandler handler) async {
-            debugLog('❌ DioError Type: ${error.type}');
-            debugLog('❌ DioError Message: ${error.message}');
-            if (AppConfig.isDevelopment) {
-              debugLog('❌ DioError Response: ${error.response?.data}');
-            }
+            debugLog(
+              'DioError: ${error.type} status=${error.response?.statusCode ?? '-'} path=${error.requestOptions.path}',
+            );
 
-            // Handle 401 Unauthorized - Token expired
             if (error.response?.statusCode == 401) {
-              debugLog('🚪 Token expired, clearing storage and redirecting to login');
+              final bool refreshed = await _attemptTokenRefresh(
+                error.requestOptions,
+              );
+              if (refreshed) {
+                try {
+                  final String? newToken = await _secureStorage.read(
+                    key: 'token',
+                  );
+                  error.requestOptions.headers['Authorization'] =
+                      'Bearer $newToken';
+                  final retryResponse = await _dioInstance!.fetch(error.requestOptions);
+                  return handler.resolve(retryResponse);
+                } catch (e) {
+                  debugLog('Retry failed after refresh: $e');
+                }
+              }
+
+              debugLog(
+                'Token refresh failed, clearing storage and redirecting to login',
+              );
               await _secureStorage.deleteAll();
-              _dioInstance = null; // Reset Dio instance
-              
-              // Redirect to login page using Get
-              // Import is lazy to avoid circular dependencies
+              _dioInstance = null;
               _redirectToLogin();
+              return;
             }
 
             return handler.next(error);
@@ -137,30 +152,80 @@ class ApiClient {
     return _dioInstance!;
   }
 
-  // Method to reset dio instance (useful for logout)
+  static Future<bool> _attemptTokenRefresh(
+    RequestOptions requestOptions,
+  ) async {
+    if (requestOptions.path.contains('/api/v1/auth/refresh')) {
+      return false;
+    }
+
+    if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
+      return _refreshCompleter!.future;
+    }
+
+    _refreshCompleter = Completer<bool>();
+
+    try {
+      final String? refreshToken = await _secureStorage.read(
+        key: 'refresh_token',
+      );
+      if (refreshToken == null || refreshToken.isEmpty) {
+        _refreshCompleter!.complete(false);
+        return false;
+      }
+
+      debugLog('Attempting to refresh token...');
+      final Dio refreshDio = Dio(BaseOptions(baseUrl: AppConfig.baseUrl));
+
+      final response = await refreshDio.post(
+        '/api/v1/auth/refresh',
+        data: {'refresh_token': refreshToken},
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'];
+        if (data != null && data['token'] != null) {
+          await _secureStorage.write(key: 'token', value: data['token']);
+          if (data['refresh_token'] != null) {
+            await _secureStorage.write(
+              key: 'refresh_token',
+              value: data['refresh_token'],
+            );
+          }
+          debugLog('Token refreshed successfully');
+          _refreshCompleter!.complete(true);
+          return true;
+        }
+      }
+      _refreshCompleter!.complete(false);
+      return false;
+    } catch (e) {
+      debugLog('Refresh token API error: $e');
+      _refreshCompleter!.complete(false);
+      return false;
+    } finally {
+      _refreshCompleter = null;
+    }
+  }
+
   static void reset() {
     _dioInstance = null;
   }
-  
-  // Flag to prevent multiple redirects
-  static bool _isRedirecting = false;
-  
-  // Helper method to redirect to login page
+
   static void _redirectToLogin() {
-    // Prevent multiple redirects
     if (_isRedirecting) return;
     _isRedirecting = true;
-    
-    // Reset flag after short delay to allow future redirects
+
     Future.delayed(const Duration(seconds: 2), () {
       _isRedirecting = false;
     });
-    
-    // Show session expired dialog
+
     if (Get.context != null) {
       Get.dialog(
         AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Container(
@@ -169,7 +234,11 @@ class ApiClient {
                   color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.timer_off, color: Colors.orange.shade400, size: 24),
+                child: Icon(
+                  Icons.timer_off,
+                  color: Colors.orange.shade400,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -189,8 +258,8 @@ class ApiClient {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  Get.back(); // Close dialog
-                  Get.offAllNamed('/login'); // Navigate to login and clear stack
+                  Get.back();
+                  Get.offAllNamed('/login');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE63946),
@@ -200,7 +269,10 @@ class ApiClient {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('Login Kembali', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Login Kembali',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],
@@ -208,7 +280,6 @@ class ApiClient {
         barrierDismissible: false,
       );
     } else {
-      // Fallback: direct navigation if dialog can't be shown
       Get.offAllNamed('/login');
     }
   }
