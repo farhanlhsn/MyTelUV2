@@ -81,6 +81,7 @@ yarn.lock
 .next/
 
 # Flutter generated plugin files
+**/pubspec.lock
 **/linux/flutter/ephemeral/
 **/macos/Flutter/ephemeral/
 **/windows/flutter/ephemeral/
