@@ -41,11 +41,11 @@ venv.bak/
 
 # Environment variables
 .env
-.env.production
-.env.test
 .env.local
-.env.*.local
+.env.*
 *.env
+!.env.example
+!.env.*.example
 
 # Firebase Admin SDK credentials (sensitive)
 *-firebase-adminsdk-*.json
@@ -79,6 +79,14 @@ yarn.lock
 /build
 /out
 .next/
+
+# Flutter generated plugin files
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/windows/flutter/ephemeral/
+**/generated_plugin_registrant.*
+**/GeneratedPluginRegistrant.*
+**/generated_plugins.cmake
 
 # Archive
 /archive

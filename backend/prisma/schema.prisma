@@ -400,37 +400,3 @@ model PostComment {
   @@map("post_comments")
 }
 
-// =================== Enums ====================
-enum Role { 
-  MAHASISWA 
-  DOSEN 
-  ADMIN 
-}
-
-enum TypeAbsensi { 
-  REMOTE_ABSENSI 
-  LOKAL_ABSENSI 
-}
-
-enum TypeAnomali { 
-  KEHADIRAN_GANDA 
-  TIDAK_HADIR_BERULANG 
-  POLA_WAKTU_TIDAK_WAJAR
-}
-
-enum StatusAnomali {
-  OPEN
-  REVIEWED
-  RESOLVED
-}
-
-enum StatusPengajuan {
-  MENUNGGU
-  DISETUJUI
-  DITOLAK
-}
-
-enum ParkingType {
-  MASUK
-  KELUAR
-}

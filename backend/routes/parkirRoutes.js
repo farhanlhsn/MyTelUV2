@@ -1,6 +1,7 @@
 const express = require('express');
 const { getHistoriParkir, getAllParkiran, getAnalitikParkiran, createParkiran, updateParkiran, deleteParkiran, processEdgeEntry, reconcileKapasitas, exportParkirLogs, manualOverride } = require('../controllers/parkirController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const { protectEdgeDevice } = require('../middlewares/edgeAuthMiddleware');
 const { edgeLimiter } = require('../middlewares/rateLimiterMiddleware');
 const multer = require('multer');
 
@@ -17,6 +18,7 @@ const router = express.Router();
 // Edge device parking entry/exit (internal API - uses X-Edge-Secret header)
 // Accepts two images: 'image' (plate) and 'face_image' (optional face capture)
 router.post('/edge-entry',
+    protectEdgeDevice,
     edgeLimiter,
     upload.fields([
         { name: 'image', maxCount: 1 },

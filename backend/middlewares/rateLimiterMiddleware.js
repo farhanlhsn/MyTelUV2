@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 // General API rate limiter
 exports.generalLimiter = rateLimit({
@@ -40,7 +40,9 @@ exports.authLimiter = rateLimit({
 exports.biometrikLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5, // limit each user/IP to 5 requests per minute
-  keyGenerator: (req) => req.user?.id_user || `${req.ip}`,
+  keyGenerator: (req) => req.user?.id_user
+    ? `user:${req.user.id_user}`
+    : `ip:${ipKeyGenerator(req.ip)}`,
   message: {
     status: "error",
     message: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
