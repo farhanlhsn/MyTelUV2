@@ -400,3 +400,14 @@ model PostComment {
   @@map("post_comments")
 }
 
+model SystemSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique @db.VarChar(255)
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+

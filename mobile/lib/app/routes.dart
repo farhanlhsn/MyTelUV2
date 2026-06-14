@@ -28,6 +28,7 @@ import '../pages/jadwal/jadwal_mingguan_page.dart';
 import '../pages/jadwal/form_jadwal_pengganti_page.dart';
 import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
+import '../pages/admin/admin_anomaly_config_page.dart';
 import 'auth_middleware.dart';
 import 'role_middleware.dart';
 
@@ -60,6 +61,7 @@ class AppRoutes {
   static const String formJadwalPengganti = '/form-jadwal-pengganti';
   static const String anomaliResult = '/anomali-result';
   static const String anomaliDashboard = '/anomali-dashboard';
+  static const String adminAnomalyConfig = '/admin-anomaly-config';
   
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
     GetPage<dynamic>(
@@ -181,6 +183,11 @@ class AppRoutes {
     GetPage<dynamic>(
       name: adminAbsensiMonitoring,
       page: () => const AdminAbsensiMonitoringPage(),
+      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+    ),
+    GetPage<dynamic>(
+      name: adminAnomalyConfig,
+      page: () => const AdminAnomalyConfigPage(),
       middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
     ),
     GetPage<dynamic>(

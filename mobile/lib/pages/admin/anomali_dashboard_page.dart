@@ -6,6 +6,7 @@ import '../../services/akademik_service.dart';
 import '../../services/dosen_service.dart';
 import '../../models/kelas.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../app/routes.dart';
 
 class AnomaliDashboardPage extends StatefulWidget {
   const AnomaliDashboardPage({super.key});
@@ -188,6 +189,20 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                   child: const Icon(Icons.refresh, color: Colors.white, size: 20),
                 ),
               ),
+              if (_userRole == 'ADMIN') ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => Get.toNamed(AppRoutes.adminAnomalyConfig),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.settings, color: Colors.white, size: 20),
+                  ),
+                ),
+              ],
             ],
           ),
           

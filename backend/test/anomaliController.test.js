@@ -11,7 +11,9 @@ jest.mock('../utils/prisma', () => ({
     absensi: { findMany: jest.fn() },
     sesiAbsensi: { findMany: jest.fn(), count: jest.fn() },
     laporanAnomali: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), createMany: jest.fn(), update: jest.fn() },
+    systemSetting: { findUnique: jest.fn(), upsert: jest.fn() },
     $transaction: jest.fn(),
+    $queryRaw: jest.fn(),
 }));
 
 jest.mock('axios');
@@ -42,19 +44,6 @@ describe('Anomaly Controller Tests', () => {
     });
 
     describe('analyzeKelasAttendance', () => {
-        test('should fail if threshold is invalid', async () => {
-            const req = createMockReq({ threshold: 1.5 }, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 });
-            const res = createMockRes();
-
-            await anomaliController.analyzeKelasAttendance(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                status: 'error',
-                message: 'Threshold harus berupa angka antara 0.1 dan 1.0'
-            }));
-        });
-
         test('should fail if class is not found', async () => {
             const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 999 });
             const res = createMockRes();
@@ -86,10 +75,11 @@ describe('Anomaly Controller Tests', () => {
         });
 
         test('should analyze class attendance successfully', async () => {
-            const req = createMockReq({ threshold: 0.6 }, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 });
+            const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 });
             const res = createMockRes();
 
             prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
+            prisma.systemSetting.findUnique.mockResolvedValue(null); // Will fallback to default thresholds
             
             const mockPeserta = [
                 { mahasiswa: { id_user: 10, nama: 'Student A' } },
@@ -106,19 +96,9 @@ describe('Anomaly Controller Tests', () => {
             prisma.laporanAnomali.updateMany.mockResolvedValue({ count: 1 });
             prisma.laporanAnomali.createMany.mockResolvedValue({ count: 1 });
 
-            axios.post.mockResolvedValue({
-                data: {
-                    success: true,
-                    anomalies: [
-                        { id_user: 11, type_anomali: 'TIDAK_HADIR_BERULANG', confidence: 0.8, description: 'Low attendance rate' }
-                    ]
-                }
-            });
-
             await anomaliController.analyzeKelasAttendance(req, res);
 
             expect(prisma.$transaction).toHaveBeenCalled();
-            expect(axios.post).toHaveBeenCalled();
             expect(prisma.laporanAnomali.updateMany).toHaveBeenCalled();
             expect(prisma.laporanAnomali.createMany).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);

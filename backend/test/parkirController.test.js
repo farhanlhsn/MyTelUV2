@@ -149,8 +149,10 @@ describe('Parkir Controller - processEdgeEntry', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                success: false,
-                gate_action: 'DENY',
+                status: 'error',
+                data: expect.objectContaining({
+                    gate_action: 'DENY'
+                }),
                 message: expect.stringContaining('penuh')
             }));
         });

@@ -2270,7 +2270,7 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
                 total_tidak_hadir: kelasSesi.length - totalHadir,
                 persentase: kelasSesi.length > 0
                     ? ((totalHadir / kelasSesi.length) * 100).toFixed(1)
-                    : 0
+                    : 100
             }
         };
     });

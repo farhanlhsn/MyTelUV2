@@ -23,26 +23,8 @@ const anomalyApiBreaker = new CircuitBreaker("AnomalyAPI", {
  */
 exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     const { id_kelas } = req.params;
-    const { threshold = 0.5, contamination = 0.1 } = req.body;
     const userId = req.user.id_user;
     const userRole = req.user.role;
-
-    // 1. Validasi Input Threshold & Contamination
-    const parsedThreshold = parseFloat(threshold);
-    if (isNaN(parsedThreshold) || parsedThreshold < 0.1 || parsedThreshold > 1.0) {
-        return res.status(400).json({
-            status: "error",
-            message: "Threshold harus berupa angka antara 0.1 dan 1.0"
-        });
-    }
-
-    const parsedContamination = parseFloat(contamination);
-    if (isNaN(parsedContamination) || parsedContamination < 0.01 || parsedContamination > 0.5) {
-        return res.status(400).json({
-            status: "error",
-            message: "Contamination harus berupa angka antara 0.01 dan 0.5"
-        });
-    }
 
     // 2. Validasi Keberadaan Kelas
     const kelas = await prisma.kelas.findUnique({
@@ -79,9 +61,9 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 } 
             }
         }),
-        // Ambil record absensi valid dengan koordinat (Gunakan $queryRaw karena field point tidak di-support Prisma findMany)
-        prisma.$queryRaw`SELECT id_user, id_sesi_absensi, koordinat, "createdAt" FROM absensi WHERE id_kelas = ${parseInt(id_kelas)} AND "deletedAt" IS NULL`,
-        // Ambil list semua sesi yang valid dengan koordinat
+        // Ambil record absensi valid
+        prisma.$queryRaw`SELECT id_user, id_sesi_absensi, "createdAt" FROM absensi WHERE id_kelas = ${parseInt(id_kelas)} AND "deletedAt" IS NULL`,
+        // Ambil list semua sesi yang valid
         prisma.sesiAbsensi.findMany({
             where: { 
                 id_kelas: parseInt(id_kelas), 
@@ -91,9 +73,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
             select: {
                 id_sesi_absensi: true,
                 mulai: true,
-                selesai: true,
-                latitude: true,
-                longitude: true
+                selesai: true
             }
         })
     ]);
@@ -107,64 +87,76 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     }
 
     const totalSesi = sesiList.length;
-
-    // 5. Siapkan Payload untuk dikirim ke Python Service
-    const payload = {
-        total_sessions: totalSesi === 0 ? 1 : totalSesi, // Hindari division by zero
-        threshold: parsedThreshold,
-        contamination: parsedContamination,
-        students: peserta.map(p => ({
-            id_user: p.mahasiswa.id_user,
-            nama: p.mahasiswa.nama
-        })),
-        sessions: sesiList.map(s => ({
-            id_sesi: s.id_sesi_absensi,
-            mulai: s.mulai.toISOString(),
-            selesai: s.selesai.toISOString(),
-            latitude: s.latitude,
-            longitude: s.longitude
-        })),
-        attendance: absensi.map(a => {
-            // koordinat is of type Point in Postgres/Prisma.
-            // Safe parse object {x, y} or array [x, y]
-            let lat = null;
-            let lng = null;
-            if (a.koordinat) {
-                if (typeof a.koordinat === 'object') {
-                    lat = a.koordinat.y !== undefined ? a.koordinat.y : a.koordinat[1];
-                    lng = a.koordinat.x !== undefined ? a.koordinat.x : a.koordinat[0];
-                } else if (Array.isArray(a.koordinat)) {
-                    lng = a.koordinat[0];
-                    lat = a.koordinat[1];
-                }
-            }
-            return {
-                id_user: a.id_user,
-                id_sesi: a.id_sesi_absensi,
-                timestamp: a.createdAt.toISOString(),
-                latitude: lat,
-                longitude: lng
-            };
-        })
-    };
-
     const isAsync = req.query.async === 'true';
 
     const runAnalysisTask = async () => {
-        // 6. Request ke Python Microservice
-        console.log(`[Anomali] Sending data to ${ANOMALY_SERVICE_URL}/detect-anomalies...`);
-        const pythonResponse = await anomalyApiBreaker.fire(async () => {
-            return await axios.post(`${ANOMALY_SERVICE_URL}/detect-anomalies`, payload, {
-                timeout: ANOMALY_SERVICE_TIMEOUT_MS,
-                headers: {
-                    'X-API-Key': process.env.ANOMALY_API_KEY || ''
-                }
-            });
+        // Fetch threshold from database dynamically
+        const settingJarangHadir = await prisma.systemSetting.findUnique({
+            where: { key: 'anomaly_threshold_jarang_hadir' }
         });
-        
-        const anomalies = Array.isArray(pythonResponse.data?.anomalies)
-            ? pythonResponse.data.anomalies
-            : [];
+        const thresholdJarangHadirVal = settingJarangHadir ? parseFloat(settingJarangHadir.value) : 50; // default 50%
+        const thresholdJarangHadir = thresholdJarangHadirVal / 100;
+
+        const settingKehadiranGanda = await prisma.systemSetting.findUnique({
+            where: { key: 'anomaly_threshold_kehadiran_ganda' }
+        });
+        const thresholdKehadiranGandaVal = settingKehadiranGanda ? parseFloat(settingKehadiranGanda.value) : 10; // default 10%
+        const thresholdKehadiranGanda = thresholdKehadiranGandaVal / 100;
+
+        const anomalies = [];
+
+        // Rule 1: TIDAK_HADIR_BERULANG (Jarang Hadir)
+        const attendanceCounts = {};
+        absensi.forEach(a => {
+            attendanceCounts[a.id_user] = (attendanceCounts[a.id_user] || 0) + 1;
+        });
+
+        for (const p of peserta) {
+            const uid = p.mahasiswa.id_user;
+            const jumlahHadir = attendanceCounts[uid] || 0;
+            const attendanceRate = totalSesi > 0 ? (jumlahHadir / totalSesi) : 1.0;
+
+            if (attendanceRate <= thresholdJarangHadir) {
+                const confidence = thresholdJarangHadir > 0 ? 1.0 - (attendanceRate / thresholdJarangHadir) : 1.0;
+                anomalies.push({
+                    id_user: uid,
+                    type_anomali: 'TIDAK_HADIR_BERULANG',
+                    confidence: Math.min(1.0, Math.max(0.0, parseFloat(confidence.toFixed(2)))),
+                    description: `Kehadiran rendah: ${(attendanceRate * 100).toFixed(0)}% (Threshold: ${(thresholdJarangHadir * 100).toFixed(0)}%)`
+                });
+            }
+        }
+
+        // Rule 2: KEHADIRAN_GANDA
+        const userSesiCounts = {};
+        absensi.forEach(a => {
+            const key = `${a.id_user}_${a.id_sesi_absensi}`;
+            userSesiCounts[key] = (userSesiCounts[key] || 0) + 1;
+        });
+
+        const duplicateSessionsByUser = {};
+        Object.keys(userSesiCounts).forEach(key => {
+            if (userSesiCounts[key] > 1) {
+                const [uid, _] = key.split('_');
+                duplicateSessionsByUser[uid] = (duplicateSessionsByUser[uid] || 0) + 1;
+            }
+        });
+
+        Object.keys(duplicateSessionsByUser).forEach(uidStr => {
+            const uid = parseInt(uidStr);
+            const dupCount = duplicateSessionsByUser[uidStr];
+            const dupRate = totalSesi > 0 ? (dupCount / totalSesi) : 0;
+
+            if (dupRate >= thresholdKehadiranGanda) {
+                const confidence = thresholdKehadiranGanda > 0 ? dupRate / thresholdKehadiranGanda : 1.0;
+                anomalies.push({
+                    id_user: uid,
+                    type_anomali: 'KEHADIRAN_GANDA',
+                    confidence: Math.min(1.0, Math.max(0.0, parseFloat(confidence.toFixed(2)))),
+                    description: `Terdeteksi multiple check-in pada ${dupCount} sesi (${(dupRate * 100).toFixed(0)}% dari total sesi, Threshold: ${(thresholdKehadiranGanda * 100).toFixed(0)}%).`
+                });
+            }
+        });
 
         // 7. Simpan Hasil ke Database (Soft Delete laporan lama)
         await prisma.laporanAnomali.updateMany({
@@ -178,11 +170,10 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         });
 
         if (anomalies && anomalies.length > 0) {
-            // Bulk Insert menggunakan createMany
             const dataToInsert = anomalies.map(item => ({
                 id_user: item.id_user,
                 id_kelas: parseInt(id_kelas),
-                type_anomali: item.type_anomali, // Pastikan string ini match dengan ENUM di Prisma
+                type_anomali: item.type_anomali,
                 deskripsi: item.description || null,
                 confidence: item.confidence !== undefined ? parseFloat(item.confidence) : null,
                 status: 'OPEN'
@@ -193,7 +184,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
             });
         }
 
-        // 7. Audit Log (Opsional)
+        // Audit Log
         if (typeof logAudit === 'function') {
             logAudit({
                 action: 'ANOMALY_ANALYSIS',
@@ -224,9 +215,6 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     try {
         const anomalies = await runAnalysisTask();
 
-        // 8. Return Response ke Client (Mobile/Web)
-        // Kita kembalikan juga data raw anomalinya agar Frontend bisa langsung menampilkan
-        // tanpa perlu fetch ulang ke endpoint GET jika diinginkan.
         res.status(200).json({
             status: "success",
             message: anomalies.length > 0 
@@ -236,19 +224,10 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         });
 
     } catch (error) {
-        console.error("AI Service Error:", error.message);
-        
-        // Handle jika Python service mati/error
-        if (error.code === 'ECONNREFUSED') {
-            return res.status(503).json({
-                status: "error",
-                message: "Layanan AI sedang tidak tersedia. Pastikan Python Service berjalan di port 5003."
-            });
-        }
-
+        console.error("Local Rule Service Error:", error.message);
         return res.status(500).json({
             status: "error",
-            message: "Gagal memproses analisis AI: " + (error.response?.data?.error || error.message)
+            message: "Gagal memproses analisis: " + error.message
         });
     }
 });
@@ -388,5 +367,71 @@ exports.getJobStatus = asyncHandler(async (req, res) => {
     res.status(200).json({
         status: "success",
         data: job
+    });
+});
+
+/**
+ * @desc    Mengambil konfigurasi threshold anomali
+ * @route   GET /api/v1/anomali/settings
+ * @access  Private (Admin)
+ */
+exports.getAnomalySettings = asyncHandler(async (req, res) => {
+    const settingJarangHadir = await prisma.systemSetting.findUnique({
+        where: { key: 'anomaly_threshold_jarang_hadir' }
+    });
+    const settingKehadiranGanda = await prisma.systemSetting.findUnique({
+        where: { key: 'anomaly_threshold_kehadiran_ganda' }
+    });
+
+    res.status(200).json({
+        status: "success",
+        data: {
+            threshold_jarang_hadir: settingJarangHadir ? parseInt(settingJarangHadir.value) : 50,
+            threshold_kehadiran_ganda: settingKehadiranGanda ? parseInt(settingKehadiranGanda.value) : 10
+        }
+    });
+});
+
+/**
+ * @desc    Memperbarui konfigurasi threshold anomali
+ * @route   PUT /api/v1/anomali/settings
+ * @access  Private (Admin)
+ */
+exports.updateAnomalySettings = asyncHandler(async (req, res) => {
+    const { threshold_jarang_hadir, threshold_kehadiran_ganda } = req.body;
+
+    if (threshold_jarang_hadir !== undefined) {
+        const val = parseInt(threshold_jarang_hadir);
+        if (isNaN(val) || val < 0 || val > 100) {
+            return res.status(400).json({
+                status: "error",
+                message: "Threshold jarang hadir harus berupa angka antara 0 dan 100"
+            });
+        }
+        await prisma.systemSetting.upsert({
+            where: { key: 'anomaly_threshold_jarang_hadir' },
+            update: { value: String(val) },
+            create: { key: 'anomaly_threshold_jarang_hadir', value: String(val) }
+        });
+    }
+
+    if (threshold_kehadiran_ganda !== undefined) {
+        const val = parseInt(threshold_kehadiran_ganda);
+        if (isNaN(val) || val < 0 || val > 100) {
+            return res.status(400).json({
+                status: "error",
+                message: "Threshold kehadiran ganda harus berupa angka antara 0 dan 100"
+            });
+        }
+        await prisma.systemSetting.upsert({
+            where: { key: 'anomaly_threshold_kehadiran_ganda' },
+            update: { value: String(val) },
+            create: { key: 'anomaly_threshold_kehadiran_ganda', value: String(val) }
+        });
+    }
+
+    res.status(200).json({
+        status: "success",
+        message: "Konfigurasi threshold anomali berhasil diperbarui"
     });
 });

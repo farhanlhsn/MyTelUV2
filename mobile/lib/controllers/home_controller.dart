@@ -170,7 +170,7 @@ class HomeController extends GetxController {
 
   // Get total kehadiran percentage across all classes
   double get totalKehadiranPercentage {
-    if (absensiStats.isEmpty) return 0.0;
+    if (absensiStats.isEmpty) return 100.0;
 
     int totalHadir = 0;
     int totalAbsensi = 0;
@@ -184,7 +184,7 @@ class HomeController extends GetxController {
           stats.totalAlpha;
     }
 
-    if (totalAbsensi == 0) return 0.0;
+    if (totalAbsensi == 0) return 100.0;
 
     return (totalHadir / totalAbsensi * 100);
   }

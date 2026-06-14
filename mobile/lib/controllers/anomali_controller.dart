@@ -11,6 +11,59 @@ class AnomaliController extends GetxController {
   final RxList<AnomaliModel> anomaliList = <AnomaliModel>[].obs;
   final RxString message = ''.obs;
 
+  final RxInt thresholdJarangHadir = 50.obs;
+  final RxInt thresholdKehadiranGanda = 10.obs;
+
+  Future<void> getAnomalySettings() async {
+    isLoading.value = true;
+    try {
+      final Response<dynamic> response = await ApiClient.dio.get<dynamic>(
+        '/api/v1/anomali/settings',
+      );
+
+      if (response.statusCode == 200) {
+        final body = response.data as Map<String, dynamic>? ?? {};
+        final data = body['data'] as Map<String, dynamic>? ?? {};
+        thresholdJarangHadir.value = data['threshold_jarang_hadir'] as int? ?? 50;
+        thresholdKehadiranGanda.value = data['threshold_kehadiran_ganda'] as int? ?? 10;
+      }
+    } on DioException catch (e) {
+      debugLog('Error getAnomalySettings: $e');
+      Get.snackbar("Error", "Gagal mengambil konfigurasi threshold");
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<bool> updateAnomalySettings(int jarangHadir, int ganda) async {
+    isLoading.value = true;
+    try {
+      final Response<dynamic> response = await ApiClient.dio.put<dynamic>(
+        '/api/v1/anomali/settings',
+        data: {
+          'threshold_jarang_hadir': jarangHadir,
+          'threshold_kehadiran_ganda': ganda,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        thresholdJarangHadir.value = jarangHadir;
+        thresholdKehadiranGanda.value = ganda;
+        Get.snackbar("Sukses", "Konfigurasi threshold berhasil disimpan");
+        return true;
+      }
+      return false;
+    } on DioException catch (e) {
+      debugLog('Error updateAnomalySettings: $e');
+      final responseData = e.response?.data;
+      final serverMsg = responseData is Map<String, dynamic> ? responseData['message']?.toString() : null;
+      Get.snackbar("Error", serverMsg ?? "Gagal menyimpan konfigurasi threshold");
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   Future<void> analyzeKelas(int idKelas) async {
     isLoading.value = true;
     message.value = '';
