@@ -47,7 +47,7 @@ class AnomaliResultPage extends StatelessWidget {
               color: isSevere ? Colors.red[50] : Colors.orange[50],
               child: ListTile(
                 leading: Icon(Icons.warning, color: isSevere ? Colors.red : Colors.orange),
-                title: Text("User ID: ${item.idUser}"), // Bisa join nama di backend jika mau
+                title: Text(item.nama ?? "User ID: ${item.idUser}"),
                 subtitle: Text(item.description),
                 trailing: Chip(
                   label: Text(isSevere ? "Jarang Hadir" : "Ganda"),

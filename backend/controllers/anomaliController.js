@@ -90,17 +90,27 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     const isAsync = req.query.async === 'true';
 
     const runAnalysisTask = async () => {
-        // Fetch threshold from database dynamically
-        const settingJarangHadir = await prisma.systemSetting.findUnique({
-            where: { key: 'anomaly_threshold_jarang_hadir' }
-        });
-        const thresholdJarangHadirVal = settingJarangHadir ? parseFloat(settingJarangHadir.value) : 50; // default 50%
+        // Fetch threshold from database dynamically with safety fallbacks
+        let thresholdJarangHadirVal = 50; // default 50%
+        try {
+            const settingJarangHadir = await prisma.systemSetting.findUnique({
+                where: { key: 'anomaly_threshold_jarang_hadir' }
+            });
+            if (settingJarangHadir) thresholdJarangHadirVal = parseFloat(settingJarangHadir.value);
+        } catch (e) {
+            console.warn("Failed to fetch anomaly_threshold_jarang_hadir from DB, using default 50:", e.message);
+        }
         const thresholdJarangHadir = thresholdJarangHadirVal / 100;
 
-        const settingKehadiranGanda = await prisma.systemSetting.findUnique({
-            where: { key: 'anomaly_threshold_kehadiran_ganda' }
-        });
-        const thresholdKehadiranGandaVal = settingKehadiranGanda ? parseFloat(settingKehadiranGanda.value) : 10; // default 10%
+        let thresholdKehadiranGandaVal = 10; // default 10%
+        try {
+            const settingKehadiranGanda = await prisma.systemSetting.findUnique({
+                where: { key: 'anomaly_threshold_kehadiran_ganda' }
+            });
+            if (settingKehadiranGanda) thresholdKehadiranGandaVal = parseFloat(settingKehadiranGanda.value);
+        } catch (e) {
+            console.warn("Failed to fetch anomaly_threshold_kehadiran_ganda from DB, using default 10:", e.message);
+        }
         const thresholdKehadiranGanda = thresholdKehadiranGandaVal / 100;
 
         const anomalies = [];
@@ -113,6 +123,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
 
         for (const p of peserta) {
             const uid = p.mahasiswa.id_user;
+            const nama = p.mahasiswa.nama;
             const jumlahHadir = attendanceCounts[uid] || 0;
             const attendanceRate = totalSesi > 0 ? (jumlahHadir / totalSesi) : 1.0;
 
@@ -120,6 +131,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 const confidence = thresholdJarangHadir > 0 ? 1.0 - (attendanceRate / thresholdJarangHadir) : 1.0;
                 anomalies.push({
                     id_user: uid,
+                    nama: nama,
                     type_anomali: 'TIDAK_HADIR_BERULANG',
                     confidence: Math.min(1.0, Math.max(0.0, parseFloat(confidence.toFixed(2)))),
                     description: `Kehadiran rendah: ${(attendanceRate * 100).toFixed(0)}% (Threshold: ${(thresholdJarangHadir * 100).toFixed(0)}%)`
@@ -144,6 +156,8 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
 
         Object.keys(duplicateSessionsByUser).forEach(uidStr => {
             const uid = parseInt(uidStr);
+            const p = peserta.find(item => item.mahasiswa.id_user === uid);
+            const nama = p ? p.mahasiswa.nama : 'Unknown';
             const dupCount = duplicateSessionsByUser[uidStr];
             const dupRate = totalSesi > 0 ? (dupCount / totalSesi) : 0;
 
@@ -151,6 +165,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 const confidence = thresholdKehadiranGanda > 0 ? dupRate / thresholdKehadiranGanda : 1.0;
                 anomalies.push({
                     id_user: uid,
+                    nama: nama,
                     type_anomali: 'KEHADIRAN_GANDA',
                     confidence: Math.min(1.0, Math.max(0.0, parseFloat(confidence.toFixed(2)))),
                     description: `Terdeteksi multiple check-in pada ${dupCount} sesi (${(dupRate * 100).toFixed(0)}% dari total sesi, Threshold: ${(thresholdKehadiranGanda * 100).toFixed(0)}%).`
@@ -376,20 +391,31 @@ exports.getJobStatus = asyncHandler(async (req, res) => {
  * @access  Private (Admin)
  */
 exports.getAnomalySettings = asyncHandler(async (req, res) => {
-    const settingJarangHadir = await prisma.systemSetting.findUnique({
-        where: { key: 'anomaly_threshold_jarang_hadir' }
-    });
-    const settingKehadiranGanda = await prisma.systemSetting.findUnique({
-        where: { key: 'anomaly_threshold_kehadiran_ganda' }
-    });
+    try {
+        const settingJarangHadir = await prisma.systemSetting.findUnique({
+            where: { key: 'anomaly_threshold_jarang_hadir' }
+        });
+        const settingKehadiranGanda = await prisma.systemSetting.findUnique({
+            where: { key: 'anomaly_threshold_kehadiran_ganda' }
+        });
 
-    res.status(200).json({
-        status: "success",
-        data: {
-            threshold_jarang_hadir: settingJarangHadir ? parseInt(settingJarangHadir.value) : 50,
-            threshold_kehadiran_ganda: settingKehadiranGanda ? parseInt(settingKehadiranGanda.value) : 10
-        }
-    });
+        res.status(200).json({
+            status: "success",
+            data: {
+                threshold_jarang_hadir: settingJarangHadir ? parseInt(settingJarangHadir.value) : 50,
+                threshold_kehadiran_ganda: settingKehadiranGanda ? parseInt(settingKehadiranGanda.value) : 10
+            }
+        });
+    } catch (error) {
+        res.status(200).json({
+            status: "success",
+            data: {
+                threshold_jarang_hadir: 50,
+                threshold_kehadiran_ganda: 10,
+                warning: "Table 'system_settings' is missing. Using default values."
+            }
+        });
+    }
 });
 
 /**
@@ -400,38 +426,45 @@ exports.getAnomalySettings = asyncHandler(async (req, res) => {
 exports.updateAnomalySettings = asyncHandler(async (req, res) => {
     const { threshold_jarang_hadir, threshold_kehadiran_ganda } = req.body;
 
-    if (threshold_jarang_hadir !== undefined) {
-        const val = parseInt(threshold_jarang_hadir);
-        if (isNaN(val) || val < 0 || val > 100) {
-            return res.status(400).json({
-                status: "error",
-                message: "Threshold jarang hadir harus berupa angka antara 0 dan 100"
+    try {
+        if (threshold_jarang_hadir !== undefined) {
+            const val = parseInt(threshold_jarang_hadir);
+            if (isNaN(val) || val < 0 || val > 100) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Threshold jarang hadir harus berupa angka antara 0 dan 100"
+                });
+            }
+            await prisma.systemSetting.upsert({
+                where: { key: 'anomaly_threshold_jarang_hadir' },
+                update: { value: String(val) },
+                create: { key: 'anomaly_threshold_jarang_hadir', value: String(val) }
             });
         }
-        await prisma.systemSetting.upsert({
-            where: { key: 'anomaly_threshold_jarang_hadir' },
-            update: { value: String(val) },
-            create: { key: 'anomaly_threshold_jarang_hadir', value: String(val) }
-        });
-    }
 
-    if (threshold_kehadiran_ganda !== undefined) {
-        const val = parseInt(threshold_kehadiran_ganda);
-        if (isNaN(val) || val < 0 || val > 100) {
-            return res.status(400).json({
-                status: "error",
-                message: "Threshold kehadiran ganda harus berupa angka antara 0 dan 100"
+        if (threshold_kehadiran_ganda !== undefined) {
+            const val = parseInt(threshold_kehadiran_ganda);
+            if (isNaN(val) || val < 0 || val > 100) {
+                return res.status(400).json({
+                    status: "error",
+                    message: "Threshold kehadiran ganda harus berupa angka antara 0 dan 100"
+                });
+            }
+            await prisma.systemSetting.upsert({
+                where: { key: 'anomaly_threshold_kehadiran_ganda' },
+                update: { value: String(val) },
+                create: { key: 'anomaly_threshold_kehadiran_ganda', value: String(val) }
             });
         }
-        await prisma.systemSetting.upsert({
-            where: { key: 'anomaly_threshold_kehadiran_ganda' },
-            update: { value: String(val) },
-            create: { key: 'anomaly_threshold_kehadiran_ganda', value: String(val) }
+
+        res.status(200).json({
+            status: "success",
+            message: "Konfigurasi threshold anomali berhasil diperbarui"
+        });
+    } catch (error) {
+        return res.status(500).json({
+            status: "error",
+            message: "Gagal memperbarui konfigurasi (tabel system_settings mungkin belum dibuat): " + error.message
         });
     }
-
-    res.status(200).json({
-        status: "success",
-        message: "Konfigurasi threshold anomali berhasil diperbarui"
-    });
 });

@@ -90,17 +90,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   }
 
   List<AnomaliModel> get _filteredAnomalies {
-    if (_selectedFilter == 'Semua') {
-      return _anomaliController.anomaliList;
-    } else if (_selectedFilter == 'Jarang Hadir') {
-      return _anomaliController.anomaliList
-          .where((a) => a.typeAnomali == 'TIDAK_HADIR_BERULANG')
-          .toList();
-    } else {
-      return _anomaliController.anomaliList
-          .where((a) => a.typeAnomali == 'KEHADIRAN_GANDA')
-          .toList();
-    }
+    return _anomaliController.anomaliList;
   }
 
   @override
@@ -131,11 +121,6 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                     
                     // Kelas Dropdown
                     _buildKelasDropdown(),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Filter Chips
-                    _buildFilterChips(),
                     
                     const SizedBox(height: 16),
                     
@@ -372,43 +357,6 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     );
   }
 
-  Widget _buildFilterChips() {
-    final filters = ['Semua', 'Jarang Hadir', 'Kehadiran Ganda'];
-    
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: filters.map((filter) {
-          final isSelected = _selectedFilter == filter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(filter),
-              selected: isSelected,
-              onSelected: (selected) {
-                setState(() => _selectedFilter = filter);
-              },
-              selectedColor: primaryRed.withOpacity(0.2),
-              checkmarkColor: primaryRed,
-              labelStyle: TextStyle(
-                color: isSelected ? primaryRed : Colors.grey.shade700,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-              backgroundColor: Colors.grey.shade100,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: isSelected ? primaryRed : Colors.grey.shade300,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   Widget _buildAnomalyList() {
     return Obx(() {
       if (_anomaliController.isLoading.value) {
@@ -529,13 +477,23 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'User ID: ${anomali.idUser}',
+                        anomali.nama ?? 'User ID: ${anomali.idUser}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (anomali.nama != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'ID: ${anomali.idUser}',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 4),
                       Text(
                         anomali.description,
@@ -642,12 +600,22 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
             
             // User ID
             Text(
-              'User ID: ${anomali.idUser}',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade600,
+              anomali.nama ?? 'User ID: ${anomali.idUser}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
+            if (anomali.nama != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'User ID: ${anomali.idUser}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             
             // Description
@@ -678,50 +646,6 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey.shade400),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Tutup'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Get.snackbar(
-                        'Info',
-                        'Fitur kirim peringatan akan segera tersedia',
-                        snackPosition: SnackPosition.BOTTOM,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accentColor,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Kirim Peringatan',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
