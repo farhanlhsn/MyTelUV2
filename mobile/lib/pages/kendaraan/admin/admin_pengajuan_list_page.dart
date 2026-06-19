@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'package:mobile/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/pages/kendaraan/admin/admin_pengajuan_detail_page.dart';
-import 'package:mobile/utils/logger.dart';
 
 
 
@@ -29,6 +29,12 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   // Scroll controller for infinite scroll
   final ScrollController _scrollController = ScrollController();
 
+  // Filter variables
+  String? _filterQuery;
+  String? _filterStatus; // null, 'MENUNGGU', 'DITOLAK'
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +45,13 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  List<PengajuanPlatModel> get _filteredPengajuanList {
+    return _pengajuanList;
   }
 
   void _onScroll() {
@@ -62,6 +74,8 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
       final result = await KendaraanService.getAllUnverifiedKendaraan(
         page: 1,
         limit: _limit,
+        search: _filterQuery,
+        status: _filterStatus,
       );
       
       setState(() {
@@ -90,6 +104,8 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
       final result = await KendaraanService.getAllUnverifiedKendaraan(
         page: _currentPage + 1,
         limit: _limit,
+        search: _filterQuery,
+        status: _filterStatus,
       );
       
       setState(() {
@@ -203,8 +219,20 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                     : _errorMessage != null
                         ? _buildErrorWidget()
                         : _pengajuanList.isEmpty
-                            ? _buildEmptyWidget()
-                            : _buildListWidget(),
+                            ? _buildEmptyWidget(isFiltered: false)
+                            : Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                                    child: _buildFilterBar(const Color(0xFFE63946)),
+                                  ),
+                                  Expanded(
+                                    child: _filteredPengajuanList.isEmpty
+                                        ? _buildEmptyWidget(isFiltered: true)
+                                        : _buildListWidget(),
+                                  ),
+                                ],
+                              ),
               ),
             ),
           ],
@@ -248,7 +276,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
     );
   }
 
-  Widget _buildEmptyWidget() {
+  Widget _buildEmptyWidget({bool isFiltered = false}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -256,24 +284,26 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.check_circle_outline,
+              isFiltered ? Icons.search_off : Icons.check_circle_outline,
               size: 80,
-              color: Colors.green[400],
+              color: isFiltered ? Colors.grey[400] : Colors.green[400],
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Tidak ada pengajuan',
-              style: TextStyle(
+            Text(
+              isFiltered ? 'Tidak ada hasil' : 'Tidak ada pengajuan',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.grey,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Semua pengajuan kendaraan sudah diproses',
+            Text(
+              isFiltered 
+                  ? 'Tidak ada pengajuan yang sesuai dengan filter Anda'
+                  : 'Semua pengajuan kendaraan sudah diproses',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
               ),
@@ -285,6 +315,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   }
 
   Widget _buildListWidget() {
+    final filteredList = _filteredPengajuanList;
     return RefreshIndicator(
       onRefresh: _loadPengajuan,
       color: const Color(0xFFE63946),
@@ -292,13 +323,13 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(
           horizontal: 20,
-          vertical: 24,
+          vertical: 16,
         ),
-        itemCount: _pengajuanList.length + (_isLoadingMore ? 1 : 0),
+        itemCount: filteredList.length + (_isLoadingMore ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 16),
         itemBuilder: (context, index) {
           // Show loading indicator at the bottom
-          if (index == _pengajuanList.length) {
+          if (index == filteredList.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16.0),
               child: Center(
@@ -309,7 +340,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
             );
           }
           
-          final pengajuan = _pengajuanList[index];
+          final pengajuan = filteredList[index];
           return _buildPengajuanCard(pengajuan);
         },
       ),
@@ -317,6 +348,12 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   }
 
   Widget _buildPengajuanCard(PengajuanPlatModel pengajuan) {
+    final isDeleteRequest = pengajuan.feedback != null && pengajuan.feedback!.startsWith('DELETE_REQUEST:');
+    final deleteReason = isDeleteRequest ? pengajuan.feedback!.replaceFirst('DELETE_REQUEST:', '').trim() : '';
+
+    final badgeColor = isDeleteRequest ? const Color(0xFFD32F2F) : _getStatusColor(pengajuan.statusPengajuan);
+    final badgeText = isDeleteRequest ? 'Permintaan Hapus' : _getStatusText(pengajuan.statusPengajuan);
+
     return InkWell(
       onTap: () async {
         final result = await Navigator.push(
@@ -338,7 +375,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: const Color(0xFFF76F68),
+            color: isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFF76F68),
             width: 1.5,
           ),
           boxShadow: [
@@ -359,12 +396,12 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  color: (isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFE63946)).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.directions_car,
-                  color: Color(0xFFE63946),
+                child: Icon(
+                  isDeleteRequest ? Icons.delete_forever : Icons.directions_car,
+                  color: isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFE63946),
                   size: 28,
                 ),
               ),
@@ -392,6 +429,46 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                    if (pengajuan.userName != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${pengajuan.userName} (${pengajuan.userUsername ?? ''})',
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (isDeleteRequest) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFD32F2F)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Alasan: $deleteReason',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFFD32F2F),
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     // Status Badge
                     Container(
@@ -400,11 +477,11 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(pengajuan.statusPengajuan),
+                        color: badgeColor,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        _getStatusText(pengajuan.statusPengajuan),
+                        badgeText,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -424,6 +501,222 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(Color primaryColor) {
+    final bool hasFilter =
+        _filterStatus != null ||
+        (_filterQuery != null && _filterQuery!.isNotEmpty);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cari Kendaraan
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Cari plat, nama kendaraan/user...',
+              hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+              prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
+              suffixIcon: _filterQuery != null && _filterQuery!.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: Colors.grey.shade500,
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                          _filterQuery = null;
+                        });
+                        _searchDebounce?.cancel();
+                        _loadPengajuan();
+                      },
+                    )
+                  : null,
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 16,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: primaryColor.withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _filterQuery = value;
+              });
+              _searchDebounce?.cancel();
+              _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+                _loadPengajuan();
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Filter Chips Row
+        Row(
+          children: [
+            // Filter Status Pengajuan
+            PopupMenuButton<String>(
+              initialValue: _filterStatus ?? 'Semua',
+              offset: const Offset(0, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onSelected: (String value) {
+                setState(() {
+                  _filterStatus = value == 'Semua' ? null : value;
+                });
+                _loadPengajuan();
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'Semua',
+                  child: Text(
+                    'Semua Status',
+                    style: TextStyle(
+                      color: _filterStatus == null
+                          ? primaryColor
+                          : Colors.black87,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'MENUNGGU',
+                  child: Text(
+                    'Menunggu',
+                    style: TextStyle(
+                      color: _filterStatus == 'MENUNGGU'
+                          ? primaryColor
+                          : Colors.black87,
+                    ),
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'DITOLAK',
+                  child: Text(
+                    'Ditolak',
+                    style: TextStyle(
+                      color: _filterStatus == 'DITOLAK'
+                          ? primaryColor
+                          : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+              child: _buildModernChip(
+                label: _filterStatus == null
+                    ? 'Status'
+                    : (_filterStatus == 'MENUNGGU'
+                          ? 'Menunggu'
+                          : 'Ditolak'),
+                icon: Icons.filter_list_rounded,
+                isActive: _filterStatus != null,
+                primaryColor: primaryColor,
+                onTap: null,
+                onClear: _filterStatus != null
+                    ? () {
+                        setState(() {
+                          _filterStatus = null;
+                        });
+                        _loadPengajuan();
+                      }
+                    : null,
+              ),
+            ),
+
+            if (hasFilter) ...[
+              const SizedBox(width: 12),
+              Container(height: 24, width: 1, color: Colors.grey.shade300),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _searchController.clear();
+                    _filterStatus = null;
+                    _filterQuery = null;
+                  });
+                  _searchDebounce?.cancel();
+                  _loadPengajuan();
+                },
+                child: Text(
+                  'Reset',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModernChip({
+    required String label,
+    required IconData icon,
+    required bool isActive,
+    required Color primaryColor,
+    VoidCallback? onTap,
+    VoidCallback? onClear,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? primaryColor.withOpacity(0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? primaryColor.withOpacity(0.5)
+                : Colors.grey.shade300,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? primaryColor : Colors.grey.shade500,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                color: isActive ? primaryColor : Colors.grey.shade700,
+              ),
+            ),
+            if (isActive && onClear != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(Icons.close, size: 14, color: primaryColor),
+              ),
+            ],
+          ],
         ),
       ),
     );

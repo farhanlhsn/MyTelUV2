@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile/controllers/notification_controller.dart';
 import 'api_client.dart';
 
 /// Background message handler - must be top-level function
@@ -76,6 +77,18 @@ class NotificationService {
         Get.snackbar(
           message.notification!.title ?? 'Notifikasi',
           message.notification!.body ?? '',
+          icon: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Image.asset(
+                'assets/images/telyu.png',
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
           snackPosition: SnackPosition.TOP,
           duration: const Duration(seconds: 4),
           onTap: (_) {
@@ -127,6 +140,10 @@ class NotificationService {
 
       await prefs.setString('local_notifications', jsonEncode(notifications));
       debugPrint('✅ Notification saved locally');
+      
+      if (Get.isRegistered<NotificationController>()) {
+        Get.find<NotificationController>().loadNotifications();
+      }
     } catch (e) {
       debugPrint('❌ Failed to save notification locally: $e');
     }

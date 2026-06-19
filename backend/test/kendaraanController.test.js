@@ -195,6 +195,40 @@ describe('Kendaraan Controller Tests', () => {
             await kendaraanController.verifyKendaraan(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
         });
+
+        test('should verify and approve vehicle deletion request (soft delete)', async () => {
+            const req = createMockReq({ id_kendaraan: 1, id_user: 2 });
+            const res = createMockRes();
+
+            prisma.kendaraan.findUnique.mockResolvedValue({
+                id_kendaraan: 1,
+                statusVerif: false,
+                plat_nomor: 'D 1 A',
+                nama_kendaraan: 'Tesla',
+                feedback: 'DELETE_REQUEST: Ganti kendaraan'
+            });
+            prisma.kendaraan.update.mockResolvedValue({});
+            prisma.user.findUnique.mockResolvedValue({ fcm_token: 'token123' });
+
+            await kendaraanController.verifyKendaraan(req, res);
+
+            expect(prisma.kendaraan.update).toHaveBeenCalledWith({
+                where: { id_kendaraan: 1 },
+                data: expect.objectContaining({
+                    deletedAt: expect.any(Date),
+                    statusVerif: false
+                })
+            });
+
+            expect(sendPushNotification).toHaveBeenCalledWith(
+                'token123',
+                expect.stringContaining('Kendaraan Dihapus'),
+                expect.any(String),
+                expect.anything()
+            );
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     /**
@@ -231,28 +265,66 @@ describe('Kendaraan Controller Tests', () => {
             await kendaraanController.rejectKendaraan(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
         });
+
+        test('should reject vehicle deletion request and restore to DISETUJUI', async () => {
+            const req = createMockReq({ id_kendaraan: 1, id_user: 2, feedback: 'Kendaraan ini masih aktif digunakan' });
+            const res = createMockRes();
+
+            prisma.kendaraan.findUnique.mockResolvedValue({
+                id_kendaraan: 1,
+                plat_nomor: 'D 1 A',
+                feedback: 'DELETE_REQUEST: Ganti plat'
+            });
+            prisma.kendaraan.update.mockResolvedValue({});
+            prisma.user.findUnique.mockResolvedValue({ fcm_token: 'token123' });
+
+            await kendaraanController.rejectKendaraan(req, res);
+
+            expect(prisma.kendaraan.update).toHaveBeenCalledWith({
+                where: { id_kendaraan: 1, id_user: 2 },
+                data: expect.objectContaining({
+                    status_pengajuan: 'DISETUJUI',
+                    statusVerif: true,
+                    feedback: 'PENOLAKAN_HAPUS: Kendaraan ini masih aktif digunakan'
+                })
+            });
+
+            expect(sendPushNotification).toHaveBeenCalledWith(
+                'token123',
+                expect.stringContaining('Pembatalan Penghapusan'),
+                expect.any(String),
+                expect.anything()
+            );
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
     /**
      * DELETE KENDARAAN
      */
     describe('deleteKendaraan', () => {
-        test('should soft delete vehicle', async () => {
-            const req = createMockReq({}, { id_user: 1 }, {}, { id_kendaraan: 1 });
+        test('should submit deletion request', async () => {
+            const req = createMockReq({ reason: 'Jual kendaraan' }, { id_user: 1 }, {}, { id_kendaraan: 1 });
             const res = createMockRes();
 
             prisma.kendaraan.findUnique.mockResolvedValue({
                 id_kendaraan: 1,
+                id_user: 1,
                 fotoKendaraan: ['url1', 'url2'],
-                fotoSTNK: 'urlStnk'
+                fotoSTNK: 'urlStnk',
+                deletedAt: null
             });
 
             await kendaraanController.deleteKendaraan(req, res);
 
-            expect(deleteFile).not.toHaveBeenCalled(); 
             expect(prisma.kendaraan.update).toHaveBeenCalledWith({
-                where: { id_kendaraan: 1, id_user: 1 },
-                data: { deletedAt: expect.any(Date) }
+                where: { id_kendaraan: 1 },
+                data: {
+                    status_pengajuan: 'MENUNGGU',
+                    statusVerif: false,
+                    feedback: 'DELETE_REQUEST: Jual kendaraan'
+                }
             });
             expect(res.status).toHaveBeenCalledWith(200);
         });

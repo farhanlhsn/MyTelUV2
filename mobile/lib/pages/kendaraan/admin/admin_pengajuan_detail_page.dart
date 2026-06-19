@@ -31,12 +31,15 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
   }
 
   Future<void> _handleApprove() async {
+    final isDeleteRequest = widget.pengajuan.feedback != null && widget.pengajuan.feedback!.startsWith('DELETE_REQUEST:');
+
     final confirmed = await _showConfirmDialog(
-      title: 'Setujui Pengajuan',
-      message:
-          'Apakah Anda yakin ingin menyetujui pengajuan kendaraan ${widget.pengajuan.platNomor}?',
-      confirmText: 'SETUJUI',
-      confirmColor: Colors.green,
+      title: isDeleteRequest ? 'Setujui Hapus Kendaraan' : 'Setujui Pengajuan',
+      message: isDeleteRequest
+          ? 'Apakah Anda yakin ingin menyetujui penghapusan kendaraan ${widget.pengajuan.platNomor}?'
+          : 'Apakah Anda yakin ingin menyetujui pengajuan kendaraan ${widget.pengajuan.platNomor}?',
+      confirmText: isDeleteRequest ? 'SETUJUI HAPUS' : 'SETUJUI',
+      confirmColor: isDeleteRequest ? Colors.red : Colors.green,
     );
 
     if (confirmed != true) return;
@@ -50,18 +53,25 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
       );
 
       if (success) {
-        ErrorHelper.showSuccess('Kendaraan berhasil disetujui');
+        ErrorHelper.showSuccess(isDeleteRequest ? 'Kendaraan berhasil dihapus' : 'Kendaraan berhasil disetujui');
         Navigator.pop(context, true);
       }
     } catch (e) {
-      ErrorHelper.showError(e, title: 'Gagal Menyetujui');
+      ErrorHelper.showError(e, title: 'Gagal Memproses');
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleReject() async {
-    final feedback = await _showFeedbackDialog();
+    final isDeleteRequest = widget.pengajuan.feedback != null && widget.pengajuan.feedback!.startsWith('DELETE_REQUEST:');
+
+    final feedback = await _showFeedbackDialog(
+      title: isDeleteRequest ? 'Tolak Permintaan Hapus' : 'Tolak Pengajuan',
+      hintText: isDeleteRequest
+          ? 'Contoh: Kendaraan ini masih aktif digunakan di kampus'
+          : 'Contoh: Foto STNK tidak jelas, silakan upload ulang',
+    );
     if (feedback == null || feedback.isEmpty) return;
 
     setState(() => _isLoading = true);
@@ -74,11 +84,11 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
       );
 
       if (success) {
-        ErrorHelper.showSuccess('Pengajuan kendaraan ditolak');
+        ErrorHelper.showSuccess(isDeleteRequest ? 'Permintaan hapus kendaraan ditolak' : 'Pengajuan kendaraan ditolak');
         Navigator.pop(context, true);
       }
     } catch (e) {
-      ErrorHelper.showError(e, title: 'Gagal Menolak');
+      ErrorHelper.showError(e, title: 'Gagal Memproses');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -127,7 +137,10 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
     );
   }
 
-  Future<String?> _showFeedbackDialog() {
+  Future<String?> _showFeedbackDialog({
+    required String title,
+    required String hintText,
+  }) {
     final controller = TextEditingController();
 
     return showDialog<String>(
@@ -136,9 +149,9 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: const Text(
-          'Tolak Pengajuan',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -153,7 +166,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               controller: controller,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText: 'Contoh: Foto STNK tidak jelas, silakan upload ulang',
+                hintText: hintText,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Color(0xFFE63946)),
@@ -218,10 +231,12 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                       }
                     },
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      "Detail Pengajuan",
-                      style: TextStyle(
+                      (widget.pengajuan.feedback != null && widget.pengajuan.feedback!.startsWith('DELETE_REQUEST:'))
+                          ? "Permintaan Hapus"
+                          : "Detail Pengajuan",
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 20,
@@ -376,6 +391,45 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 ],
               ),
             ),
+
+          if (widget.pengajuan.feedback != null && widget.pengajuan.feedback!.startsWith('DELETE_REQUEST:')) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 18, color: Colors.red.shade600),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Permintaan Hapus Kendaraan',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Alasan: ${widget.pengajuan.feedback!.replaceFirst('DELETE_REQUEST:', '').trim()}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.red.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // Status Badge
           Container(
@@ -558,6 +612,8 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
       );
     }
 
+    final isDeleteRequest = widget.pengajuan.feedback != null && widget.pengajuan.feedback!.startsWith('DELETE_REQUEST:');
+
     return Row(
       children: [
         // Reject Button
@@ -577,9 +633,9 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               ),
               elevation: 0,
             ),
-            child: const Text(
-              'TOLAK',
-              style: TextStyle(
+            child: Text(
+              isDeleteRequest ? 'TOLAK HAPUS' : 'TOLAK',
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -593,7 +649,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleApprove,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: isDeleteRequest ? Colors.red : Colors.green,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
@@ -601,9 +657,9 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               ),
               elevation: 0,
             ),
-            child: const Text(
-              'SETUJUI',
-              style: TextStyle(
+            child: Text(
+              isDeleteRequest ? 'SETUJUI HAPUS' : 'SETUJUI',
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),

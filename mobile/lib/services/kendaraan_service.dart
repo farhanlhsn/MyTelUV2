@@ -242,14 +242,24 @@ class KendaraanService {
   static Future<Map<String, dynamic>> getAllUnverifiedKendaraan({
     int page = 1,
     int limit = 10,
+    String? search,
+    String? status,
   }) async {
     try {
+      final Map<String, dynamic> queryParameters = {
+        'page': page,
+        'limit': limit,
+      };
+      if (search != null && search.isNotEmpty) {
+        queryParameters['search'] = search;
+      }
+      if (status != null && status.isNotEmpty) {
+        queryParameters['status'] = status;
+      }
+
       final response = await _dio.get(
         '/api/v1/kendaraan/all-unverified',
-        queryParameters: {
-          'page': page,
-          'limit': limit,
-        },
+        queryParameters: queryParameters,
       );
 
       if (response.statusCode == 200 && response.data['status'] == 'success') {
@@ -258,11 +268,13 @@ class KendaraanService {
             .map((item) => PengajuanPlatModel.fromJson(item as Map<String, dynamic>))
             .toList();
         
+        final pagination = response.data['pagination'] as Map<String, dynamic>? ?? {};
+        
         return {
           'items': items,
-          'totalPages': response.data['totalPages'] ?? 1,
-          'total': response.data['total'] ?? 0,
-          'currentPage': response.data['currentPage'] ?? 1,
+          'totalPages': pagination['totalPages'] ?? 1,
+          'total': pagination['totalItems'] ?? 0,
+          'currentPage': pagination['currentPage'] ?? 1,
         };
       } else {
         throw Exception(
@@ -327,6 +339,32 @@ class KendaraanService {
       if (e.response != null) {
         throw Exception(
           e.response?.data['message'] ?? 'Error rejecting kendaraan',
+        );
+      } else {
+        throw Exception('Network error: ${e.message}');
+      }
+    }
+  }
+
+  // Request delete kendaraan (requires admin approval)
+  static Future<bool> deleteKendaraan({
+    required int idKendaraan,
+    required String reason,
+  }) async {
+    try {
+      debugLog('Requesting delete for kendaraan ID: $idKendaraan...');
+      final response = await _dio.delete(
+        '/api/v1/kendaraan/$idKendaraan',
+        data: {
+          'reason': reason,
+        },
+      );
+
+      return response.statusCode == 200 && response.data['status'] == 'success';
+    } on DioException catch (e) {
+      if (e.response != null) {
+        throw Exception(
+          e.response?.data['message'] ?? 'Error requesting delete for kendaraan',
         );
       } else {
         throw Exception('Network error: ${e.message}');

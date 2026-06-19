@@ -14,6 +14,7 @@ import '../pages/auth/otp_verification_page.dart';
 import '../pages/kendaraan/resubmit_kendaraan_page.dart';
 import '../pages/kendaraan/parkir/analitik_parkir.dart';
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
+import '../pages/kendaraan/historyPengajuan/list_kendaraan_terdaftar_page.dart';
 import '../pages/absensi/absensi_page.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
@@ -52,6 +53,7 @@ class AppRoutes {
   static const String historiParkir = '/histori-parkir';
   static const String account = '/account';
   static const String notification = '/notification';
+  static const String listKendaraanTerdaftar = '/list-kendaraan-terdaftar';
   static const String adminPengajuanList = '/admin-pengajuan-list';
   static const String adminAkademik = '/admin-akademik';
   static const String adminBiometrik = '/admin-biometrik';
@@ -158,6 +160,11 @@ class AppRoutes {
     GetPage<dynamic>(
       name: notification,
       page: () => const NotificationPage(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage<dynamic>(
+      name: listKendaraanTerdaftar,
+      page: () => const ListKendaraanTerdaftarPage(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(

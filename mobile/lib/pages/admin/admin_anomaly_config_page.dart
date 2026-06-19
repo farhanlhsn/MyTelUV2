@@ -17,7 +17,6 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   static const Color accentGreen = Color(0xFF2A9D8F);
 
   double _localJarangHadir = 50.0;
-  double _localKehadiranGanda = 10.0;
   bool _isInitializing = true;
 
   @override
@@ -31,7 +30,6 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
     await _controller.getAnomalySettings();
     setState(() {
       _localJarangHadir = _controller.thresholdJarangHadir.value.toDouble();
-      _localKehadiranGanda = _controller.thresholdKehadiranGanda.value.toDouble();
       _isInitializing = false;
     });
   }
@@ -39,7 +37,7 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   Future<void> _saveSettings() async {
     final bool success = await _controller.updateAnomalySettings(
       _localJarangHadir.round(),
-      _localKehadiranGanda.round(),
+      _controller.thresholdKehadiranGanda.value,
     );
     if (success) {
       Get.back();
@@ -141,22 +139,7 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
                                   setState(() => _localJarangHadir = val);
                                 },
                               ),
-                              
-                              const SizedBox(height: 20),
 
-                              // Card 2: Kehadiran Ganda
-                              _buildSettingCard(
-                                title: "Batas Sesi Ganda (Kehadiran Ganda)",
-                                subtitle: "Tandai mahasiswa jika persentase sesi absensi ganda (check-in mencurigakan) di atas batas ini.",
-                                value: _localKehadiranGanda,
-                                min: 5.0,
-                                max: 50.0,
-                                icon: Icons.copy_all_rounded,
-                                iconColor: accentGreen,
-                                onChanged: (val) {
-                                  setState(() => _localKehadiranGanda = val);
-                                },
-                              ),
 
                               const SizedBox(height: 40),
 

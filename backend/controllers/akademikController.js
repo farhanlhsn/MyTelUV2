@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { Prisma } = require('../generated/prisma');
 const { parsePagination, buildPaginationResponse, isDosenAuthorizedForKelas, haversineDistance } = require('../utils/akademikHelpers');
+const { sendAbsensiNotification } = require('../utils/firebase');
 
 // ==================== MATAKULIAH CONTROLLERS ====================
 exports.createMatakuliah = asyncHandler(async (req, res) => {
@@ -1415,6 +1416,9 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
         where: {
             id_kelas: parseInt(id_kelas),
             deletedAt: null
+        },
+        include: {
+            matakuliah: true
         }
     });
 
@@ -1483,6 +1487,13 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
             createdBy: id_user
         }
     });
+
+    // Send push notification to all students in the class
+    sendAbsensiNotification(
+        parseInt(id_kelas),
+        kelas.nama_kelas,
+        kelas.matakuliah?.nama_matakuliah || 'Mata Kuliah'
+    ).catch(err => console.error('Error triggering absensi notification:', err.message));
 
     res.status(201).json({
         status: "success",

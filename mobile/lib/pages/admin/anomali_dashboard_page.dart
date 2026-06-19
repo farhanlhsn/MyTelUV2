@@ -7,6 +7,8 @@ import '../../services/dosen_service.dart';
 import '../../models/kelas.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/routes.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../app/auth_middleware.dart';
 
 class AnomaliDashboardPage extends StatefulWidget {
   const AnomaliDashboardPage({super.key});
@@ -38,9 +40,9 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   Future<void> _loadUserRoleAndKelas() async {
     setState(() => _isLoadingKelas = true);
     try {
-      // Get user role from SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      _userRole = prefs.getString('role');
+      // Get user role from AuthMiddleware cache or FlutterSecureStorage
+      const storage = FlutterSecureStorage();
+      _userRole = AuthMiddleware.cachedRole ?? await storage.read(key: 'role');
       
       if (_userRole == 'DOSEN') {
         // DOSEN: Get kelas yang diampu

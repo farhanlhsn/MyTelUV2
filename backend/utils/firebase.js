@@ -200,9 +200,88 @@ const sendSocialNotification = async (userId, type, actorName, postPreview) => {
     }
 };
 
+/**
+ * Send push notification to all students in a class when attendance is opened
+ * @param {number} classId - Class ID
+ * @param {string} className - Class name (e.g. IF-45-01)
+ * @param {string} matakuliahName - Subject name (e.g. Alpro)
+ */
+const sendAbsensiNotification = async (classId, className, matakuliahName) => {
+    try {
+        // Fetch all students enrolled in the class with FCM tokens
+        const peserta = await prisma.pesertaKelas.findMany({
+            where: { id_kelas: classId, deletedAt: null },
+            include: {
+                mahasiswa: {
+                    select: { fcm_token: true }
+                }
+            }
+        });
+
+        const tokens = peserta
+            .map(p => p.mahasiswa?.fcm_token)
+            .filter(t => t && t.trim().length > 0);
+
+        // If no tokens, skip
+        const uniqueTokens = [...new Set(tokens)];
+        if (uniqueTokens.length === 0) {
+            console.log(`No student FCM tokens found for class ${classId}, skipping notification.`);
+            return { success: false, error: 'No FCM tokens' };
+        }
+
+        const title = '📝 Sesi Absensi Dibuka!';
+        const body = `Sesi absensi untuk kelas ${className} (${matakuliahName}) telah dibuka. Silakan lakukan presensi.`;
+
+        const data = {
+            type: 'ABSENSI_NOTIFICATION',
+            id_kelas: String(classId),
+            timestamp: new Date().toISOString()
+        };
+
+        if (!firebaseInitialized) {
+            console.warn('Firebase not initialized, skipping notification');
+            return { success: false, error: 'Firebase not initialized' };
+        }
+
+        // Send to each token using multicast
+        const message = {
+            notification: { title, body },
+            data: {
+                ...data,
+                click_action: 'FLUTTER_NOTIFICATION_CLICK'
+            },
+            android: {
+                priority: 'high',
+                notification: {
+                    sound: 'default',
+                    channelId: 'absensi_notifications'
+                }
+            },
+            apns: {
+                payload: {
+                    aps: {
+                        sound: 'default',
+                        badge: 1
+                    }
+                }
+            },
+            tokens: uniqueTokens
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`✅ Absensi notification sent. Success count: ${response.successCount}, Failure count: ${response.failureCount}`);
+        return { success: true, response };
+
+    } catch (error) {
+        console.error('❌ Error in sendAbsensiNotification:', error.message);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     initializeFirebase,
     sendPushNotification,
     sendParkingNotification,
-    sendSocialNotification
+    sendSocialNotification,
+    sendAbsensiNotification
 };

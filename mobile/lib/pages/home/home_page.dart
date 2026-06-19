@@ -10,6 +10,7 @@ import 'package:mobile/pages/absensi/absensi_page.dart';
 import 'package:mobile/pages/home/notification_list_page.dart';
 
 import '../../controllers/home_controller.dart';
+import '../../controllers/notification_controller.dart';
 import '../../app/routes.dart';
 
 class HomePage extends StatefulWidget {
@@ -22,6 +23,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   final HomeController _homeController = Get.put(HomeController());
+  final NotificationController _notificationController = Get.put(NotificationController());
 
   late PageController _pageController;
   late final MapController _mapController;
@@ -255,21 +257,54 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => Get.to(() => const NotificationListPage()),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.white.withOpacity(0.2),
+              Obx(() {
+                final unread = _notificationController.unreadCount.value;
+                return GestureDetector(
+                  onTap: () => Get.to(() => const NotificationListPage()),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.white.withOpacity(0.2),
+                        ),
+                        child: const Icon(
+                          Icons.notifications,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      ),
+                      if (unread > 0)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              unread > 9 ? '9+' : '$unread',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.notifications,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ),
+                );
+              }),
             ],
           );
         }),
@@ -859,6 +894,16 @@ class _HomePageState extends State<HomePage> {
                 onTap: () {
                   Navigator.pop(context);
                   Get.toNamed(AppRoutes.registerPlat);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.list_alt, color: Color(0xFFE63946)),
+                title: const Text('List Kendaraan Terdaftar'),
+                subtitle: const Text('Daftar kendaraan Anda yang aktif'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Get.toNamed(AppRoutes.listKendaraanTerdaftar);
                 },
               ),
               const Divider(),

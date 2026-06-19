@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/akademik_service.dart';
 import '../biometrik/biometrik_verification_page.dart';
+import '../../controllers/anomali_controller.dart';
 
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
@@ -12,10 +13,12 @@ class AbsensiPage extends StatefulWidget {
 
 class _AbsensiPageState extends State<AbsensiPage> {
   final AkademikService _akademikService = AkademikService();
+  final AnomaliController _anomaliController = Get.put(AnomaliController());
 
   List<Map<String, dynamic>> _historyData = [];
   bool _isLoading = true;
   String? _errorMessage;
+  int _threshold = 75; // Default fallback
 
   // Filter states
   String? _filterQuery;
@@ -62,9 +65,9 @@ class _AbsensiPageState extends State<AbsensiPage> {
       if (_filterType != null) {
         final double persentase = double.tryParse(stats?['persentase']?.toString() ?? '0') ?? 0;
         if (_filterType == 'AMAN') {
-          matchStatus = persentase >= 75;
+          matchStatus = persentase >= _threshold;
         } else if (_filterType == 'KRITIS') {
-          matchStatus = persentase < 75;
+          matchStatus = persentase < _threshold;
         }
       }
 
@@ -91,8 +94,14 @@ class _AbsensiPageState extends State<AbsensiPage> {
 
     try {
       final data = await _akademikService.getAbsensiKuHistory();
+      try {
+        await _anomaliController.getAnomalySettings();
+      } catch (e) {
+        debugPrint('Gagal memuat setting anomali: $e');
+      }
       setState(() {
         _historyData = data;
+        _threshold = _anomaliController.thresholdJarangHadir.value;
         _isLoading = false;
       });
     } catch (e) {
@@ -338,7 +347,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   PopupMenuItem<String>(
                     value: 'AMAN',
                     child: Text(
-                      'Kehadiran Aman (>= 75%)',
+                      'Kehadiran Aman (>= $_threshold%)',
                       style: TextStyle(
                         color: _filterType == 'AMAN'
                             ? primaryColor
@@ -349,7 +358,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   PopupMenuItem<String>(
                     value: 'KRITIS',
                     child: Text(
-                      'Kehadiran Kritis (< 75%)',
+                      'Kehadiran Kritis (< $_threshold%)',
                       style: TextStyle(
                         color: _filterType == 'KRITIS'
                             ? primaryColor
@@ -499,7 +508,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     final String dosenInfo = dosen != null ? 'Dosen: ${dosen['nama']}' : '';
 
     final double persentase = double.tryParse(stats?['persentase']?.toString() ?? '0') ?? 0;
-    final Color statusColor = persentase >= 75 ? Colors.green : Colors.orange;
+    final Color statusColor = persentase >= _threshold ? Colors.green : Colors.orange;
 
     final int idKelas = kelas?['id_kelas'] as int? ?? 0;
 

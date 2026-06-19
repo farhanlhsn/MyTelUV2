@@ -42,10 +42,16 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         });
     }
 
-    // Cek batas maksimal kendaraan per user
+    // Cek batas maksimal kendaraan per user (kecuali yang ditolak/rejected)
     const maxKendaraan = parseInt(process.env.MAX_KENDARAAN_PER_USER) || 3;
     const userKendaraanCount = await prisma.kendaraan.count({
-        where: { id_user, deletedAt: null }
+        where: { 
+            id_user, 
+            deletedAt: null,
+            status_pengajuan: {
+                not: 'DITOLAK'
+            }
+        }
     });
 
     if (userKendaraanCount >= maxKendaraan) {
@@ -159,18 +165,27 @@ exports.getKendaraan = asyncHandler(async (req, res) => {
 
 exports.deleteKendaraan = asyncHandler(async (req, res) => {
     const { id_kendaraan } = req.params;
+    const { reason } = req.body;
+    const id_user = req.user.id_user;
+
     const kendaraan = await prisma.kendaraan.findUnique({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user, deletedAt: null }
+        where: { id_kendaraan: parseInt(id_kendaraan), id_user, deletedAt: null }
     });
     if (!kendaraan || kendaraan.deletedAt) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
     }
-    // Soft delete kendaraan from database (preserve R2 files for audit)
+
+    // Set status to MENUNGGU dengan format feedback khusus untuk permintaan penghapusan
     await prisma.kendaraan.update({
-        where: { id_kendaraan: parseInt(id_kendaraan), id_user: req.user.id_user },
-        data: { deletedAt: new Date() }
+        where: { id_kendaraan: parseInt(id_kendaraan) },
+        data: {
+            status_pengajuan: 'MENUNGGU',
+            statusVerif: false,
+            feedback: `DELETE_REQUEST: ${reason || 'No reason provided'}`
+        }
     });
-    res.status(200).json({ status: "success", message: `Kendaraan ${kendaraan.plat_nomor} deleted successfully` });
+
+    res.status(200).json({ status: "success", message: "Kendaraan deletion request submitted successfully" });
 });
 
 exports.verifyKendaraan = asyncHandler(async (req, res) => {
@@ -186,11 +201,43 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
         return res.status(400).json({ status: "error", message: "Kendaraan already verified" });
     }
 
+    // Jika ini adalah permintaan hapus kendaraan
+    if (kendaraan.feedback && kendaraan.feedback.startsWith('DELETE_REQUEST:')) {
+        const updatedKendaraan = await prisma.kendaraan.update({
+            where: { id_kendaraan: parseInt(id_kendaraan) },
+            data: {
+                deletedAt: new Date(),
+                statusVerif: false
+            }
+        });
+
+        // Kirim notifikasi penghapusan disetujui ke user
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id_user: parseInt(id_user) },
+                select: { fcm_token: true }
+            });
+            if (user?.fcm_token) {
+                await sendPushNotification(
+                    user.fcm_token,
+                    '🗑️ Kendaraan Dihapus',
+                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} telah disetujui admin.`,
+                    { type: 'KENDARAAN_DELETED', id_kendaraan: id_kendaraan.toString() }
+                );
+            }
+        } catch (notifError) {
+            console.error('Failed to send notification:', notifError.message);
+        }
+
+        return res.status(200).json({ status: "success", message: "Kendaraan deletion approved and deleted successfully", data: updatedKendaraan });
+    }
+
     const updatedKendaraan = await prisma.kendaraan.update({
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },
         data: {
             statusVerif: true,
-            status_pengajuan: 'DISETUJUI'
+            status_pengajuan: 'DISETUJUI',
+            feedback: null
         }
     });
 
@@ -217,10 +264,36 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
     const { page, limit, skip } = parsePagination(req.query);
-    const total = await prisma.kendaraan.count({ where: { statusVerif: false, deletedAt: null } });
+    const { search, status } = req.query;
+
+    const whereClause = {
+        statusVerif: false,
+        deletedAt: null
+    };
+
+    if (status) {
+        whereClause.status_pengajuan = status;
+    }
+
+    if (search) {
+        whereClause.OR = [
+            { plat_nomor: { contains: search, mode: 'insensitive' } },
+            { nama_kendaraan: { contains: search, mode: 'insensitive' } },
+            {
+                user: {
+                    OR: [
+                        { nama: { contains: search, mode: 'insensitive' } },
+                        { username: { contains: search, mode: 'insensitive' } }
+                    ]
+                }
+            }
+        ];
+    }
+
+    const total = await prisma.kendaraan.count({ where: whereClause });
 
     const unverifiedKendaraan = await prisma.kendaraan.findMany({
-        where: { statusVerif: false, deletedAt: null },
+        where: whereClause,
         include: {
             user: {
                 select: {
@@ -314,6 +387,38 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
             status: "error",
             message: "Kendaraan not found"
         });
+    }
+
+    // Jika ini adalah penolakan permintaan hapus kendaraan
+    if (kendaraan.feedback && kendaraan.feedback.startsWith('DELETE_REQUEST:')) {
+        const updatedKendaraan = await prisma.kendaraan.update({
+            where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },
+            data: {
+                status_pengajuan: 'DISETUJUI',
+                statusVerif: true,
+                feedback: `PENOLAKAN_HAPUS: ${feedback || 'Ditolak oleh admin'}`
+            }
+        });
+
+        // Kirim notifikasi penolakan penghapusan ke user
+        try {
+            const user = await prisma.user.findUnique({
+                where: { id_user: parseInt(id_user) },
+                select: { fcm_token: true }
+            });
+            if (user?.fcm_token) {
+                await sendPushNotification(
+                    user.fcm_token,
+                    '❌ Pembatalan Penghapusan Kendaraan',
+                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} ditolak admin. Alasan: ${feedback}`,
+                    { type: 'KENDARAAN_DELETE_REJECTED', id_kendaraan: id_kendaraan.toString() }
+                );
+            }
+        } catch (notifError) {
+            console.error('Failed to send notification:', notifError.message);
+        }
+
+        return res.status(200).json({ status: "success", message: "Kendaraan deletion request rejected", data: updatedKendaraan });
     }
 
     if (kendaraan.status_pengajuan === 'DISETUJUI') {
