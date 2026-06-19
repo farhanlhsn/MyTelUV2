@@ -1,10 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:dio/dio.dart';
 import '../models/anomali_model.dart';
 import '../services/api_client.dart';
 import 'package:mobile/utils/logger.dart';
-
-
 
 class AnomaliController extends GetxController {
   final RxBool isLoading = false.obs;
@@ -49,7 +48,6 @@ class AnomaliController extends GetxController {
       if (response.statusCode == 200) {
         thresholdJarangHadir.value = jarangHadir;
         thresholdKehadiranGanda.value = ganda;
-        Get.snackbar("Sukses", "Konfigurasi threshold berhasil disimpan");
         return true;
       }
       return false;

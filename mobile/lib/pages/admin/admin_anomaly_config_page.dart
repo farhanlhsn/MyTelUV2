@@ -41,7 +41,64 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
     );
     if (success) {
       Get.back();
+      Get.snackbar(
+        "Sukses",
+        "threshold berhasil diubah",
+        backgroundColor: Colors.green.shade600,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+        margin: const EdgeInsets.all(15),
+        borderRadius: 8,
+        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+      );
     }
+  }
+
+  void _showConfirmDialog() {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline_rounded, color: primaryRed, size: 28),
+            SizedBox(width: 10),
+            Text(
+              'Konfirmasi',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Apakah Anda yakin ingin menyimpan perubahan threshold kehadiran?',
+          style: TextStyle(fontSize: 14, color: Colors.black54),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey),
+            child: const Text('Batal', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              _saveSettings();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryRed,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text(
+              'Ya, Simpan',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -148,7 +205,7 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
                                 width: double.infinity,
                                 height: 50,
                                 child: ElevatedButton(
-                                  onPressed: isLoading ? null : _saveSettings,
+                                  onPressed: isLoading ? null : _showConfirmDialog,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: primaryRed,
                                     shape: RoundedRectangleBorder(
