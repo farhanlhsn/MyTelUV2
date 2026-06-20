@@ -6,7 +6,7 @@
 # Pipeline terdiri dari 3 job:
 #   1. backend-unit-tests  — Jest unit tests + coverage (cepat, isolated)
 #   2. ai-contract-tests   — Python AI contract tests (paralel dengan job 1)
-#   3. backend-e2e-tests   — Full stack E2E (butuh unit tests lulus lebih dulu)
+#   3. backend-e2e-tests   — Full stack E2E (butuh unit tests dan ai-contract lulus lebih dulu)
 #
 # Mobile E2E (Flutter) tidak dijalankan di CI otomatis karena memerlukan
 # emulator fisik yang resource-intensif. Jalankan manual sebelum release.
@@ -119,13 +119,13 @@ jobs:
         run: |
           pip install --upgrade pip
           # Face recognition (tanpa model berat — hanya dependency Flask)
-          pip install flask flask-cors numpy pillow opencv-python-headless || true
+          pip install flask flask-cors numpy pillow opencv-python-headless
           # Anomaly detection
-          pip install pandas scikit-learn || true
+          pip install pandas scikit-learn
           # Shared
-          pip install requests python-dotenv || true
+          pip install requests python-dotenv
           # Test runner
-          pip install pytest || true
+          pip install pytest
 
       - name: Start Face Recognition Service (TEST_MODE=true)
         env:
@@ -134,10 +134,12 @@ jobs:
         run: |
           python backend/python-service/face_recognition/app.py > /tmp/face.log 2>&1 &
           echo "Waiting for Face service..."
+          READY=false
           for i in $(seq 1 25); do
-            curl -sf http://localhost:5051/health > /dev/null 2>&1 && echo "Face service ready!" && break
+            curl -sf http://localhost:5051/health > /dev/null 2>&1 && READY=true && echo "Face service ready!" && break
             sleep 1
           done
+          if [ "$READY" = "false" ]; then echo "❌ Service failed to start"; exit 1; fi
 
       - name: Start Anomaly Detection Service
         env:
@@ -145,10 +147,12 @@ jobs:
         run: |
           python backend/python-service/anomaly_detection/app.py > /tmp/anomaly.log 2>&1 &
           echo "Waiting for Anomaly service..."
+          READY=false
           for i in $(seq 1 25); do
-            curl -sf http://localhost:5003/health > /dev/null 2>&1 && echo "Anomaly service ready!" && break
+            curl -sf http://localhost:5003/health > /dev/null 2>&1 && READY=true && echo "Anomaly service ready!" && break
             sleep 1
           done
+          if [ "$READY" = "false" ]; then echo "❌ Service failed to start"; exit 1; fi
 
       - name: Start Plate Recognition Service (TEST_MODE=true)
         env:
@@ -157,10 +161,12 @@ jobs:
         run: |
           python backend/python-service/plate_recognition/app.py > /tmp/plate.log 2>&1 &
           echo "Waiting for Plate service..."
+          READY=false
           for i in $(seq 1 25); do
-            curl -sf http://localhost:5001/health > /dev/null 2>&1 && echo "Plate service ready!" && break
+            curl -sf http://localhost:5001/health > /dev/null 2>&1 && READY=true && echo "Plate service ready!" && break
             sleep 1
           done
+          if [ "$READY" = "false" ]; then echo "❌ Service failed to start"; exit 1; fi
 
       - name: Run AI Contract Tests
         run: |
@@ -182,7 +188,7 @@ jobs:
   backend-e2e-tests:
     name: Backend E2E Tests
     runs-on: ubuntu-latest
-    needs: [backend-unit-tests]
+    needs: [backend-unit-tests, ai-contract-tests]
 
     services:
       postgres:
@@ -235,7 +241,7 @@ jobs:
       - name: Install AI service dependencies
         run: |
           pip install --upgrade pip
-          pip install flask flask-cors numpy pillow opencv-python-headless pandas scikit-learn requests python-dotenv || true
+          pip install flask flask-cors numpy pillow opencv-python-headless pandas scikit-learn requests python-dotenv
 
       - name: Prisma setup (generate + migrate)
         working-directory: backend
@@ -254,20 +260,24 @@ jobs:
 
           echo "Waiting for AI services..."
           for svc_url in "http://localhost:5051/health" "http://localhost:5001/health" "http://localhost:5003/health"; do
+            READY=false
             for i in $(seq 1 25); do
-              curl -sf "$svc_url" > /dev/null 2>&1 && echo "$svc_url ready" && break
+              curl -sf "$svc_url" > /dev/null 2>&1 && READY=true && echo "$svc_url ready" && break
               sleep 1
             done
+            if [ "$READY" = "false" ]; then echo "❌ $svc_url failed to start"; exit 1; fi
           done
 
       - name: Start Backend Server
         run: |
           node backend/server.js > /tmp/backend.log 2>&1 &
           echo "Waiting for backend..."
+          READY=false
           for i in $(seq 1 25); do
-            curl -sf http://localhost:5050/health > /dev/null 2>&1 && echo "Backend ready!" && break
+            curl -sf http://localhost:5050/health > /dev/null 2>&1 && READY=true && echo "Backend ready!" && break
             sleep 1
           done
+          if [ "$READY" = "false" ]; then echo "❌ Backend failed to start"; exit 1; fi
 
       - name: Run Backend E2E Tests
         working-directory: backend

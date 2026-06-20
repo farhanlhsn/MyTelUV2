@@ -8,8 +8,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: myteluv2-backend
-    ports:
-      - "5050:5050"
+    expose:
+      - "5050"
     environment:
       - NODE_ENV=production
       - PORT=5050
@@ -40,6 +40,12 @@ services:
     container_name: myteluv2-face-recognition
     expose:
       - "5051"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5051/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     environment:
       - FACE_API_KEY=${FACE_API_KEY}
     volumes:
@@ -56,6 +62,12 @@ services:
     container_name: myteluv2-plate-recognition
     expose:
       - "5001"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     environment:
       - NODEJS_BACKEND_URL=http://backend:5050
     env_file:
@@ -80,6 +92,27 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 3
+    networks:
+      - myteluv2-network
+    restart: unless-stopped
+
+  # Docker Caddy Router
+  caddy:
+    image: caddy:2-alpine
+    container_name: myteluv2-caddy
+    ports:
+      - "8880:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      backend:
+        condition: service_started
+      face-recognition:
+        condition: service_healthy
+      plate-recognition:
+        condition: service_healthy
+      anomaly-detection:
+        condition: service_healthy
     networks:
       - myteluv2-network
     restart: unless-stopped

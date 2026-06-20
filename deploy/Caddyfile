@@ -1,7 +1,6 @@
-# Caddyfile for MyTelUV2
-# Automatic HTTPS with Let's Encrypt
+# Docker internal router
 
-mytelu.farhanlhsn.web.id {
+:80 {
     # Enable compression
     encode gzip
 
@@ -10,16 +9,22 @@ mytelu.farhanlhsn.web.id {
         reverse_proxy backend:5050
     }
 
-    # Face Recognition Service (internal, but exposed for edge devices if needed)
+    # Face Recognition Service
     handle /face/* {
         uri strip_prefix /face
         reverse_proxy face-recognition:5051
     }
 
-    # Plate Recognition Service (internal, but exposed for edge devices if needed)
+    # Plate Recognition Service
     handle /plate/* {
         uri strip_prefix /plate
         reverse_proxy plate-recognition:5001
+    }
+
+    # Anomaly Detection Service
+    handle /anomaly/* {
+        uri strip_prefix /anomaly
+        reverse_proxy anomaly-detection:5003
     }
 
     # Health check endpoint

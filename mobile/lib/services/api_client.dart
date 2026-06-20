@@ -24,7 +24,10 @@ class AppConfig {
   static const String _apiUrlDevDefault = String.fromEnvironment(
     'API_URL_DEV_DEFAULT',
   );
-  static const String _apiUrlProd = String.fromEnvironment('API_URL_PROD');
+  static const String _apiUrlProd = String.fromEnvironment(
+    'API_URL_PROD', 
+    defaultValue: 'https://mytelu.farhanlhsn.web.id',
+  );
 
   static const String _androidDevFallback = 'http://10.0.2.2:5050';
   static const String _defaultDevFallback = 'http://localhost:5050';
@@ -34,10 +37,9 @@ class AppConfig {
 
   static String get baseUrl {
     if (isProduction) {
-      if (_apiUrlProd.trim().isEmpty) {
-        throw StateError('API_URL_PROD must be set when ENV=prod');
-      }
-      return _apiUrlProd.trim();
+      return _apiUrlProd.trim().isNotEmpty 
+          ? _apiUrlProd.trim() 
+          : 'https://mytelu.farhanlhsn.web.id';
     }
 
     final String apiUrlDev = _apiUrlDev.trim();
