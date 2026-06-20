@@ -27,9 +27,15 @@ try:
     from ultralytics import YOLO
     USE_ULTRALYTICS = True
 except ImportError:
-    print("Ultralytics not available, trying ONNX...")
-    import onnxruntime as ort
+    print("Ultralytics not available, using ONNX fallback...")
     USE_ULTRALYTICS = False
+
+if not USE_ULTRALYTICS:
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        ort = None
+        print("[WARNING] Neither ultralytics nor onnxruntime available. Service will run in TEST_MODE only.")
 
 # Load environment variables from root project .env
 # Path: backend/python-service/plate_recognition -> root

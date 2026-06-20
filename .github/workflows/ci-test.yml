@@ -122,8 +122,8 @@ jobs:
           pip install flask flask-cors numpy pillow opencv-python-headless
           # Anomaly detection
           pip install pandas scikit-learn
-          # Plate recognition (ONNX runtime for test mode)
-          pip install onnxruntime
+          # Plate recognition (ONNX runtime + yaml for test mode)
+          pip install onnxruntime pyyaml
           # Shared
           pip install requests python-dotenv
           # Test runner
@@ -243,7 +243,7 @@ jobs:
       - name: Install AI service dependencies
         run: |
           pip install --upgrade pip
-          pip install flask flask-cors numpy pillow opencv-python-headless pandas scikit-learn onnxruntime requests python-dotenv
+          pip install flask flask-cors numpy pillow opencv-python-headless pandas scikit-learn onnxruntime pyyaml requests python-dotenv
 
       - name: Prisma setup (generate + migrate)
         working-directory: backend
