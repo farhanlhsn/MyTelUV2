@@ -664,7 +664,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
   }
 
   const isTestMode =
-    req.headers["x-test-mode"] === "true" || process.env.TEST_MODE === "true";
+    req.headers?.["x-test-mode"] === "true" || process.env.TEST_MODE === "true";
 
   try {
     // Get user's biometric data from cache or database
@@ -730,7 +730,6 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     });
 
     if (enrolledClasses.length === 0) {
-      console.log("[BIOMETRIK DEBUG] No enrolled classes for user:", id_user);
       return res.status(400).json({
         status: "error",
         message: "Anda tidak terdaftar di kelas manapun",

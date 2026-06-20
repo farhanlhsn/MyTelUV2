@@ -252,6 +252,13 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 3: Face Detection Failed', () => {
         test('TC003 - Should return 400 when face detection fails', async () => {
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1,
+                id_user: 1,
+                face_embedding: [0.1, 0.2, 0.3],
+                deletedAt: null,
+                user: { id_user: 1, nama: 'Test User', username: 'testuser' }
+            });
             axios.post.mockResolvedValueOnce({
                 data: { success: false, error: 'No face detected' }
             });
@@ -270,6 +277,13 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         });
 
         test('TC003b - Should return 400 with generic message when error is null', async () => {
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1,
+                id_user: 1,
+                face_embedding: [0.1, 0.2, 0.3],
+                deletedAt: null,
+                user: { id_user: 1, nama: 'Test User', username: 'testuser' }
+            });
             axios.post.mockResolvedValueOnce({
                 data: { success: false, error: null }
             });
@@ -675,6 +689,13 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Error Handling', () => {
         test('Should clean up file on error', async () => {
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1,
+                id_user: 1,
+                face_embedding: [0.1, 0.2, 0.3],
+                deletedAt: null,
+                user: { id_user: 1, nama: 'Test User', username: 'testuser' }
+            });
             axios.post.mockRejectedValueOnce(new Error('Service unavailable'));
 
             const req = createMockReq();
