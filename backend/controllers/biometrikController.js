@@ -884,7 +884,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 ${activeSesi.id_kelas},
                 ${activeSesi.id_sesi_absensi},
                 ${activeSesi.type_absensi}::"TypeAbsensi",
-                point(${lng}, ${lat}),
+                point(${lng}::float, ${lat}::float),
                 ${isMock},
                 ${absenPhotoUrl},
                 NOW()
@@ -924,7 +924,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       },
     });
   } catch (error) {
-    
+    console.error("[BIOMETRIK ABSEN ERROR]", error);
     throw error;
   }
 });
