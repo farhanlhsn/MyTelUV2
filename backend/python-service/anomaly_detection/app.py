@@ -46,13 +46,35 @@ def haversine_vectorized(lat1, lon1, lat2, lon2):
 @app.route('/detect-anomalies', methods=['POST'])
 def detect_anomalies():
     try:
-        data = request.json
+        # Reject non-JSON bodies early with 400
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'Request body must be JSON (Content-Type: application/json)'}), 400
+
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({'success': False, 'error': 'Invalid JSON body'}), 400
+
         students = data.get('students', [])
         attendance_records = data.get('attendance', [])
         sessions = data.get('sessions', [])
         total_sessions = data.get('total_sessions', 1)
         threshold = data.get('threshold', 0.5)
         contamination_rate = data.get('contamination', 0.1)
+
+        # Validate total_sessions: must be an integer >= 1
+        if not isinstance(total_sessions, (int, float)) or int(total_sessions) < 1:
+            return jsonify({'success': False, 'error': 'total_sessions must be an integer >= 1'}), 400
+        total_sessions = int(total_sessions)
+
+        # Validate attendance records: each must contain required fields
+        required_attendance_fields = ['id_user', 'id_sesi']
+        for idx, record in enumerate(attendance_records):
+            missing = [f for f in required_attendance_fields if f not in record]
+            if missing:
+                return jsonify({
+                    'success': False,
+                    'error': f"Attendance record at index {idx} is missing required field(s): {', '.join(missing)}"
+                }), 400
 
         if not students:
             return jsonify({'success': True, 'count': 0, 'anomalies': []})
