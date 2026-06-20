@@ -52,6 +52,7 @@ const callPythonService = async (endpoint, formData) => {
               ? formData.getHeaders()
               : { "Content-Type": "application/json" }),
             "X-API-Key": process.env.FACE_API_KEY || "",
+            ...(process.env.TEST_MODE === "true" && { "X-Test-Mode": "true" })
           },
           maxContentLength: Infinity,
           maxBodyLength: Infinity,

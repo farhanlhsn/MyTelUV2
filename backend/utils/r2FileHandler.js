@@ -14,6 +14,20 @@ const getConfiguredAcl = (options = {}) => {
 };
 
 const uploadFile = async (fileBuffer, fileName, mimeType, folder, options = {}) => {
+    // Mock upload for tests
+    if (process.env.TEST_MODE === 'true') {
+        return {
+            success: true,
+            fileUrl: `https://mock-r2.com/${folder}/${fileName}`,
+            fileKey: `${folder}/${fileName}`,
+            fileName: fileName,
+            originalName: fileName,
+            folder,
+            size: fileBuffer.length,
+            mimeType
+        };
+    }
+
     try {
         // Generate unique file name
         const fileExtension = path.extname(fileName);
@@ -74,6 +88,11 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder, options = {}) 
 
 
 const deleteFile = async (fileKey) => {
+    // Mock delete for tests
+    if (process.env.TEST_MODE === 'true') {
+        return { success: true, message: 'File deleted successfully (mock)', fileKey };
+    }
+
     try {
         const deleteParams = {
             Bucket: BUCKET_NAME,
@@ -95,6 +114,11 @@ const deleteFile = async (fileKey) => {
 };
 
 const fileExists = async (fileKey) => {
+    // Mock fileExists for tests
+    if (process.env.TEST_MODE === 'true') {
+        return true;
+    }
+
     try {
         const headParams = {
             Bucket: BUCKET_NAME,

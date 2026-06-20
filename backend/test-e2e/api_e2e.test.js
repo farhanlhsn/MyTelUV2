@@ -227,7 +227,7 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
       {
         headers: {
           ...form.getHeaders(),
-          "X-Edge-Secret": "e2e-testing-edge-device-secret-32-chars",
+          "X-Edge-Secret": process.env.EDGE_DEVICE_SECRET || "e2e-testing-edge-device-secret-32-chars",
           "X-Test-Mode": "true", // Forwarded by backend to plate recognizer
         },
       },
