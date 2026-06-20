@@ -40,9 +40,9 @@ exports.authLimiter = rateLimit({
 exports.biometrikLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5, // limit each user/IP to 5 requests per minute
-  keyGenerator: (req) => req.user?.id_user
+  keyGenerator: (req, res) => req.user?.id_user
     ? `user:${req.user.id_user}`
-    : `ip:${ipKeyGenerator(req.ip)}`,
+    : `ip:${ipKeyGenerator(req, res)}`,
   message: {
     status: "error",
     message: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'
