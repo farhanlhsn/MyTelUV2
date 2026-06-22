@@ -2,7 +2,7 @@
     "info": {
         "_postman_id": "myteluv2-api-collection",
         "name": "MyTelUV2 API Collection",
-        "description": "Complete Postman collection for MyTelUV2 backend API - includes Auth, Akademik, Biometrik, and Kendaraan endpoints",
+        "description": "MyTelUV2 backend API collection. Import the companion environment file for cleaner variable management and quick access to API docs.",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     },
     "auth": {
@@ -22,12 +22,48 @@
             "type": "string"
         },
         {
+            "key": "api_docs_url",
+            "value": "http://localhost:5050/api-docs",
+            "type": "string"
+        },
+        {
             "key": "access_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "refresh_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "edge_secret",
             "value": "",
             "type": "string"
         }
     ],
     "item": [
+        {
+            "name": "Quick Links",
+            "item": [
+                {
+                    "name": "Open API Docs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{api_docs_url}}",
+                            "host": [
+                                "{{api_docs_url}}"
+                            ]
+                        },
+                        "description": "Open the backend Swagger UI in the browser."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Utility links for local development"
+        },
         {
             "name": "Authentication",
             "item": [
@@ -1539,6 +1575,964 @@
                 }
             ],
             "description": "Vehicle registration and management endpoints"
+        },
+        {
+            "name": "Parkir",
+            "item": [
+                {
+                    "name": "Edge Entry",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "X-Edge-Secret",
+                                "value": "{{edge_secret}}",
+                                "type": "text"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "image",
+                                    "type": "file",
+                                    "src": "/path/to/plate.jpg",
+                                    "description": "Plate image (required)"
+                                },
+                                {
+                                    "key": "face_image",
+                                    "type": "file",
+                                    "src": "/path/to/face.jpg",
+                                    "description": "Optional face capture"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir/edge-entry",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir",
+                                "edge-entry"
+                            ]
+                        },
+                        "description": "Internal edge-device parking flow. Requires X-Edge-Secret header."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Histori Parkir",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir/histori",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir",
+                                "histori"
+                            ]
+                        },
+                        "description": "Get parking history for the authenticated user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All Parkir",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir/all",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir",
+                                "all"
+                            ]
+                        },
+                        "description": "Get all parking data. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Analitik Parkir",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir/analitik",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir",
+                                "analitik"
+                            ]
+                        },
+                        "description": "Get parking analytics. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Create Parkiran (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"nama\": \"Gerbang Utama\",\n    \"kapasitas\": 100\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir"
+                            ]
+                        },
+                        "description": "Create a parking location. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Export Parkir CSV (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/parkir/export?parkiran_id=1&from=2024-01-01&to=2024-12-31",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "parkir",
+                                "export"
+                            ],
+                            "query": [
+                                {
+                                    "key": "parkiran_id",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2024-01-01"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2024-12-31"
+                                }
+                            ]
+                        },
+                        "description": "Export parking logs as CSV. Requires ADMIN role."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Parking endpoints for user history, admin management, and edge device flow"
+        },
+        {
+            "name": "Anomali",
+            "item": [
+                {
+                    "name": "Get Settings",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/anomali/settings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "anomali",
+                                "settings"
+                            ]
+                        },
+                        "description": "Get anomaly detection settings."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Settings (Admin)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"enabled\": true\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/anomali/settings",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "anomali",
+                                "settings"
+                            ]
+                        },
+                        "description": "Update anomaly settings. Requires ADMIN role."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Analyze Kelas Attendance",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/anomali/analyze/:id_kelas",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "anomali",
+                                "analyze",
+                                ":id_kelas"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "id_kelas",
+                                    "value": "1"
+                                }
+                            ]
+                        },
+                        "description": "Start anomaly analysis for a class. Requires DOSEN or ADMIN role."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Attendance anomaly analysis endpoints"
+        },
+        {
+            "name": "Posts",
+            "item": [
+                {
+                    "name": "Get All Posts",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/posts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "posts"
+                            ]
+                        },
+                        "description": "Get all feed posts. Requires authentication."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get My Posts",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/posts/me",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "posts",
+                                "me"
+                            ]
+                        },
+                        "description": "Get posts created by the authenticated user."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Create Post",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "content",
+                                    "value": "Halo kampus!",
+                                    "type": "text"
+                                },
+                                {
+                                    "key": "media",
+                                    "type": "file",
+                                    "src": "/path/to/image.jpg"
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/posts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "posts"
+                            ]
+                        },
+                        "description": "Create a post with optional media uploads."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Campus social feed endpoints"
+        },
+        {
+            "name": "Auth Extras",
+            "item": [
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/refresh",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "refresh"
+                            ]
+                        },
+                        "description": "Refresh the access token using a valid refresh token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Forgot Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"testuser\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/forgot-password",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "forgot-password"
+                            ]
+                        },
+                        "description": "Request a password reset token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Reset Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"token\": \"reset-token\",\n    \"newPassword\": \"NewPass123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/reset-password",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "reset-password"
+                            ]
+                        },
+                        "description": "Reset the password using a valid token."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Profile",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{access_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"nama\": \"Test User Updated\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/auth/profile",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "auth",
+                                "profile"
+                            ]
+                        },
+                        "description": "Update current profile name."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Additional auth flows and profile management"
+        },
+        {
+            "name": "AI Services",
+            "item": [
+                {
+                    "name": "Face Recognition",
+                    "item": [
+                        {
+                            "name": "Health",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{face_api_url}}/health",
+                                    "host": [
+                                        "{{face_api_url}}"
+                                    ],
+                                    "path": [
+                                        "health"
+                                    ]
+                                },
+                                "description": "Health check endpoint for the face recognition service."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Docs",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{face_docs_url}}",
+                                    "host": [
+                                        "{{face_docs_url}}"
+                                    ]
+                                },
+                                "description": "Open the Swagger UI for face recognition."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Detect Face",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{face_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "image",
+                                            "type": "file",
+                                            "src": "/path/to/face.jpg"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{face_api_url}}/detect-face",
+                                    "host": [
+                                        "{{face_api_url}}"
+                                    ],
+                                    "path": [
+                                        "detect-face"
+                                    ]
+                                },
+                                "description": "Detect one face and return embedding, bounding box, and score."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Detect Multiple Faces",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{face_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "image",
+                                            "type": "file",
+                                            "src": "/path/to/group.jpg"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{face_api_url}}/detect-multiple",
+                                    "host": [
+                                        "{{face_api_url}}"
+                                    ],
+                                    "path": [
+                                        "detect-multiple"
+                                    ]
+                                },
+                                "description": "Detect multiple faces in one image."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Compare Embeddings",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{face_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"embedding1\": [0.1, 0.2],\n    \"embedding2\": [0.1, 0.2]\n}"
+                                },
+                                "url": {
+                                    "raw": "{{face_api_url}}/compare",
+                                    "host": [
+                                        "{{face_api_url}}"
+                                    ],
+                                    "path": [
+                                        "compare"
+                                    ]
+                                },
+                                "description": "Compare two face embeddings."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Find Match",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{face_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"target_embedding\": [0.1, 0.2],\n    \"embeddings_list\": [[0.1, 0.2]]\n}"
+                                },
+                                "url": {
+                                    "raw": "{{face_api_url}}/find-match",
+                                    "host": [
+                                        "{{face_api_url}}"
+                                    ],
+                                    "path": [
+                                        "find-match"
+                                    ]
+                                },
+                                "description": "Find the best match from a list of embeddings."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "Face detection and embedding service"
+                },
+                {
+                    "name": "Plate Recognition",
+                    "item": [
+                        {
+                            "name": "Health",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{plate_api_url}}/health",
+                                    "host": [
+                                        "{{plate_api_url}}"
+                                    ],
+                                    "path": [
+                                        "health"
+                                    ]
+                                },
+                                "description": "Health check endpoint for the plate recognition service."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Docs",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{plate_docs_url}}",
+                                    "host": [
+                                        "{{plate_docs_url}}"
+                                    ]
+                                },
+                                "description": "Open the Swagger UI for plate recognition."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Recognize Plate",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{plate_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "image",
+                                            "type": "file",
+                                            "src": "/path/to/plate.jpg"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{plate_api_url}}/api/recognize-plate",
+                                    "host": [
+                                        "{{plate_api_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "recognize-plate"
+                                    ]
+                                },
+                                "description": "OCR a license plate image."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Process Parking",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{plate_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "formdata",
+                                    "formdata": [
+                                        {
+                                            "key": "image",
+                                            "type": "file",
+                                            "src": "/path/to/plate.jpg"
+                                        },
+                                        {
+                                            "key": "face_image",
+                                            "type": "file",
+                                            "src": "/path/to/face.jpg",
+                                            "disabled": true
+                                        },
+                                        {
+                                            "key": "parkiran_id",
+                                            "value": "1",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "key": "gate_type",
+                                            "value": "MASUK",
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "url": {
+                                    "raw": "{{plate_api_url}}/api/parking/process",
+                                    "host": [
+                                        "{{plate_api_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "parking",
+                                        "process"
+                                    ]
+                                },
+                                "description": "Process parking entry/exit from the edge device service."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "License plate OCR and parking forwarding service"
+                },
+                {
+                    "name": "Anomaly Detection",
+                    "item": [
+                        {
+                            "name": "Health",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{anomaly_api_url}}/health",
+                                    "host": [
+                                        "{{anomaly_api_url}}"
+                                    ],
+                                    "path": [
+                                        "health"
+                                    ]
+                                },
+                                "description": "Health check endpoint for the anomaly detection service."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Docs",
+                            "request": {
+                                "method": "GET",
+                                "header": [],
+                                "url": {
+                                    "raw": "{{anomaly_docs_url}}",
+                                    "host": [
+                                        "{{anomaly_docs_url}}"
+                                    ]
+                                },
+                                "description": "Open the Swagger UI for anomaly detection."
+                            },
+                            "response": []
+                        },
+                        {
+                            "name": "Detect Anomalies",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    },
+                                    {
+                                        "key": "X-API-Key",
+                                        "value": "{{anomaly_api_key}}",
+                                        "type": "text"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"students\": [],\n    \"attendance\": [],\n    \"sessions\": [],\n    \"total_sessions\": 1,\n    \"threshold\": 0.5,\n    \"contamination\": 0.1\n}"
+                                },
+                                "url": {
+                                    "raw": "{{anomaly_api_url}}/detect-anomalies",
+                                    "host": [
+                                        "{{anomaly_api_url}}"
+                                    ],
+                                    "path": [
+                                        "detect-anomalies"
+                                    ]
+                                },
+                                "description": "Analyze attendance data for anomalies."
+                            },
+                            "response": []
+                        }
+                    ],
+                    "description": "Attendance anomaly detection service"
+                }
+            ],
+            "description": "Standalone AI microservice endpoints with Swagger docs"
         }
     ],
     "event": [

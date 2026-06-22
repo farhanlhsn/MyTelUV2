@@ -1,6 +1,6 @@
 import os
 import traceback
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import IsolationForest
@@ -8,6 +8,122 @@ from sklearn.ensemble import IsolationForest
 app = Flask(__name__)
 
 ANOMALY_API_KEY = os.getenv('ANOMALY_API_KEY', '')
+
+OPENAPI_SPEC = {
+    'openapi': '3.0.3',
+    'info': {
+        'title': 'MyTelUV2 Anomaly Detection API',
+        'version': '1.0.0',
+        'description': 'Attendance anomaly detection API for MyTelUV2.',
+    },
+    'servers': [
+        {'url': 'http://localhost:5003', 'description': 'Local development'},
+    ],
+    'components': {
+        'securitySchemes': {
+            'apiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+            },
+        },
+    },
+    'security': [
+        {'apiKeyAuth': []},
+    ],
+    'paths': {
+        '/': {
+            'get': {
+                'tags': ['System'],
+                'summary': 'Root health message',
+                'security': [],
+                'responses': {
+                    '200': {'description': 'Service banner'},
+                },
+            },
+        },
+        '/health': {
+            'get': {
+                'tags': ['System'],
+                'summary': 'Health check',
+                'security': [],
+                'responses': {
+                    '200': {'description': 'Service is healthy'},
+                },
+            },
+        },
+        '/detect-anomalies': {
+            'post': {
+                'tags': ['Anomaly Detection'],
+                'summary': 'Detect anomalies in attendance data',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                'type': 'object',
+                                'properties': {
+                                    'students': {
+                                        'type': 'array',
+                                        'items': {'type': 'object'},
+                                    },
+                                    'attendance': {
+                                        'type': 'array',
+                                        'items': {'type': 'object'},
+                                    },
+                                    'sessions': {
+                                        'type': 'array',
+                                        'items': {'type': 'object'},
+                                    },
+                                    'total_sessions': {'type': 'integer', 'minimum': 1},
+                                    'threshold': {'type': 'number'},
+                                    'contamination': {'type': 'number'},
+                                },
+                            },
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Anomaly analysis result'},
+                },
+            },
+        },
+    },
+}
+
+SWAGGER_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__TITLE__</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>body { margin: 0; background: #0f172a; } #swagger-ui { min-height: 100vh; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: '__OPENAPI_URL__',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'BaseLayout'
+      });
+    };
+  </script>
+</body>
+</html>"""
+
+
+def swagger_docs(title):
+    return Response(
+        SWAGGER_HTML.replace('__TITLE__', title).replace('__OPENAPI_URL__', '/openapi.json'),
+        mimetype='text/html',
+    )
 
 @app.before_request
 def check_api_key():
@@ -29,6 +145,16 @@ def health():
         'service': 'anomaly-detection-ai',
         'version': '1.0.0'
     }), 200
+
+
+@app.route('/openapi.json', methods=['GET'])
+def openapi_json():
+    return jsonify(OPENAPI_SPEC)
+
+
+@app.route('/docs', methods=['GET'])
+def docs():
+    return swagger_docs('MyTelUV2 Anomaly Detection API Docs')
 
 def haversine_vectorized(lat1, lon1, lat2, lon2):
     """Calculate Haversine distance in meters between two sets of coordinates"""

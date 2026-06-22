@@ -13,7 +13,7 @@ import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from face_processor import FaceProcessor
 import os
@@ -37,6 +37,232 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 FACE_API_KEY = os.getenv('FACE_API_KEY', '')
 
+OPENAPI_SPEC = {
+    'openapi': '3.0.3',
+    'info': {
+        'title': 'MyTelUV2 Face Recognition API',
+        'version': '1.0.0',
+        'description': 'Face detection, embedding, matching, and similarity APIs for MyTelUV2.',
+    },
+    'servers': [
+        {'url': 'http://localhost:5051', 'description': 'Local development'},
+    ],
+    'components': {
+        'securitySchemes': {
+            'apiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+            },
+        },
+        'schemas': {
+            'ErrorResponse': {
+                'type': 'object',
+                'properties': {
+                    'success': {'type': 'boolean'},
+                    'error': {'type': 'string'},
+                },
+            },
+            'DetectFaceResponse': {
+                'type': 'object',
+                'properties': {
+                    'success': {'type': 'boolean'},
+                    'embedding': {
+                        'type': 'array',
+                        'items': {'type': 'number'},
+                    },
+                    'bbox': {
+                        'type': 'array',
+                        'items': {'type': 'number'},
+                    },
+                    'face_score': {'type': 'number'},
+                },
+            },
+            'CompareRequest': {
+                'type': 'object',
+                'required': ['embedding1', 'embedding2'],
+                'properties': {
+                    'embedding1': {
+                        'type': 'array',
+                        'items': {'type': 'number'},
+                    },
+                    'embedding2': {
+                        'type': 'array',
+                        'items': {'type': 'number'},
+                    },
+                },
+            },
+            'FindMatchRequest': {
+                'type': 'object',
+                'required': ['target_embedding', 'embeddings_list'],
+                'properties': {
+                    'target_embedding': {
+                        'type': 'array',
+                        'items': {'type': 'number'},
+                    },
+                    'embeddings_list': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'array',
+                            'items': {'type': 'number'},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    'security': [
+        {'apiKeyAuth': []},
+    ],
+    'paths': {
+        '/health': {
+            'get': {
+                'tags': ['System'],
+                'summary': 'Health check',
+                'security': [],
+                'responses': {
+                    '200': {'description': 'Service is healthy'},
+                },
+            },
+        },
+        '/detect-face': {
+            'post': {
+                'tags': ['Face Recognition'],
+                'summary': 'Detect one face and extract embedding',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'multipart/form-data': {
+                            'schema': {
+                                'type': 'object',
+                                'required': ['image'],
+                                'properties': {
+                                    'image': {
+                                        'type': 'string',
+                                        'format': 'binary',
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {
+                        'description': 'Face detected',
+                        'content': {
+                            'application/json': {
+                                'schema': {'$ref': '#/components/schemas/DetectFaceResponse'},
+                            },
+                        },
+                    },
+                    '400': {
+                        'description': 'Invalid request',
+                        'content': {
+                            'application/json': {
+                                'schema': {'$ref': '#/components/schemas/ErrorResponse'},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/detect-multiple': {
+            'post': {
+                'tags': ['Face Recognition'],
+                'summary': 'Detect multiple faces from one image',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'multipart/form-data': {
+                            'schema': {
+                                'type': 'object',
+                                'required': ['image'],
+                                'properties': {
+                                    'image': {
+                                        'type': 'string',
+                                        'format': 'binary',
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Faces detected'},
+                },
+            },
+        },
+        '/compare': {
+            'post': {
+                'tags': ['Face Recognition'],
+                'summary': 'Compare two embeddings',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'application/json': {
+                            'schema': {'$ref': '#/components/schemas/CompareRequest'},
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Similarity result'},
+                },
+            },
+        },
+        '/find-match': {
+            'post': {
+                'tags': ['Face Recognition'],
+                'summary': 'Find the best match from a list of embeddings',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'application/json': {
+                            'schema': {'$ref': '#/components/schemas/FindMatchRequest'},
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Best match result'},
+                },
+            },
+        },
+    },
+}
+
+SWAGGER_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__TITLE__</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>body { margin: 0; background: #0f172a; } #swagger-ui { min-height: 100vh; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: '__OPENAPI_URL__',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'BaseLayout'
+      });
+    };
+  </script>
+</body>
+</html>"""
+
+
+def swagger_docs(title):
+    return Response(
+        SWAGGER_HTML.replace('__TITLE__', title).replace('__OPENAPI_URL__', '/openapi.json'),
+        mimetype='text/html',
+    )
+
 @app.before_request
 def check_api_key():
     if request.path == '/health':
@@ -56,6 +282,16 @@ def health_check():
         'service': 'Face Recognition API',
         'version': '1.0.0'
     })
+
+
+@app.route('/openapi.json', methods=['GET'])
+def openapi_json():
+    return jsonify(OPENAPI_SPEC)
+
+
+@app.route('/docs', methods=['GET'])
+def docs():
+    return swagger_docs('MyTelUV2 Face Recognition API Docs')
 
 @app.route('/detect-face', methods=['POST'])
 def detect_face():

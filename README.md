@@ -75,6 +75,14 @@ npm test
 
 Backend default berjalan di port `5050`.
 
+Swagger/OpenAPI docs tersedia di:
+
+```text
+http://localhost:5050/api-docs
+```
+
+Kalau backend dijalankan dari host lain atau via production compose, sesuaikan host-nya dan buka endpoint `api-docs` yang sama.
+
 ## AI Services
 
 Face recognition:
@@ -85,6 +93,11 @@ pip install -r requirements.txt
 python app.py
 ```
 
+Docs:
+
+- `http://localhost:5051/docs`
+- `http://localhost:5051/openapi.json`
+
 Plate recognition:
 
 ```bash
@@ -93,6 +106,11 @@ pip install -r requirements.txt
 python app.py
 ```
 
+Docs:
+
+- `http://localhost:5001/docs`
+- `http://localhost:5001/openapi.json`
+
 Anomaly detection:
 
 ```bash
@@ -100,6 +118,11 @@ cd backend/python-service/anomaly_detection
 pip install -r requirements.txt
 python app.py
 ```
+
+Docs:
+
+- `http://localhost:5003/docs`
+- `http://localhost:5003/openapi.json`
 
 Port default:
 

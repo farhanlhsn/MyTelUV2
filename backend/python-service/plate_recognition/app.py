@@ -14,7 +14,7 @@ import numpy as np
 from pathlib import Path
 import yaml
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from PIL import Image
 import io
 import os
@@ -46,6 +46,150 @@ load_dotenv(dotenv_path=ENV_PATH)
 # Environment Configuration
 NODEJS_BACKEND_URL = os.getenv('NODEJS_BACKEND_URL', 'http://localhost:3000')
 EDGE_DEVICE_SECRET = os.getenv('EDGE_DEVICE_SECRET', 'your-secret-key')
+
+OPENAPI_SPEC = {
+    'openapi': '3.0.3',
+    'info': {
+        'title': 'MyTelUV2 Plate Recognition API',
+        'version': '1.0.0',
+        'description': 'OCR and edge-parking forwarding APIs for MyTelUV2.',
+    },
+    'servers': [
+        {'url': 'http://localhost:5001', 'description': 'Local development'},
+    ],
+    'components': {
+        'securitySchemes': {
+            'apiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+            },
+        },
+    },
+    'security': [
+        {'apiKeyAuth': []},
+    ],
+    'paths': {
+        '/health': {
+            'get': {
+                'tags': ['System'],
+                'summary': 'Health check',
+                'security': [],
+                'responses': {
+                    '200': {'description': 'Service is healthy'},
+                },
+            },
+        },
+        '/api/recognize-plate': {
+            'post': {
+                'tags': ['Plate Recognition'],
+                'summary': 'Recognize a license plate from an image',
+                'parameters': [
+                    {
+                        'name': 'confidence',
+                        'in': 'query',
+                        'required': False,
+                        'schema': {'type': 'number', 'format': 'float'},
+                        'description': 'Confidence threshold for OCR detection',
+                    },
+                ],
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'multipart/form-data': {
+                            'schema': {
+                                'type': 'object',
+                                'required': ['image'],
+                                'properties': {
+                                    'image': {
+                                        'type': 'string',
+                                        'format': 'binary',
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Plate recognized'},
+                },
+            },
+        },
+        '/api/parking/process': {
+            'post': {
+                'tags': ['Parking'],
+                'summary': 'Process parking entry/exit from edge device',
+                'requestBody': {
+                    'required': True,
+                    'content': {
+                        'multipart/form-data': {
+                            'schema': {
+                                'type': 'object',
+                                'required': ['image', 'parkiran_id'],
+                                'properties': {
+                                    'image': {'type': 'string', 'format': 'binary'},
+                                    'face_image': {'type': 'string', 'format': 'binary'},
+                                    'parkiran_id': {'type': 'string'},
+                                    'gate_type': {
+                                        'type': 'string',
+                                        'enum': ['MASUK', 'KELUAR'],
+                                    },
+                                    'face_detected': {'type': 'string'},
+                                },
+                            },
+                        },
+                    },
+                },
+                'responses': {
+                    '200': {'description': 'Parking flow forwarded'},
+                },
+            },
+        },
+        '/api/parking/entry': {
+            'post': {
+                'tags': ['Parking'],
+                'summary': 'Legacy parking entry endpoint',
+                'responses': {
+                    '200': {'description': 'Parking flow forwarded'},
+                },
+            },
+        },
+    },
+}
+
+SWAGGER_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__TITLE__</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>body { margin: 0; background: #0f172a; } #swagger-ui { min-height: 100vh; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: '__OPENAPI_URL__',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'BaseLayout'
+      });
+    };
+  </script>
+</body>
+</html>"""
+
+
+def swagger_docs(title):
+    return Response(
+        SWAGGER_HTML.replace('__TITLE__', title).replace('__OPENAPI_URL__', '/openapi.json'),
+        mimetype='text/html',
+    )
 
 class PlateRecognizer:
     def __init__(self, model_path, classes_path):
@@ -325,6 +469,16 @@ def init_recognizer():
 def health():
     """Health check endpoint"""
     return jsonify({'status': 'ok', 'service': 'plate-recognizer'})
+
+
+@app.route('/openapi.json', methods=['GET'])
+def openapi_json():
+    return jsonify(OPENAPI_SPEC)
+
+
+@app.route('/docs', methods=['GET'])
+def docs():
+    return swagger_docs('MyTelUV2 Plate Recognition API Docs')
 
 
 @app.route('/api/recognize-plate', methods=['POST'])
