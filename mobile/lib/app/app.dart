@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'routes.dart';
+import '../utils/app_theme.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -9,11 +10,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'MyTelUV2',
+      title: 'MyTelU',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      theme: AppTheme.light,
       getPages: AppRoutes.pages,
       initialRoute: AppRoutes.splash,
     );

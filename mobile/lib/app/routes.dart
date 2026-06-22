@@ -64,12 +64,9 @@ class AppRoutes {
   static const String anomaliResult = '/anomali-result';
   static const String anomaliDashboard = '/anomali-dashboard';
   static const String adminAnomalyConfig = '/admin-anomaly-config';
-  
+
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
-    GetPage<dynamic>(
-      name: splash,
-      page: () => const SplashPage(),
-    ),
+    GetPage<dynamic>(name: splash, page: () => const SplashPage()),
     GetPage<dynamic>(
       name: login,
       page: () => const LoginPage(),
@@ -107,7 +104,7 @@ class AppRoutes {
       binding: AuthBinding(),
     ),
     GetPage<dynamic>(
-      name: registerPlat, 
+      name: registerPlat,
       page: () => const RegisterPlatPage(),
       middlewares: [AuthMiddleware()],
     ),
@@ -125,11 +122,9 @@ class AppRoutes {
       name: otpVerification,
       page: () => OtpVerificationPage(phoneNumber: Get.arguments ?? ""),
     ),
-    // TODO: Verifikasi apakah route ini seharusnya menampilkan halaman kehadiran
-    // bukan halaman parkir. Jika salah, ganti dengan halaman yang sesuai.
     GetPage<dynamic>(
       name: analitikKehadiran,
-      page: () => const AnalitikParkirPage(), // Intentional atau bug?
+      page: () => const AbsensiPage(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(
@@ -170,32 +165,50 @@ class AppRoutes {
     GetPage<dynamic>(
       name: adminPengajuanList,
       page: () => const AdminPengajuanListPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: adminAkademik,
       page: () => const AdminAkademikPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: adminBiometrik,
       page: () => const AdminBiometrikPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: adminUserManagement,
       page: () => const AdminUserManagementPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: adminAbsensiMonitoring,
       page: () => const AdminAbsensiMonitoringPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: adminAnomalyConfig,
       page: () => const AdminAnomalyConfigPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN']),
+      ],
     ),
     GetPage<dynamic>(
       name: jadwalMingguan,
@@ -205,27 +218,26 @@ class AppRoutes {
     GetPage<dynamic>(
       name: formJadwalPengganti,
       page: () => const FormJadwalPenggantiPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN', 'DOSEN']),
+      ],
     ),
     GetPage<dynamic>(
       name: anomaliResult,
       page: () => const AnomaliResultPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN', 'DOSEN']),
+      ],
     ),
     GetPage<dynamic>(
       name: anomaliDashboard,
       page: () => const AnomaliDashboardPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
-    ),
-    GetPage<dynamic>(
-      name: anomaliResult,
-      page: () => const AnomaliResultPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
-    ),
-    GetPage<dynamic>(
-      name: anomaliDashboard,
-      page: () => const AnomaliDashboardPage(),
-      middlewares: [AuthMiddleware(), RoleMiddleware(const ['ADMIN', 'DOSEN'])],
+      middlewares: [
+        AuthMiddleware(),
+        RoleMiddleware(const ['ADMIN', 'DOSEN']),
+      ],
     ),
   ];
 }

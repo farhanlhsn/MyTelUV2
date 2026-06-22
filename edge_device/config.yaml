@@ -9,8 +9,8 @@ model:
 
 # Server Configuration
 server:
-  url: "http://localhost:5050"  # Direct backend URL
-  secret: "e2e-testing-edge-device-secret-32-chars"  # Edge device secret key
+  url: "https://mytelu.farhanlhsn.web.id"  # Direct backend URL
+  secret: "5eb3460116f76c5fc31cf3aba0e02dc3556d49e6b13198b26de733655d63c839"  # Edge device secret key
   timeout: 10  # Request timeout in seconds
 
 # Camera Configuration
@@ -34,7 +34,7 @@ logging:
 # Gate Configuration
 gate:
   type: "MASUK"  # MASUK or KELUAR - determines which gate this device controls
-  parkiran_id: 1  # ID of the parkiran this gate belongs to
+  parkiran_id: 3  # ID of the parkiran this gate belongs to
   open_duration: 5  # Seconds to keep gate open after successful detection
 
 # GPIO Configuration (for real gate control on Raspberry Pi)

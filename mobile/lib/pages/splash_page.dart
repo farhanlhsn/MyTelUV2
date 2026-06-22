@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../app/routes.dart';
 import '../app/auth_middleware.dart';
@@ -13,8 +12,6 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
   @override
   void initState() {
     super.initState();
@@ -27,12 +24,11 @@ class _SplashPageState extends State<SplashPage> {
 
     try {
       await AuthMiddleware.loadCredentials();
-      
-      if (AuthMiddleware.cachedToken != null && AuthMiddleware.cachedToken!.isNotEmpty) {
-        // Token exists, go to home
+
+      if (AuthMiddleware.isTokenValid) {
         Get.offAllNamed(AppRoutes.home);
       } else {
-        // No token, go to login
+        AuthMiddleware.clearCredentials();
         Get.offAllNamed(AppRoutes.login);
       }
     } catch (e) {
@@ -50,11 +46,7 @@ class _SplashPageState extends State<SplashPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TelU Logo
-            Image.asset(
-              'assets/images/telyu.png',
-              width: 150,
-              height: 150,
-            ),
+            Image.asset('assets/images/telyu.png', width: 150, height: 150),
             const SizedBox(height: 24),
             // Loading indicator
             const CircularProgressIndicator(

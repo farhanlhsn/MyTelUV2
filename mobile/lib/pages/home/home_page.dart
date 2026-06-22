@@ -23,10 +23,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   final HomeController _homeController = Get.put(HomeController());
-  final NotificationController _notificationController = Get.put(NotificationController());
+  final NotificationController _notificationController = Get.put(
+    NotificationController(),
+  );
 
   late PageController _pageController;
   late final MapController _mapController;
+  final Set<int> _mountedTabIndexes = <int>{0};
 
   // --- Daftar halaman untuk navigasi ---
   late final List<Widget> _pages;
@@ -159,7 +162,15 @@ class _HomePageState extends State<HomePage> {
         return Stack(
           children: [
             // Konten Halaman Utama
-            IndexedStack(index: _selectedIndex, children: _pages),
+            IndexedStack(
+              index: _selectedIndex,
+              children: List<Widget>.generate(_pages.length, (index) {
+                if (!_mountedTabIndexes.contains(index)) {
+                  return const SizedBox.shrink();
+                }
+                return _pages[index];
+              }),
+            ),
 
             // Navigasi di bagian bawah
             Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
@@ -449,17 +460,25 @@ class _HomePageState extends State<HomePage> {
     final bool requireFace = activeSesi?.requireFace ?? false;
 
     return GestureDetector(
-      onTap: hasActiveAbsensi ? () {
-        // Navigate based on require_face setting
-        final idSesi = activeSesi?.idSesiAbsensi ?? 0;
-        if (requireFace) {
-          // Need face verification
-          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
-        } else {
-          // GPS only - still use BiometrikAbsenPage for now
-          Get.to(() => BiometrikAbsenPage(idSesiAbsensi: idSesi), arguments: {'idSesiAbsensi': idSesi});
-        }
-      } : null,
+      onTap: hasActiveAbsensi
+          ? () {
+              // Navigate based on require_face setting
+              final idSesi = activeSesi?.idSesiAbsensi ?? 0;
+              if (requireFace) {
+                // Need face verification
+                Get.to(
+                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
+                  arguments: {'idSesiAbsensi': idSesi},
+                );
+              } else {
+                // GPS only - still use BiometrikAbsenPage for now
+                Get.to(
+                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
+                  arguments: {'idSesiAbsensi': idSesi},
+                );
+              }
+            }
+          : null,
       child: Card(
         elevation: 8,
         shadowColor: Colors.black.withOpacity(0.3),
@@ -480,54 +499,60 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-          // Active absensi badge
-          if (hasActiveAbsensi)
-            Positioned(
-              top: 10,
-              left: 10,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      requireFace ? Icons.face : Icons.location_on,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      requireFace ? 'Absen + Selfie' : 'Absen GPS',
-                      style: const TextStyle(
+            // Active absensi badge
+            if (hasActiveAbsensi)
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        requireFace ? Icons.face : Icons.location_on,
                         color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        size: 14,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Tap untuk absen →',
-                        style: TextStyle(
-                          color: Color(0xFFE63946),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(width: 4),
+                      Text(
+                        requireFace ? 'Absen + Selfie' : 'Absen GPS',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Tap untuk absen →',
+                          style: TextStyle(
+                            color: Color(0xFFE63946),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
             Positioned(
               top: 15,
               right: 15,
@@ -556,35 +581,43 @@ class _HomePageState extends State<HomePage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 14, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Text(
-                      jadwal,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.black54),
-                    const SizedBox(width: 4),
-                    Text(
-                      location,
-                      style: const TextStyle(
-                        fontSize: 12,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time,
+                        size: 14,
                         color: Colors.black54,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 4),
+                      Text(
+                        jadwal,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Colors.black54,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        location,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -717,7 +750,7 @@ class _HomePageState extends State<HomePage> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$label - Coming Soon!'),
+              content: Text('$label belum tersedia'),
               duration: const Duration(seconds: 1),
               behavior: SnackBarBehavior.floating,
             ),
@@ -794,6 +827,7 @@ class _HomePageState extends State<HomePage> {
         onTap: () {
           setState(() {
             _selectedIndex = index;
+            _mountedTabIndexes.add(index);
           });
         },
         borderRadius: BorderRadius.circular(20),
@@ -822,21 +856,26 @@ class _HomePageState extends State<HomePage> {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
-                height: isSelected ? 16 : 0, // cukup buat fontSize 12
+                height: isSelected ? 18 : 0,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 200),
                   opacity: isSelected ? 1.0 : 0.0,
                   child: Center(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      softWrap: false,
                     ),
                   ),
                 ),

@@ -53,7 +53,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Row(
                 children: [
                   const Text(
-                    'Sign In',
+                    'Masuk',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -185,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: () {
-                                Get.toNamed('/forgot-password');
+                                Get.toNamed(AppRoutes.forgotPassword);
                               },
                               style: TextButton.styleFrom(
                                 foregroundColor: const Color(0xFFE63946),
@@ -233,7 +233,7 @@ class _LoginPageState extends State<LoginPage> {
                                         ),
                                       )
                                     : const Text(
-                                        'Sign In',
+                                        'Masuk',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -245,7 +245,7 @@ class _LoginPageState extends State<LoginPage> {
                           }),
                           const SizedBox(height: 30),
 
-                          // Sign Up Link
+                          // Register Link
                           Center(
                             child: RichText(
                               text: TextSpan(
@@ -254,11 +254,9 @@ class _LoginPageState extends State<LoginPage> {
                                   fontWeight: FontWeight.w600,
                                 ),
                                 children: <TextSpan>[
-                                  const TextSpan(
-                                    text: "Belum punya akun? ",
-                                  ),
+                                  const TextSpan(text: "Belum punya akun? "),
                                   TextSpan(
-                                    text: 'Sign Up',
+                                    text: 'Daftar',
                                     style: const TextStyle(
                                       color: Color(0xFFE63946),
                                       fontWeight: FontWeight.bold,

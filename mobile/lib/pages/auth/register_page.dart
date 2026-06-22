@@ -83,7 +83,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     },
                   ),
                   const Text(
-                    'Register',
+                    'Daftar',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -348,7 +348,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           const SizedBox(height: 10),
 
-                          // Sign Up Button
+                          // Register Button
                           Obx(() {
                             final bool isLoading =
                                 _authController.isLoading.value;
@@ -379,7 +379,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                         ),
                                       )
                                     : const Text(
-                                        'Sign Up',
+                                        'Daftar',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -391,7 +391,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           }),
                           const SizedBox(height: 30),
 
-                          // Sign In Link
+                          // Login Link
                           Center(
                             child: RichText(
                               text: TextSpan(
@@ -402,7 +402,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                 children: <TextSpan>[
                                   const TextSpan(text: 'Sudah punya akun? '),
                                   TextSpan(
-                                    text: 'Sign In',
+                                    text: 'Masuk',
                                     style: const TextStyle(
                                       color: Color(0xFFE63946),
                                       fontWeight: FontWeight.bold,

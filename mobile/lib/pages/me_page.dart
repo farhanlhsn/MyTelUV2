@@ -39,7 +39,9 @@ class MePage extends StatelessWidget {
               }
 
               if (snapshot.hasError) {
-                return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
+                return Center(
+                  child: Text('Terjadi kesalahan: ${snapshot.error}'),
+                );
               }
 
               final Map<String, String?> data = snapshot.data ?? {};
@@ -56,7 +58,7 @@ class MePage extends StatelessWidget {
                     Center(
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: const Color(0xFFE63946),
                         child: Text(
                           nama.isNotEmpty ? nama[0].toUpperCase() : 'U',
                           style: const TextStyle(
