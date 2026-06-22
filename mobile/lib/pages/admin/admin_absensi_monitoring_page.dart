@@ -40,10 +40,9 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
         _isLoading = false;
       });
 
-      // Load stats for each kelas in background
-      for (final kelas in kelasList) {
-        _loadKelasStats(kelas.idKelas);
-      }
+      // Load stats for all kelas in parallel
+      final futures = kelasList.map((k) => _loadKelasStats(k.idKelas));
+      await Future.wait(futures);
     } catch (e) {
       setState(() {
         _error = e.toString();

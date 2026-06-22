@@ -455,25 +455,27 @@ class _PostPageState extends State<PostPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(top: 8, bottom: 100), // Extra bottom padding for navbar
         itemCount: _posts.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _posts.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(
-                child: CircularProgressIndicator(color: primaryColor, strokeWidth: 3),
-              ),
-            );
-          }
-          return _buildPostCard(_posts[index]);
-        },
+          itemBuilder: (context, index) {
+            if (index == _posts.length) {
+              return const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Center(
+                  child: CircularProgressIndicator(color: primaryColor, strokeWidth: 3),
+                ),
+              );
+            }
+            final post = _posts[index];
+            return _buildPostCard(post, ValueKey('post_${post.idPost}_${post.isLiked}_${post.likeCount}_${post.commentCount}'));
+          },
       ),
     );
   }
 
-  Widget _buildPostCard(PostModel post) {
+  Widget _buildPostCard(PostModel post, [Key? key]) {
     final bool isOwner = _currentUserId == post.idUser;
 
     return Container(
+      key: key,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,

@@ -46,7 +46,6 @@ class AppRoutes {
   static const String resubmitKendaraan = '/resubmit-kendaraan';
   static const String pengajuanList = '/pengajuan-list';
   static const String otpVerification = '/otp-verification';
-  static const String analitikKehadiran = '/analitik-kehadiran';
   static const String userHistoriPengajuan = '/user-histori-pengajuan';
   static const String absensi = '/absensi';
   static const String analitikParkir = '/analitik-parkir';
@@ -121,11 +120,6 @@ class AppRoutes {
     GetPage<dynamic>(
       name: otpVerification,
       page: () => OtpVerificationPage(phoneNumber: Get.arguments ?? ""),
-    ),
-    GetPage<dynamic>(
-      name: analitikKehadiran,
-      page: () => const AbsensiPage(),
-      middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(
       name: userHistoriPengajuan,

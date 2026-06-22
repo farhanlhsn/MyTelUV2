@@ -1,15 +1,18 @@
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile/controllers/notification_controller.dart';
+import '../utils/logger.dart';
 import 'api_client.dart';
+
+String _maskToken(String token) => '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
 
 /// Background message handler - must be top-level function
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('📬 Background message: ${message.notification?.title}');
   await NotificationService.saveNotification(message);
 }
 
@@ -33,17 +36,19 @@ class NotificationService {
         sound: true,
       );
 
-      debugPrint('🔔 Notification permission: ${settings.authorizationStatus}');
+      debugLog('Notification permission: ${settings.authorizationStatus}');
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
         // Get FCM token
         _fcmToken = await _messaging.getToken();
-        debugPrint('📱 FCM Token: $_fcmToken');
+        if (_fcmToken != null && kDebugMode) {
+          debugLog('FCM Token: ${_maskToken(_fcmToken!)}');
+        }
 
         // Listen for token refresh
         _messaging.onTokenRefresh.listen((String newToken) {
-          debugPrint('🔄 FCM Token refreshed: $newToken');
+          debugLog('FCM Token refreshed: ${_maskToken(newToken)}');
           _fcmToken = newToken;
           // Re-register with backend if logged in
           _registerTokenWithBackend(newToken);
@@ -53,7 +58,7 @@ class NotificationService {
         _setupMessageHandlers();
       }
     } catch (e) {
-      debugPrint('❌ NotificationService init error: $e');
+      debugLog('NotificationService init error: $e');
     }
   }
 
@@ -64,10 +69,8 @@ class NotificationService {
   static void _setupMessageHandlers() {
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('📬 Foreground message received:');
-      debugPrint('   Title: ${message.notification?.title}');
-      debugPrint('   Body: ${message.notification?.body}');
-      debugPrint('   Data: ${message.data}');
+      debugLog('Foreground message: ${message.notification?.title}');
+      debugLog('Data type: ${message.data['type']}');
 
       // Save notification locally
       saveNotification(message);
@@ -105,8 +108,7 @@ class NotificationService {
 
     // Handle notification tap when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('📬 Notification tapped (from background):');
-      debugPrint('   Data: ${message.data}');
+      debugLog('Notification tapped (from background), type: ${message.data['type']}');
       saveNotification(message); // Ensure saved if opened
     });
   }
@@ -139,7 +141,7 @@ class NotificationService {
       }
 
       await prefs.setString('local_notifications', jsonEncode(notifications));
-      debugPrint('✅ Notification saved locally');
+      debugLog('Notification saved locally');
       
       if (Get.isRegistered<NotificationController>()) {
         Get.find<NotificationController>().loadNotifications();
@@ -154,10 +156,9 @@ class NotificationService {
     final String? type = message.data['type'];
     if (type == 'PARKING_NOTIFICATION') {
       final String parkingType = message.data['parking_type'] ?? '';
-      final String platNomor = message.data['plat_nomor'] ?? '';
       final String parkiranName = message.data['parkiran_name'] ?? '';
 
-      debugPrint('🚗 Parking notification: $parkingType - $platNomor at $parkiranName');
+      debugLog('Parking notification: $parkingType at $parkiranName');
     }
   }
 
@@ -168,9 +169,9 @@ class NotificationService {
         '/api/v1/auth/fcm-token',
         data: <String, String>{'fcm_token': token},
       );
-      debugPrint('✅ FCM token registered with backend');
+      debugLog('FCM token registered with backend');
     } catch (e) {
-      debugPrint('❌ Failed to register FCM token: $e');
+      debugLog('Failed to register FCM token: $e');
     }
   }
 
@@ -192,6 +193,6 @@ class NotificationService {
   /// Method ini hanya membersihkan state lokal.
   static Future<void> unregisterToken() async {
     _fcmToken = null;
-    debugPrint('✅ FCM token cleared locally (backend clears on /logout)');
+    debugLog('FCM token cleared locally (backend clears on /logout)');
   }
 }

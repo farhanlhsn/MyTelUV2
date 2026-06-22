@@ -75,7 +75,7 @@ app.use(helmet({
     },
 }));
 
-app.use(generalLimiter); // Apply rate limiting to all requests
+// app.use(generalLimiter); // Apply rate limiting to all requests
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput); // Sanitize all input

@@ -30,9 +30,7 @@ class _HomePageState extends State<HomePage> {
   late PageController _pageController;
   late final MapController _mapController;
   final Set<int> _mountedTabIndexes = <int>{0};
-
-  // --- Daftar halaman untuk navigasi ---
-  late final List<Widget> _pages;
+  final Map<int, Widget> _tabPages = <int, Widget>{};
 
   // --- FUNGSI BARU UNTUK MENU PARKIR ---
   void _showParkingOptions() {
@@ -89,23 +87,23 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.9);
-
     _mapController = MapController();
+    // Tab 0 (Home) is always built eagerly — it's the landing tab
+    _tabPages[0] = _buildHomeContent();
+  }
 
-    // --- PERBAIKAN DI SINI ---
-    // Kita harus mendaftarkan 4 widget, sesuai dengan 4 tombol navigasi
-    _pages = [
-      _buildHomeContent(), // Halaman 0 - Home
-      // Halaman 1 - Maps (Widget Pengganti)
-      Center(child: MapPage(mapController: _mapController)),
-
-      // Halaman 2 - Post (Widget Pengganti)
-      const Center(child: PostPage()),
-
-      // Halaman 3 - Settings (Widget Pengganti)
-      Center(child: SettingsPage()),
-    ];
-    // --- AKHIR PERBAIKAN ---
+  Widget _getTabPage(int index) {
+    if (!_tabPages.containsKey(index)) {
+      switch (index) {
+        case 1:
+          _tabPages[1] = Center(child: MapPage(mapController: _mapController));
+        case 2:
+          _tabPages[2] = const Center(child: PostPage());
+        case 3:
+          _tabPages[3] = Center(child: SettingsPage());
+      }
+    }
+    return _tabPages[index]!;
   }
 
   @override
@@ -145,38 +143,26 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Obx(() {
-        // Show error message if any
-        if (_homeController.errorMessage.value.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(_homeController.errorMessage.value),
-                backgroundColor: Colors.red,
-              ),
-            );
-            _homeController.errorMessage.value = '';
-          });
-        }
+      body: Stack(
+        children: [
+          // Konten Halaman Utama
+          IndexedStack(
+            index: _selectedIndex,
+            children: List<Widget>.generate(4, (index) {
+              if (!_mountedTabIndexes.contains(index)) {
+                return const SizedBox.shrink();
+              }
+              return _getTabPage(index);
+            }),
+          ),
 
-        return Stack(
-          children: [
-            // Konten Halaman Utama
-            IndexedStack(
-              index: _selectedIndex,
-              children: List<Widget>.generate(_pages.length, (index) {
-                if (!_mountedTabIndexes.contains(index)) {
-                  return const SizedBox.shrink();
-                }
-                return _pages[index];
-              }),
-            ),
+          // Navigasi di bagian bawah
+          Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
 
-            // Navigasi di bagian bawah
-            Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
-          ],
-        );
-      }),
+          // Error snackbar listener (tiny Obx)
+          _ErrorListener(controller: _homeController),
+        ],
+      ),
     );
   }
 
@@ -873,7 +859,7 @@ class _HomePageState extends State<HomePage> {
                             fontSize: 12,
                           ),
                           maxLines: 1,
-                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -960,5 +946,30 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+}
+
+class _ErrorListener extends StatelessWidget {
+  final HomeController controller;
+  const _ErrorListener({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      if (controller.errorMessage.value.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(controller.errorMessage.value),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          controller.errorMessage.value = '';
+        });
+      }
+      return const SizedBox.shrink();
+    });
   }
 }

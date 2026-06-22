@@ -7,10 +7,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:mobile/utils/logger.dart';
 
-
-
-import 'package:mobile/utils/logger.dart';
-
 /// Environment configuration for API URLs.
 ///
 /// Usage:
