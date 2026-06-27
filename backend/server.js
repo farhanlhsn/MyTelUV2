@@ -125,7 +125,7 @@ app.get('/health', async (req, res) => {
 });
 
 if (swaggerSpec) {
-    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 
 // Support both /api and /api/v1 prefixes
