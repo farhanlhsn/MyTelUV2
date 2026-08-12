@@ -41,6 +41,8 @@ COPY utils ./utils/
 # Create uploads directory
 RUN mkdir -p uploads
 
+RUN chown -R node:node /app
+USER node
 # Expose port
 EXPOSE 5050
 

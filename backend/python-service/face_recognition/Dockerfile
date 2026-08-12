@@ -33,6 +33,8 @@ COPY *.py ./
 # Create models directory (InsightFace will download models here on first run)
 RUN mkdir -p /root/.insightface
 
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
 # Expose port
 EXPOSE 5051
 

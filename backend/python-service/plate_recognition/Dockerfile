@@ -30,6 +30,8 @@ COPY *.py ./
 # Copy models directory (YOLO models)
 COPY models ./models/
 
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
 # Expose port
 EXPOSE 5001
 
