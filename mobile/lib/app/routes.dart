@@ -17,6 +17,8 @@ import '../pages/absensi/absensi_page.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
+import '../pages/home/notification_list_page.dart';
+import '../pages/home/post_comments_route_page.dart';
 import '../pages/kendaraan/admin/admin_pengajuan_list_page.dart';
 import '../pages/admin/admin_akademik_page.dart';
 import '../pages/admin/admin_biometrik_page.dart';
@@ -47,6 +49,8 @@ class AppRoutes {
   static const String historiParkir = '/histori-parkir';
   static const String account = '/account';
   static const String notification = '/notification';
+  static const String notificationList = '/notification-list';
+  static const String postComments = '/post-comments';
   static const String listKendaraanTerdaftar = '/list-kendaraan-terdaftar';
   static const String adminPengajuanList = '/admin-pengajuan-list';
   static const String adminAkademik = '/admin-akademik';
@@ -134,6 +138,16 @@ class AppRoutes {
     GetPage<dynamic>(
       name: notification,
       page: () => const NotificationPage(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage<dynamic>(
+      name: notificationList,
+      page: () => const NotificationListPage(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage<dynamic>(
+      name: postComments,
+      page: () => const PostCommentsRoutePage(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(

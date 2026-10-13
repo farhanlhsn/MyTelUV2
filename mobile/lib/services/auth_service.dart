@@ -124,6 +124,24 @@ class AuthService {
     );
   }
 
+  /// Turns push notifications on or off for the logged-in user (the server stops sending to them).
+  Future<Map<String, dynamic>> updatePushPreference({required bool enabled}) async {
+    final Response<dynamic> response = await _dio.put<dynamic>(
+      '/api/v1/auth/preferences',
+      data: <String, dynamic>{'push_notifications_enabled': enabled},
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Invalid response format from server',
+    );
+  }
+
   Future<void> logout({String? refreshToken}) async {
     try {
       final data = refreshToken != null ? {'refresh_token': refreshToken} : null;

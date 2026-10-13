@@ -72,11 +72,12 @@ class ApiClient {
 
   /// Endpoints whose 401 means "these credentials / token are wrong" and not "your session
   /// expired": no refresh, no logout, the error goes to the caller. Matched on the path suffix, so
-  /// `/auth/admin/reset-password` (a normal authenticated call) is not one of them.
+  /// `/auth/admin/reset-password` (a normal authenticated call) is not one of them. Nor is
+  /// `/auth/password` (change password): a wrong current password is answered with a 400, so a 401
+  /// there is an expired access token and refreshes like any other call.
   static const List<String> _authEndpoints = <String>[
     '/auth/login',
     '/auth/register',
-    '/auth/password',
     '/auth/refresh',
     '/auth/forgot-password',
     '/auth/reset-password',

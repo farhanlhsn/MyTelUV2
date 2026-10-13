@@ -9,8 +9,8 @@ import 'auth_controller_test.mocks.dart';
 import 'support/stub_http_adapter.dart';
 
 /// The 401 handling of [ApiClient]: only a real expired session may refresh the token and log the
-/// user out. A 401 that is the answer of an auth endpoint (wrong old password, bad credentials, bad
-/// reset token) must reach the caller untouched.
+/// user out. A 401 that is the answer of an auth endpoint (bad credentials, bad reset token) must
+/// reach the caller untouched.
 void main() {
   late MockFlutterSecureStorage storage;
   late int sessionExpiredCalls;
@@ -66,34 +66,6 @@ void main() {
   }
 
   group('401 from an auth endpoint', () {
-    test('wrong old password on /auth/password is an error for the caller, nothing is wiped', () async {
-      final adapter = StubHttpAdapter(401, <String, dynamic>{
-        'status': 'error',
-        'message': 'Password lama salah',
-      });
-      final dio = clientWith(adapter);
-
-      await expectLater(
-        dio.put<dynamic>(
-          '/api/v1/auth/password',
-          data: <String, dynamic>{'oldPassword': 'x', 'newPassword': 'abcd1234'},
-        ),
-        throwsA(
-          isA<DioException>().having(
-            (e) => e.response?.statusCode,
-            'status',
-            401,
-          ),
-        ),
-      );
-
-      // exactly the one request: no refresh call, no retry
-      expect(adapter.requests, hasLength(1));
-      verifyNever(storage.deleteAll());
-      verifyNever(storage.read(key: 'refresh_token'));
-      expect(sessionExpiredCalls, 0);
-    });
-
     test('login, register, forgot and reset password are never refreshed or logged out', () async {
       for (final path in <String>[
         '/api/v1/auth/login',
@@ -123,7 +95,7 @@ void main() {
       final dio = clientWith(adapter);
 
       await expectLater(
-        dio.put<dynamic>('/api/v1/auth/password?x=1'),
+        dio.post<dynamic>('/api/v1/auth/login?x=1'),
         throwsA(isA<DioException>()),
       );
 
@@ -213,6 +185,67 @@ void main() {
       );
 
       verifyNever(storage.deleteAll());
+      expect(sessionExpiredCalls, 0);
+    });
+
+    test('/auth/password (change password) with an expired token refreshes and retries like any call', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized), // PUT /auth/password with an expired access token
+        (200, refreshOk), // POST /auth/refresh
+        (200, <String, dynamic>{'status': 'success', 'message': 'Password berhasil diubah'}),
+      ]);
+      final dio = clientWith(adapter);
+
+      final response = await dio.put<dynamic>(
+        '/api/v1/auth/password',
+        data: <String, dynamic>{'oldPassword': 'lama1234', 'newPassword': 'baru5678'},
+      );
+
+      expect(response.statusCode, 200);
+      expect(adapter.requests.map((r) => r.path), <String>[
+        '/api/v1/auth/password',
+        '/api/v1/auth/refresh',
+        '/api/v1/auth/password',
+      ]);
+      expect(adapter.lastRequest!.headers['Authorization'], 'Bearer access-new');
+      verifyNever(storage.deleteAll());
+      expect(sessionExpiredCalls, 0);
+    });
+
+    test('/auth/password with a dead session logs the user out once', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized),
+        (401, unauthorized), // refresh fails
+      ]);
+      final dio = clientWith(adapter);
+
+      fireAndForget(dio.put<dynamic>('/api/v1/auth/password'));
+      await waitUntil(() => sessionExpiredCalls > 0);
+
+      expect(sessionExpiredCalls, 1);
+      expect(adapter.requests.last.path, '/api/v1/auth/refresh');
+    });
+
+    test('a wrong current password on /auth/password (the server now answers 400) is an error for the caller', () async {
+      final adapter = StubHttpAdapter(400, <String, dynamic>{
+        'status': 'error',
+        'message': 'Password lama salah',
+      });
+      final dio = clientWith(adapter);
+
+      await expectLater(
+        dio.put<dynamic>(
+          '/api/v1/auth/password',
+          data: <String, dynamic>{'oldPassword': 'x', 'newPassword': 'abcd1234'},
+        ),
+        throwsA(
+          isA<DioException>().having((e) => e.response?.statusCode, 'status', 400),
+        ),
+      );
+
+      expect(adapter.requests, hasLength(1));
+      verifyNever(storage.deleteAll());
+      verifyNever(storage.read(key: 'refresh_token'));
       expect(sessionExpiredCalls, 0);
     });
 

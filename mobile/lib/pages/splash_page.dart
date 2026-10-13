@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../app/routes.dart';
 import '../app/auth_middleware.dart';
+import '../utils/notification_router.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -27,12 +28,19 @@ class _SplashPageState extends State<SplashPage> {
 
       if (AuthMiddleware.isTokenValid) {
         Get.offAllNamed(AppRoutes.home);
+        // The app is ready and the user is on the home page: open the notification that launched
+        // the app (cold start), on top of home so back returns to it
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          NotificationNavigator.openPending();
+        });
       } else {
+        NotificationNavigator.clearPending();
         AuthMiddleware.clearCredentials();
         Get.offAllNamed(AppRoutes.login);
       }
     } catch (e) {
       // Error reading token, go to login
+      NotificationNavigator.clearPending();
       Get.offAllNamed(AppRoutes.login);
     }
   }

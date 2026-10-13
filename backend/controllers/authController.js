@@ -182,7 +182,8 @@ exports.getMe = asyncHandler(async (req, res) => {
             username: user.username,
             nama: user.nama,
             role: user.role,
-            nim_nip: user.nim_nip
+            nim_nip: user.nim_nip,
+            push_notifications_enabled: user.push_notifications_enabled
         }
     });
 });

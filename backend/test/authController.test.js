@@ -592,6 +592,19 @@ describe('Auth Controller Tests', () => {
                 })
             }));
         });
+
+        test('should return the push notification preference so the app can show the real toggle state', async () => {
+            for (const enabled of [true, false]) {
+                const mockUser = { id_user: 1, nama: 'User', username: 'u', role: 'MAHASISWA', nim_nip: null, push_notifications_enabled: enabled };
+                const res = createMockRes();
+
+                await authController.getMe(createMockReq({}, mockUser), res);
+
+                expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                    data: expect.objectContaining({ push_notifications_enabled: enabled })
+                }));
+            }
+        });
     });
 
     /**

@@ -19,16 +19,19 @@ class AuthController extends GetxController {
   final FlutterSecureStorage _secureStorage;
   final Future<void> Function() _registerNotificationToken;
   final Future<void> Function() _unregisterNotificationToken;
+  final Future<void> Function(int? idUser) _clearNotificationInbox;
 
   AuthController({
     AuthService? authService, 
     FlutterSecureStorage? secureStorage,
     Future<void> Function()? registerNotificationToken,
     Future<void> Function()? unregisterNotificationToken,
+    Future<void> Function(int? idUser)? clearNotificationInbox,
   }) : _authService = authService ?? AuthService(),
        _secureStorage = secureStorage ?? const FlutterSecureStorage(),
        _registerNotificationToken = registerNotificationToken ?? NotificationService.registerToken,
-       _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken;
+       _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken,
+       _clearNotificationInbox = clearNotificationInbox ?? NotificationService.clearInbox;
 
   Future<bool> login(String username, String password) async {
     if (username.isEmpty || password.isEmpty) {
@@ -133,6 +136,8 @@ class AuthController extends GetxController {
   Future<bool> logout() async {
     try {
       final String? refreshToken = await _secureStorage.read(key: 'refresh_token');
+      // Whose inbox to clear: read before the user data is removed below
+      final int? idUser = int.tryParse(await _secureStorage.read(key: 'id_user') ?? '');
 
       // Call backend logout to clear FCM token server-side
       await _authService.logout(refreshToken: refreshToken);
@@ -153,6 +158,9 @@ class AuthController extends GetxController {
 
       // Unregister FCM token locally
       await _unregisterNotificationToken();
+
+      // The notification inbox is local to this phone: it must not outlive the session
+      await _clearNotificationInbox(idUser);
 
       return true;
     } catch (e) {

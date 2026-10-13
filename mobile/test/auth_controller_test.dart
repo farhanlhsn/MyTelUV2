@@ -14,8 +14,10 @@ void main() {
   late AuthController authController;
   late MockAuthService mockAuthService;
   late MockFlutterSecureStorage mockSecureStorage;
+  late List<int?> clearedInboxes;
 
   setUp(() {
+    clearedInboxes = <int?>[];
     mockAuthService = MockAuthService();
     mockSecureStorage = MockFlutterSecureStorage();
     
@@ -25,6 +27,7 @@ void main() {
       secureStorage: mockSecureStorage,
       registerNotificationToken: () async {},
       unregisterNotificationToken: () async {},
+      clearNotificationInbox: (int? idUser) async => clearedInboxes.add(idUser),
     );
   });
 
@@ -76,6 +79,24 @@ void main() {
       expect(result, true);
       verify(mockSecureStorage.delete(key: 'token')).called(1);
       verify(mockAuthService.logout()).called(1);
+    });
+
+    test('logout clears the local notification inbox of the user who logs out', () async {
+      when(mockSecureStorage.read(key: 'id_user')).thenAnswer((_) async => '7');
+
+      final result = await authController.logout();
+
+      expect(result, true);
+      expect(clearedInboxes, <int?>[7]);
+    });
+
+    test('logout with no stored user id still clears the (legacy) inbox', () async {
+      when(mockSecureStorage.read(key: 'id_user')).thenAnswer((_) async => null);
+
+      final result = await authController.logout();
+
+      expect(result, true);
+      expect(clearedInboxes, <int?>[null]);
     });
   });
 }

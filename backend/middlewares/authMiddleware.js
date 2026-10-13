@@ -19,7 +19,8 @@ const authenticateToken = async (token) => {
       username: true,
       nama: true,
       role: true,
-      nim_nip: true
+      nim_nip: true,
+      push_notifications_enabled: true // GET /auth/me shows it as the app's push switch
     }
   });
 };
