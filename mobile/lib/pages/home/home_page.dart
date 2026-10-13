@@ -9,7 +9,6 @@ import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
 import 'package:mobile/pages/home/kelas_hari_ini_card.dart';
-import 'package:mobile/pages/home/notification_list_page.dart';
 
 import '../../controllers/home_controller.dart';
 import '../../models/kelas_hari_ini.dart';
@@ -260,7 +259,7 @@ class _HomePageState extends State<HomePage> {
               Obx(() {
                 final unread = _notificationController.unreadCount.value;
                 return GestureDetector(
-                  onTap: () => Get.to(() => const NotificationListPage()),
+                  onTap: () => Get.toNamed(AppRoutes.notificationList),
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
