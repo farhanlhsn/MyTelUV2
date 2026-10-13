@@ -2,6 +2,7 @@ import 'package:mobile/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile/pages/kendaraan/historyPengajuan/detailuserhistoripengajuan.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
+import 'package:mobile/utils/date_helper.dart';
 import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/utils/kendaraan_helper.dart';
@@ -54,7 +55,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
 
       bool matchDate = true;
       if (_filterDate != null) {
-        final date = pengajuan.createdAt;
+        final date = toWib(pengajuan.createdAt);
         matchDate =
             date.year == _filterDate!.year &&
             date.month == _filterDate!.month &&
@@ -282,7 +283,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
               _buildModernChip(
                 label: _filterDate == null
                     ? 'Tanggal'
-                    : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
+                    : formatTanggalAngka(_filterDate!),
                 icon: Icons.calendar_today_outlined,
                 isActive: _filterDate != null,
                 primaryColor: primaryColor,

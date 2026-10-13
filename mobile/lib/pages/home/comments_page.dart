@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
+import '../../utils/date_helper.dart';
 
 class CommentsPage extends StatefulWidget {
   final PostModel post;
@@ -109,7 +110,7 @@ class _CommentsPageState extends State<CommentsPage> {
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 7) {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      return formatTanggalSingkat(dateTime);
     } else if (difference.inDays > 0) {
       return '${difference.inDays}h lalu';
     } else if (difference.inHours > 0) {

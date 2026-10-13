@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
 import '../../utils/attendance_status.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../common/error_retry_view.dart';
 import 'widgets/override_status_sheet.dart';
@@ -667,8 +668,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   String _formatTime(String? isoTime) {
     if (isoTime == null) return '-';
     try {
-      final dt = DateTime.parse(isoTime).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return formatJam(DateTime.parse(isoTime));
     } catch (_) {
       return '-';
     }

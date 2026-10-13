@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../controllers/notification_controller.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/notification_router.dart';
 
 class NotificationListPage extends StatefulWidget {
@@ -25,21 +25,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
 
   String _formatDate(String isoString) {
     try {
-      final DateTime date = DateTime.parse(isoString);
-      final DateTime now = DateTime.now();
-      final Duration diff = now.difference(date);
-
-      if (diff.inMinutes < 1) {
-        return 'Baru saja';
-      } else if (diff.inHours < 1) {
-        return '${diff.inMinutes}m lalu';
-      } else if (diff.inDays < 1) {
-        return DateFormat('HH:mm').format(date);
-      } else if (diff.inDays < 7) {
-        return DateFormat('EEEE, HH:mm').format(date);
-      } else {
-        return DateFormat('dd MMM yyyy').format(date);
-      }
+      return formatWaktuRelatif(DateTime.parse(isoString));
     } catch (_) {
       return '';
     }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/jadwal_pengganti_helper.dart';
 
@@ -194,7 +194,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                   ),
                   child: Text(
                     _tanggalAsli != null 
-                        ? DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_tanggalAsli!)
+                        ? formatTanggalKalender(_tanggalAsli!)
                         : 'Pilih Tanggal',
                   ),
                 ),
@@ -238,7 +238,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     ),
                     child: Text(
                       _tanggalGanti != null 
-                          ? DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_tanggalGanti!)
+                          ? formatTanggalKalender(_tanggalGanti!)
                           : 'Pilih Tanggal Baru',
                     ),
                   ),

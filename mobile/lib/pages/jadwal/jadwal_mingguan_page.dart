@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../services/akademik_service.dart';
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/jadwal_cache.dart';
 
@@ -29,7 +30,8 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
   @override
   void initState() {
     super.initState();
-    final today = DateTime.now().weekday - 1;
+    // The tab of today in WIB (Monday is the first tab), not in the phone's own time zone
+    final today = toWib(DateTime.now()).weekday - 1;
     _tabController = TabController(length: 7, vsync: this, initialIndex: today.clamp(0, 6));
     _loadJadwal();
   }
@@ -64,7 +66,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
   }
 
   String _formatTimestamp(DateTime dt) {
-    return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return '${formatTanggalSingkat(dt)}, ${formatJam(dt)}';
   }
 
   @override

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../models/kelas_hari_ini.dart';
 import '../../services/akademik_service.dart';
 import '../../utils/attendance_status.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../biometrik/biometrik_verification_page.dart';
 import '../common/error_retry_view.dart';
@@ -79,7 +80,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       if (_filterDate != null) {
         matchDate = sessions.any((session) {
           try {
-            final sessionDate = DateTime.parse(session['tanggal'].toString()).toLocal();
+            final sessionDate = toWib(DateTime.parse(session['tanggal'].toString()));
             return sessionDate.year == _filterDate!.year &&
                 sessionDate.month == _filterDate!.month &&
                 sessionDate.day == _filterDate!.day;
@@ -281,7 +282,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
               _buildModernChip(
                 label: _filterDate == null
                     ? 'Tanggal Sesi'
-                    : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
+                    : formatTanggalAngka(_filterDate!),
                 icon: Icons.calendar_today_outlined,
                 isActive: _filterDate != null,
                 primaryColor: primaryColor,
@@ -830,7 +831,7 @@ class AbsensiDetailPage extends StatelessWidget {
 
     DateTime? tanggal;
     try {
-      tanggal = DateTime.parse(session['tanggal'].toString()).toLocal();
+      tanggal = DateTime.parse(session['tanggal'].toString());
     } catch (_) {}
 
     return Padding(
@@ -848,7 +849,7 @@ class AbsensiDetailPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tanggal != null ? _formatDate(tanggal) : '-',
+                  tanggal != null ? formatTanggal(tanggal) : '-',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     fontWeight: FontWeight.w500,
@@ -957,16 +958,9 @@ class AbsensiDetailPage extends StatelessWidget {
     return null;
   }
 
-  String _formatDate(DateTime date) {
-    final days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return '${days[date.weekday % 7]}, ${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
   String _formatTime(String isoTime) {
     try {
-      final dt = DateTime.parse(isoTime).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return formatJam(DateTime.parse(isoTime));
     } catch (_) {
       return '-';
     }

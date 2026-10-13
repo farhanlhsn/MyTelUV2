@@ -57,7 +57,7 @@ void main() {
     expect(find.byType(BiometrikStatusWidget), findsOneWidget);
     expect(find.text('Data Biometrik'), findsOneWidget);
     expect(find.text('Wajah sudah terdaftar'), findsOneWidget);
-    expect(find.textContaining('02/10/2026'), findsOneWidget);
+    expect(find.text('Terakhir diperbarui: 2 Okt 2026'), findsOneWidget);
     expect(find.text('Hubungi admin untuk pendaftaran wajah'), findsNothing);
     // no "Daftar"/"Verifikasi" button: verifying needs an attendance session
     expect(find.text('Daftar'), findsNothing);

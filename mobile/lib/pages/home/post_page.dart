@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
+import '../../utils/date_helper.dart';
 import 'create_post_page.dart';
 import 'comments_page.dart';
 import '../common/image_viewer_page.dart';
@@ -247,7 +248,7 @@ class _PostPageState extends State<PostPage> {
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 7) {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      return formatTanggalSingkat(dateTime);
     } else if (difference.inDays > 0) {
       return '${difference.inDays}h lalu';
     } else if (difference.inHours > 0) {

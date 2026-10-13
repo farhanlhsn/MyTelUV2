@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 
 import '../../models/biometrik_status.dart';
 import '../../services/biometrik_service.dart';
@@ -62,7 +61,7 @@ class _BiometrikStatusPageState extends State<BiometrikStatusPage> {
 
   /// Date of the last update in WIB (UTC+7), as the rest of the app's business dates.
   String _updatedLabel(DateTime updatedUtc) {
-    return 'Terakhir diperbarui: ${DateFormat('dd/MM/yyyy').format(toWib(updatedUtc))}';
+    return 'Terakhir diperbarui: ${formatTanggalSingkat(updatedUtc)}';
   }
 
   @override

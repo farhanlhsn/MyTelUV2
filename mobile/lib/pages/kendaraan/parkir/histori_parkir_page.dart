@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../services/parkir_service.dart';
 import '../../../models/parkir_model.dart';
+import '../../../utils/date_helper.dart';
 
 class HistoriParkirPage extends StatefulWidget {
   const HistoriParkirPage({super.key});
@@ -38,7 +39,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
     return _logParkir.where((log) {
       bool matchDate = true;
       if (_filterDate != null) {
-        final logDate = log.localTimestamp;
+        final logDate = toWib(log.timestamp);
         matchDate =
             logDate.year == _filterDate!.year &&
             logDate.month == _filterDate!.month &&
@@ -213,7 +214,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                         platNomor: log.kendaraan?.platNomor ?? 'Unknown',
                         namaKendaraan: log.kendaraan?.namaKendaraan ?? '',
                         lokasi: log.parkiran?.namaParkiran ?? 'Unknown',
-                        waktu: _formatDateTime(log.localTimestamp),
+                        waktu: formatTanggalJam(log.timestamp),
                         type: log.type,
                         imageUrl: log.imageUrl,
                         faceImageUrl: log.faceImageUrl,
@@ -293,7 +294,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
               _buildModernChip(
                 label: _filterDate == null
                     ? 'Tanggal'
-                    : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
+                    : formatTanggalAngka(_filterDate!),
                 icon: Icons.calendar_today_outlined,
                 isActive: _filterDate != null,
                 primaryColor: primaryColor,
@@ -474,25 +475,6 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
         ),
       ),
     );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-    return '${dateTime.day} ${months[dateTime.month - 1]} ${dateTime.year} | '
-        '${dateTime.hour.toString().padLeft(2, '0')}.${dateTime.minute.toString().padLeft(2, '0')} WIB';
   }
 
   Widget _buildHistoryCard({

@@ -12,6 +12,7 @@ import '../../services/akademik_service.dart';
 import '../../services/biometrik_service.dart';
 import '../../utils/attendance_error_mapper.dart';
 import '../../utils/attendance_helper.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/kelas_helper.dart';
 
@@ -1116,8 +1117,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   String _formatTime(String? isoTime) {
     if (isoTime == null) return '-';
     try {
-      final dt = DateTime.parse(isoTime).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return formatJam(DateTime.parse(isoTime));
     } catch (_) {
       return '-';
     }
