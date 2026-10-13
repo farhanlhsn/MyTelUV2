@@ -13,18 +13,33 @@ class AuthMiddleware extends GetMiddleware {
   static bool hasLoaded = false;
   static DateTime? cachedTokenExpiry;
 
-  static Future<void> loadCredentials() async {
-    const storage = FlutterSecureStorage();
+  /// Whether a refresh token is stored: an expired access token can then still be renewed.
+  static bool cachedHasRefreshToken = false;
+
+  /// Reads the session from the secure storage ([storage] is for tests).
+  static Future<void> loadCredentials({
+    FlutterSecureStorage storage = const FlutterSecureStorage(),
+  }) async {
     cachedToken = await storage.read(key: 'token');
     cachedRole = await storage.read(key: 'role');
+    final String? refreshToken = await storage.read(key: 'refresh_token');
+    cachedHasRefreshToken = refreshToken != null && refreshToken.isNotEmpty;
     cachedTokenExpiry = _parseJwtExpiry(cachedToken);
     hasLoaded = true;
+  }
+
+  /// A new access token was stored (the session was refreshed): the cache must follow, otherwise
+  /// the middleware keeps judging the old, expired one and sends a valid session to the login page.
+  static void updateToken(String? token) {
+    cachedToken = token;
+    cachedTokenExpiry = _parseJwtExpiry(token);
   }
 
   static void clearCredentials() {
     cachedToken = null;
     cachedRole = null;
     cachedTokenExpiry = null;
+    cachedHasRefreshToken = false;
     hasLoaded = false;
   }
 
@@ -55,9 +70,15 @@ class AuthMiddleware extends GetMiddleware {
     return cachedTokenExpiry!.isAfter(DateTime.now().add(const Duration(seconds: 30)));
   }
 
+  /// An access token that ran out is not the end of the session while a refresh token exists: the
+  /// first request of the page renews it (ApiClient), and only a refresh that fails logs the user
+  /// out. The route check cannot wait for that request, so it lets such a session through.
+  static bool get canRefreshSession =>
+      cachedToken != null && cachedToken!.isNotEmpty && cachedHasRefreshToken;
+
   @override
   RouteSettings? redirect(String? route) {
-    if (!isTokenValid) {
+    if (!isTokenValid && !canRefreshSession) {
       return const RouteSettings(name: AppRoutes.login);
     }
     return null;

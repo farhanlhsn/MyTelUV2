@@ -5,7 +5,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart' hide Response;
+import 'package:mobile/app/auth_middleware.dart';
+import 'package:mobile/controllers/notification_controller.dart';
 import 'package:mobile/utils/logger.dart';
+import 'package:mobile/utils/notification_inbox.dart';
 
 /// Environment configuration for API URLs.
 ///
@@ -192,10 +195,12 @@ class ApiClient {
               debugLog(
                 'Token refresh failed, clearing storage and redirecting to login',
               );
-              await _secureStorage.deleteAll();
+              await _endSession();
               _dioInstance = null;
               onSessionExpired();
-              return;
+              // The caller's request must end too (a spinner waiting on it would never stop): it
+              // fails with the 401 it got
+              return handler.next(error);
             }
 
             return handler.next(error);
@@ -244,6 +249,8 @@ class ApiClient {
         final data = response.data['data'];
         if (data != null && data['token'] != null) {
           await _secureStorage.write(key: 'token', value: data['token']);
+          // The route middleware judges the session from its own copy of the token
+          AuthMiddleware.updateToken(data['token'] as String?);
           if (data['refresh_token'] != null) {
             await _secureStorage.write(
               key: 'refresh_token',
@@ -268,6 +275,26 @@ class ApiClient {
 
   static void reset() {
     _dioInstance = null;
+  }
+
+  /// The session is gone: wipes what belongs to it on this phone, the stored login, the route
+  /// middleware's copy of it and the notification inbox of that user. Never throws, so the caller
+  /// still gets to the login page.
+  static Future<void> _endSession() async {
+    try {
+      // Whose inbox to clear: read before the storage is wiped
+      final int? idUser = await NotificationInbox.currentUserId(
+        storage: _secureStorage,
+      );
+      await _secureStorage.deleteAll();
+      AuthMiddleware.clearCredentials();
+      await NotificationInbox.clear(idUser);
+      if (Get.isRegistered<NotificationController>()) {
+        Get.find<NotificationController>().reset();
+      }
+    } catch (e) {
+      debugLog('Failed to clear the ended session: $e');
+    }
   }
 
   static void _redirectToLogin() {

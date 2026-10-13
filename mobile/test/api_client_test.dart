@@ -1,12 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart' hide Response;
+import 'package:mobile/app/auth_middleware.dart';
+import 'package:mobile/controllers/notification_controller.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/notification_inbox.dart';
 import 'package:mockito/mockito.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_controller_test.mocks.dart';
 import 'support/stub_http_adapter.dart';
+
+/// A token shaped like the server's JWT: only the `exp` claim matters to the middleware cache.
+String _jwtExpiringAt(DateTime expiry) {
+  String part(Map<String, dynamic> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  return '${part(<String, dynamic>{'alg': 'HS256'})}.'
+      '${part(<String, dynamic>{'exp': expiry.millisecondsSinceEpoch ~/ 1000})}.signature';
+}
 
 /// The 401 handling of [ApiClient]: only a real expired session may refresh the token and log the
 /// user out. A 401 that is the answer of an auth endpoint (bad credentials, bad reset token) must
@@ -32,6 +46,8 @@ void main() {
     storage = MockFlutterSecureStorage();
     sessionExpiredCalls = 0;
     storedToken = 'access-old';
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    AuthMiddleware.clearCredentials();
     when(storage.read(key: 'token')).thenAnswer((_) async => storedToken);
     when(
       storage.read(key: 'refresh_token'),
@@ -45,7 +61,11 @@ void main() {
     ApiClient.onSessionExpired = () => sessionExpiredCalls++;
   });
 
-  tearDown(ApiClient.resetForTest);
+  tearDown(() {
+    ApiClient.resetForTest();
+    AuthMiddleware.clearCredentials();
+    Get.reset();
+  });
 
   Dio clientWith(StubHttpAdapter adapter) {
     ApiClient.httpAdapterOverride = adapter;
@@ -261,6 +281,191 @@ void main() {
 
       expect(sessionExpiredCalls, 1);
       expect(adapter.requests.last.path, '/api/v1/auth/refresh');
+    });
+  });
+
+  group('session cache of the route middleware', () {
+    test('a refresh puts the new token and its expiry into the middleware cache', () async {
+      final DateTime newExpiry = DateTime.now().add(const Duration(hours: 1));
+      final String newToken = _jwtExpiringAt(newExpiry);
+      AuthMiddleware.cachedToken = _jwtExpiringAt(
+        DateTime.now().subtract(const Duration(minutes: 5)),
+      );
+      AuthMiddleware.cachedTokenExpiry = DateTime.now().subtract(const Duration(minutes: 5));
+      expect(AuthMiddleware.isTokenValid, isFalse, reason: 'precondition: the cached token is stale');
+
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized),
+        (
+          200,
+          <String, dynamic>{
+            'status': 'success',
+            'data': <String, dynamic>{'token': newToken, 'refresh_token': 'refresh-new'},
+          },
+        ),
+        (200, <String, dynamic>{'status': 'success', 'data': <dynamic>[]}),
+      ]);
+      final dio = clientWith(adapter);
+
+      await dio.get<dynamic>('/api/v1/akademik/kelas');
+
+      expect(AuthMiddleware.cachedToken, newToken);
+      // exp has a one-second resolution
+      expect(
+        AuthMiddleware.cachedTokenExpiry,
+        DateTime.fromMillisecondsSinceEpoch(newExpiry.millisecondsSinceEpoch ~/ 1000 * 1000),
+      );
+      expect(AuthMiddleware.isTokenValid, isTrue);
+    });
+
+    test('a forced session expiry empties the middleware cache', () async {
+      AuthMiddleware.cachedToken = 'access-old';
+      AuthMiddleware.cachedRole = 'MAHASISWA';
+      AuthMiddleware.cachedTokenExpiry = DateTime.now().add(const Duration(hours: 1));
+      final adapter = StubHttpAdapter(401, unauthorized);
+      final dio = clientWith(adapter);
+
+      await expectLater(
+        dio.get<dynamic>('/api/v1/akademik/kelas').timeout(const Duration(seconds: 2)),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(AuthMiddleware.cachedToken, isNull);
+      expect(AuthMiddleware.cachedRole, isNull);
+      expect(AuthMiddleware.isTokenValid, isFalse);
+    });
+  });
+
+  group('real session expiry', () {
+    test('the caller future completes with the original 401 and the logout ran once', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized), // GET /kelas
+        (401, unauthorized), // POST /auth/refresh
+      ]);
+      final dio = clientWith(adapter);
+
+      await expectLater(
+        dio.get<dynamic>('/api/v1/akademik/kelas').timeout(const Duration(seconds: 2)),
+        throwsA(isA<DioException>().having((e) => e.response?.statusCode, 'status', 401)),
+      );
+
+      expect(sessionExpiredCalls, 1);
+      verify(storage.deleteAll()).called(1);
+    });
+
+    test('a 401 on the retry after a refresh completes the caller too', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized), // GET /kelas
+        (200, refreshOk), // POST /auth/refresh
+        (401, unauthorized), // the retry: the session is dead after all
+      ]);
+      final dio = clientWith(adapter);
+
+      await expectLater(
+        dio.get<dynamic>('/api/v1/akademik/kelas').timeout(const Duration(seconds: 2)),
+        throwsA(isA<DioException>().having((e) => e.response?.statusCode, 'status', 401)),
+      );
+
+      expect(sessionExpiredCalls, 1);
+      verify(storage.deleteAll()).called(1);
+    });
+
+    test('every request waiting on the failed refresh completes', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized), // GET /kelas
+        (401, unauthorized), // GET /jadwal
+        (401, unauthorized), // POST /auth/refresh (and anything after it)
+      ]);
+      final dio = clientWith(adapter);
+
+      final Future<Object?> first = dio
+          .get<dynamic>('/api/v1/akademik/kelas')
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      final Future<Object?> second = dio
+          .get<dynamic>('/api/v1/akademik/jadwal')
+          .then<Object?>((_) => null, onError: (Object e) => e);
+
+      final List<Object?> results = await Future.wait(<Future<Object?>>[
+        first,
+        second,
+      ]).timeout(const Duration(seconds: 2));
+
+      expect(results, everyElement(isA<DioException>()));
+    });
+  });
+
+  group('forced session expiry and the notification inbox', () {
+    Map<String, Object> inboxes() => <String, Object>{
+      NotificationInbox.notificationsKey(7): jsonEncode(<Map<String, dynamic>>[
+        <String, dynamic>{'id': 'a', 'title': 'Absensi', 'timestamp': '2026-10-14T01:00:00.000'},
+      ]),
+      NotificationInbox.lastReadKey(7): '2026-10-14T01:30:00.000',
+      NotificationInbox.notificationsKey(8): jsonEncode(<Map<String, dynamic>>[
+        <String, dynamic>{'id': 'b', 'title': 'Parkir', 'timestamp': '2026-10-14T02:00:00.000'},
+      ]),
+      NotificationInbox.legacyNotificationsKey: '[]',
+    };
+
+    Future<void> expireSession() async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized),
+        (401, unauthorized), // refresh fails
+      ]);
+      final dio = clientWith(adapter);
+      await expectLater(
+        dio.get<dynamic>('/api/v1/akademik/kelas').timeout(const Duration(seconds: 2)),
+        throwsA(isA<DioException>()),
+      );
+    }
+
+    test('removes the inbox of the user whose session ended, and only theirs', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+
+      await expireSession();
+
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isFalse);
+      expect(prefs.containsKey(NotificationInbox.lastReadKey(7)), isFalse);
+      expect(prefs.containsKey(NotificationInbox.legacyNotificationsKey), isFalse);
+      // another account on the same phone keeps theirs
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(8)), isTrue);
+    });
+
+    test('the user id is read before the storage is wiped', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+
+      await expireSession();
+
+      verifyInOrder(<Object?>[storage.read(key: 'id_user'), storage.deleteAll()]);
+    });
+
+    test('the list on screen is emptied as well', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+      final NotificationController shown = Get.put(
+        NotificationController(userIdProvider: () async => 7),
+      );
+      await shown.loadNotifications();
+      expect(shown.notifications, hasLength(1), reason: 'precondition: the inbox is on screen');
+
+      await expireSession();
+
+      expect(shown.notifications, isEmpty);
+      expect(shown.unreadCount.value, 0);
+    });
+
+    test('without a known user nothing else is touched (only the legacy inbox goes)', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => null);
+      SharedPreferences.setMockInitialValues(inboxes());
+
+      await expireSession();
+
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isTrue);
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(8)), isTrue);
+      expect(prefs.containsKey(NotificationInbox.legacyNotificationsKey), isFalse);
     });
   });
 }
