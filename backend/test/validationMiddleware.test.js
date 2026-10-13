@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { validateZod } = require('../middlewares/validationMiddleware');
+const { validateZod, sanitizeInput } = require('../middlewares/validationMiddleware');
 const schemas = require('../middlewares/zodSchemas');
 
 const createRes = () => {
@@ -381,5 +381,39 @@ describe('zodSchemas boolean and numeric coercion', () => {
             expect(next).not.toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(400);
         }
+    });
+});
+
+describe('sanitizeInput', () => {
+    const sanitize = (body) => {
+        const req = { body };
+        const next = jest.fn();
+        sanitizeInput(req, {}, next);
+        expect(next).toHaveBeenCalledTimes(1);
+        return req.body;
+    };
+
+    test('HTML-escapes ordinary string fields and trims them', () => {
+        const body = sanitize({ nama_kendaraan: '  <b>Beat</b> & co  ' });
+
+        expect(body.nama_kendaraan).toBe('&lt;b&gt;Beat&lt;&#x2F;b&gt; &amp; co');
+    });
+
+    test('leaves plat_nomor and plate_text raw so plate normalisation sees what the client sent', () => {
+        const body = sanitize({ plat_nomor: ' B 1234/XYZ ', plate_text: 'B 1234/XYZ' });
+
+        expect(body.plat_nomor).toBe('B 1234/XYZ');
+        expect(body.plate_text).toBe('B 1234/XYZ');
+    });
+
+    test('a slash in a plate no longer corrupts the normalised plate', async () => {
+        const req = { body: { plat_nomor: 'B 1234/XYZ', nama_kendaraan: 'Beat' } };
+        sanitizeInput(req, {}, jest.fn());
+        const next = jest.fn();
+
+        await validateZod(schemas.registerKendaraanSchema)(req, createRes(), next);
+
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(req.body.plat_nomor).toBe('B1234XYZ');
     });
 });

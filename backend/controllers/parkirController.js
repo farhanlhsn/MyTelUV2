@@ -7,6 +7,8 @@ const { parsePagination, buildPaginationMeta } = require('../utils/paginationHel
 const FormData = require('form-data');
 const axios = require('axios');
 const CircuitBreaker = require('../utils/CircuitBreaker');
+const { logAudit } = require('../utils/auditLogger');
+const { normalizePlate } = require('../utils/plate');
 
 const PLATE_SERVICE_URL = process.env.PLATE_API_URL || 'http://localhost:5001';
 const PLATE_SERVICE_TIMEOUT = parseInt(process.env.PLATE_SERVICE_TIMEOUT || '10000');
@@ -16,6 +18,16 @@ const plateApiBreaker = new CircuitBreaker("PlateAPI", {
     failureThreshold: parseInt(process.env.PLATE_CB_FAILURE_THRESHOLD || '5'),
     recoveryTimeout: parseInt(process.env.PLATE_CB_RECOVERY_TIMEOUT || '30000')
 });
+
+// Upper bound on the rows of one CSV export (newest first), so a request without a date filter cannot load the whole table
+const MAX_EXPORT_ROWS = 10000;
+
+// Serialises the gate events of one vehicle: of two concurrent requests the second waits here until the first has
+// committed, so the log it re-reads afterwards already contains the first one's entry. Call it first thing inside
+// the transaction.
+const lockKendaraan = (tx, idKendaraan) => tx.$queryRaw`
+    SELECT id_kendaraan FROM kendaraan WHERE id_kendaraan = ${idKendaraan} FOR UPDATE
+`;
 
 // Get histori parkir untuk user (berdasarkan kendaraan yang dimiliki)
 exports.getHistoriParkir = asyncHandler(async (req, res) => {
@@ -43,18 +55,21 @@ exports.getHistoriParkir = asyncHandler(async (req, res) => {
         });
     }
 
+    // Only this user's own entries: a soft-deleted plate that is re-registered reuses the old kendaraan row, so
+    // logs written under a previous owner must not show up in the new owner's history
+    const historyFilter = {
+        id_kendaraan: { in: kendaraanIds },
+        id_user: userId
+    };
+
     // Get total count for pagination
     const totalCount = await prisma.logParkir.count({
-        where: {
-            id_kendaraan: { in: kendaraanIds }
-        }
+        where: historyFilter
     });
 
     // Get parking logs for user's kendaraan
     const logParkir = await prisma.logParkir.findMany({
-        where: {
-            id_kendaraan: { in: kendaraanIds }
-        },
+        where: historyFilter,
         include: {
             kendaraan: {
                 select: {
@@ -469,8 +484,8 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         });
     }
 
-    // Normalize plate text (remove spaces, uppercase)
-    const normalizedPlate = recognizedPlate.toUpperCase().replace(/\s/g, '');
+    // Normalize plate text (uppercase, only A-Z and 0-9 - the same form plates are stored in)
+    const normalizedPlate = normalizePlate(recognizedPlate);
 
     // 4. Find registered vehicle by plate number
     const kendaraan = await prisma.kendaraan.findFirst({
@@ -479,13 +494,28 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             statusVerif: true,
             deletedAt: null
         },
-        include: { user: { select: { id_user: true, nama: true } } }
+        include: { user: { select: { id_user: true, nama: true, deletedAt: true } } }
     });
 
     if (!kendaraan) {
+        logAudit({
+            action: 'PARKIR_PLAT_TIDAK_DIKENAL',
+            performedBy: null, // the edge device is not a user
+            details: `Plat ${normalizedPlate} tidak dikenal di parkiran ${parseInt(parkiran_id)} (gate ${gate_type})`,
+            ip: req.ip
+        });
         return res.status(404).json({
             status: "error",
             message: `Kendaraan ${recognizedPlate} tidak terdaftar atau belum terverifikasi`,
+            data: { gate_action: "DENY" }
+        });
+    }
+
+    // A deactivated (soft-deleted) account must not open the gate with a vehicle it registered earlier
+    if (kendaraan.user?.deletedAt) {
+        return res.status(403).json({
+            status: "error",
+            message: "Akun pemilik kendaraan tidak aktif",
             data: { gate_action: "DENY" }
         });
     }
@@ -567,13 +597,51 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
     // 6. Process based on gate type
     if (gate_type === 'MASUK') {
-        // Check if vehicle already inside
-        const lastLog = await prisma.logParkir.findFirst({
-            where: { id_kendaraan: kendaraan.id_kendaraan },
-            orderBy: { timestamp: 'desc' }
+        const parsedParkiranId = parseInt(parkiran_id);
+
+        // Check-inside, capacity increment and log creation are one atomic unit, so concurrent duplicates of the
+        // same vehicle yield a single entry. Notifications, socket events and uploads happen after the commit.
+        const outcome = await prisma.$transaction(async (tx) => {
+            await lockKendaraan(tx, kendaraan.id_kendaraan);
+
+            // Check if vehicle already inside (read after the lock, so it sees every committed entry)
+            const lastLog = await tx.logParkir.findFirst({
+                where: { id_kendaraan: kendaraan.id_kendaraan },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            if (lastLog && lastLog.type === 'MASUK') {
+                return { denied: 'INSIDE' };
+            }
+
+            // Atomic capacity check + increment (prevents race condition)
+            const updateResult = await tx.$executeRaw`
+                UPDATE parkiran
+                SET live_kapasitas = live_kapasitas + 1, "updatedAt" = NOW()
+                WHERE id_parkiran = ${parsedParkiranId}
+                AND live_kapasitas < kapasitas
+                AND "deletedAt" IS NULL
+            `;
+
+            if (updateResult === 0) {
+                return { denied: 'FULL' };
+            }
+
+            const createdLog = await tx.logParkir.create({
+                data: {
+                    id_kendaraan: kendaraan.id_kendaraan,
+                    id_parkiran: parsedParkiranId,
+                    id_user: kendaraan.user?.id_user,
+                    type: 'MASUK',
+                    confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
+                    image_url: null // Will be updated asynchronously
+                }
+            });
+
+            return { newLog: createdLog };
         });
 
-        if (lastLog && lastLog.type === 'MASUK') {
+        if (outcome.denied === 'INSIDE') {
             return res.status(400).json({
                 status: "error",
                 message: `Kendaraan ${recognizedPlate} sudah berada di dalam parkiran`,
@@ -581,17 +649,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             });
         }
 
-        // Atomic capacity check + increment (prevents race condition)
-        const parsedParkiranId = parseInt(parkiran_id);
-        const updateResult = await prisma.$executeRaw`
-            UPDATE parkiran
-            SET live_kapasitas = live_kapasitas + 1, "updatedAt" = NOW()
-            WHERE id_parkiran = ${parsedParkiranId}
-            AND live_kapasitas < kapasitas
-            AND "deletedAt" IS NULL
-        `;
-
-        if (updateResult === 0) {
+        if (outcome.denied === 'FULL') {
             return res.status(400).json({
                 status: "error",
                 message: `Parkiran ${parkiranData.nama_parkiran} penuh`,
@@ -599,16 +657,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             });
         }
 
-        const newLog = await prisma.logParkir.create({
-            data: {
-                id_kendaraan: kendaraan.id_kendaraan,
-                id_parkiran: parsedParkiranId,
-                id_user: kendaraan.user?.id_user,
-                type: 'MASUK',
-                confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
-                image_url: null // Will be updated asynchronously
-            }
-        });
+        const { newLog } = outcome;
 
         // Trigger async uploads without awaiting (plate + face images)
         processPlateImageUpload(newLog.id_log_parkir);
@@ -650,16 +699,45 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         });
 
     } else if (gate_type === 'KELUAR') {
-        // Check if vehicle is inside THIS parkiran
-        const lastLog = await prisma.logParkir.findFirst({
-            where: { 
-                id_kendaraan: kendaraan.id_kendaraan,
-                id_parkiran: parseInt(parkiran_id)
-            },
-            orderBy: { timestamp: 'desc' }
+        const parsedParkiranId = parseInt(parkiran_id);
+
+        // Check-inside, exit log and capacity decrement are one atomic unit (see MASUK above)
+        const outcome = await prisma.$transaction(async (tx) => {
+            await lockKendaraan(tx, kendaraan.id_kendaraan);
+
+            // Check if vehicle is inside THIS parkiran
+            const lastLog = await tx.logParkir.findFirst({
+                where: {
+                    id_kendaraan: kendaraan.id_kendaraan,
+                    id_parkiran: parsedParkiranId
+                },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            if (!lastLog || lastLog.type === 'KELUAR') {
+                return { denied: 'NOT_INSIDE' };
+            }
+
+            // Create exit log and decrement capacity
+            const createdLog = await tx.logParkir.create({
+                data: {
+                    id_kendaraan: kendaraan.id_kendaraan,
+                    id_parkiran: parsedParkiranId,
+                    id_user: kendaraan.user?.id_user,
+                    type: 'KELUAR',
+                    confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
+                    image_url: null // Will be updated asynchronously
+                }
+            });
+            await tx.$executeRaw`
+                UPDATE parkiran SET live_kapasitas = GREATEST(0, live_kapasitas - 1), "updatedAt" = NOW()
+                WHERE id_parkiran = ${parsedParkiranId}
+            `;
+
+            return { newLog: createdLog };
         });
 
-        if (!lastLog || lastLog.type === 'KELUAR') {
+        if (outcome.denied) {
             return res.status(400).json({
                 status: "error",
                 message: `Kendaraan ${recognizedPlate} tidak tercatat masuk di parkiran ini`,
@@ -667,23 +745,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             });
         }
 
-        // Create exit log and decrement capacity
-        const [newLog] = await prisma.$transaction([
-            prisma.logParkir.create({
-                data: {
-                    id_kendaraan: kendaraan.id_kendaraan,
-                    id_parkiran: parseInt(parkiran_id),
-                    id_user: kendaraan.user?.id_user,
-                    type: 'KELUAR',
-                    confidence: ocrConfidence ? parseFloat(ocrConfidence) : null,
-                    image_url: null // Will be updated asynchronously
-                }
-            }),
-            prisma.$executeRaw`
-                UPDATE parkiran SET live_kapasitas = GREATEST(0, live_kapasitas - 1), "updatedAt" = NOW()
-                WHERE id_parkiran = ${parseInt(parkiran_id)}
-            `
-        ]);
+        const { newLog } = outcome;
 
         // Trigger async uploads without awaiting (plate + face images)
         processPlateImageUpload(newLog.id_log_parkir);
@@ -704,7 +766,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         if (io) {
             const newLiveKapasitas = Math.max(0, parkiranData.live_kapasitas - 1);
             io.emit('parking_update', {
-                id_parkiran: parseInt(parkiran_id),
+                id_parkiran: parsedParkiranId,
                 live_kapasitas: newLiveKapasitas,
                 kapasitas: parkiranData.kapasitas
             });
@@ -800,7 +862,8 @@ exports.exportParkirLogs = asyncHandler(async (req, res) => {
             user:      { select: { nama: true, username: true } },
             parkiran:  { select: { nama_parkiran: true } }
         },
-        orderBy: { timestamp: 'desc' }
+        orderBy: { timestamp: 'desc' },
+        take: MAX_EXPORT_ROWS
     });
 
     if (logs.length === 0) {
@@ -828,6 +891,10 @@ exports.exportParkirLogs = asyncHandler(async (req, res) => {
     const csv = parser.parse(logs);
 
     const filename = `log_parkir_${Date.now()}.csv`;
+    if (logs.length >= MAX_EXPORT_ROWS) {
+        // More rows matched than were exported: tell the client so it can narrow the from/to range
+        res.setHeader('X-Export-Truncated', 'true');
+    }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send('\uFEFF' + csv); // BOM for Excel UTF-8 compatibility
@@ -847,7 +914,7 @@ exports.manualOverride = asyncHandler(async (req, res) => {
         });
     }
 
-    const normalizedPlate = plat_nomor.toUpperCase().replace(/\s/g, '');
+    const normalizedPlate = normalizePlate(plat_nomor);
     const parsedParkiranId = parseInt(id);
 
     // Cek parkiran
@@ -909,6 +976,14 @@ exports.manualOverride = asyncHandler(async (req, res) => {
         }
     });
 
+    logAudit({
+        action: 'PARKIR_MANUAL_OVERRIDE',
+        performedBy: adminId,
+        targetUserId: kendaraan.user?.id_user ?? null,
+        details: `Override ${gate_type} plat ${normalizedPlate} di parkiran ${parsedParkiranId} (log ${newLog.id_log_parkir})`,
+        ip: req.ip
+    });
+
     // Emit WebSocket update
     const io = req.app.get('io');
     if (io) {
@@ -932,37 +1007,5 @@ exports.manualOverride = asyncHandler(async (req, res) => {
             parkiran:      parkiranData.nama_parkiran,
             override_by:   adminId
         }
-    });
-});
-// Reconcile live_kapasitas berdasarkan log aktual (Admin only)
-exports.reconcileKapasitas = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const parsedId = parseInt(id);
-
-    // Hitung kendaraan yang masih di dalam berdasarkan log
-    // (kendaraan yang terakhir MASUK dan belum KELUAR di parkiran ini)
-    const result = await prisma.$queryRaw`
-        SELECT COUNT(DISTINCT lp.id_kendaraan) as actual_count
-        FROM log_parkir lp
-        INNER JOIN (
-            SELECT id_kendaraan, MAX(timestamp) as last_ts
-            FROM log_parkir
-            WHERE id_parkiran = ${parsedId}
-            GROUP BY id_kendaraan
-        ) latest ON lp.id_kendaraan = latest.id_kendaraan AND lp.timestamp = latest.last_ts
-        WHERE lp.id_parkiran = ${parsedId} AND lp.type = 'MASUK'
-    `;
-
-    const actualCount = Number(result[0]?.actual_count || 0);
-
-    await prisma.$executeRaw`
-        UPDATE parkiran SET live_kapasitas = ${actualCount}, "updatedAt" = NOW()
-        WHERE id_parkiran = ${parsedId}
-    `;
-
-    res.status(200).json({
-        status: "success",
-        message: `Kapasitas direconcile: ${actualCount} kendaraan di dalam`,
-        data: { live_kapasitas: actualCount }
     });
 });

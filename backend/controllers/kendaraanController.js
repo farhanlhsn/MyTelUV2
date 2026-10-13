@@ -4,11 +4,34 @@ const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler')
 const { sendPushNotification } = require('../utils/firebase');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
+const { normalizePlate } = require('../utils/plate');
+
+// Best effort: removing superseded files from R2 must never fail (or delay) the request.
+const discardFiles = (urls) => {
+    for (const url of urls.filter(Boolean)) {
+        (async () => {
+            try {
+                await deleteFile(url);
+            } catch (error) {
+                console.error(`Failed to delete superseded file: ${error.message}`);
+            }
+        })();
+    }
+};
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
-    const { plat_nomor, nama_kendaraan } = req.body;
+    const { nama_kendaraan } = req.body;
+    // The Zod schema already normalises the plate; do it here as well so uniqueness is always checked on one canonical form
+    const plat_nomor = normalizePlate(req.body.plat_nomor);
 
     const id_user = req.user.id_user;
+
+    if (!plat_nomor) {
+        return res.status(400).json({
+            status: "error",
+            message: "Plat nomor tidak valid"
+        });
+    }
 
     // Ambil files dari req.files object
     const fotoKendaraanFiles = req.files.fotoKendaraan || [];
@@ -36,12 +59,16 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         where: { plat_nomor }
     });
 
-    if (existingKendaraan) {
+    if (existingKendaraan && !existingKendaraan.deletedAt) {
         return res.status(409).json({
             status: "error",
             message: "Plat nomor already registered"
         });
     }
+
+    // plat_nomor is unique at the database level, so a plate whose row was soft-deleted can only be re-registered by
+    // reusing that row (see the save step below)
+    const reusableKendaraan = existingKendaraan || null;
 
     // Cek batas maksimal kendaraan per user (kecuali yang ditolak/rejected)
     const maxKendaraan = parseInt(process.env.MAX_KENDARAAN_PER_USER) || 3;
@@ -101,24 +128,37 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     }
 
     // Simpan ke database
+    let kendaraan;
     try {
-        const kendaraan = await prisma.kendaraan.create({
-            data: {
-                plat_nomor,
-                nama_kendaraan,
-                id_user: id_user, // Menggunakan id_user dari token (req.user)
-                fotoKendaraan: uploadedFotoKendaraan,
-                fotoSTNK: uploadedFotoSTNK,
-                statusVerif: false,
-                status_pengajuan: 'MENUNGGU'
-            },
-        });
-
-        res.status(201).json({
-            status: "success",
-            message: "Kendaraan registered successfully",
-            data: kendaraan
-        });
+        if (reusableKendaraan) {
+            // Reuse the soft-deleted row: new owner, back to MENUNGGU, no feedback. The deletedAt filter makes a
+            // concurrent second registration of the same plate fail (P2025) instead of taking the row over twice.
+            kendaraan = await prisma.kendaraan.update({
+                where: { id_kendaraan: reusableKendaraan.id_kendaraan, deletedAt: { not: null } },
+                data: {
+                    id_user, // Menggunakan id_user dari token (req.user)
+                    nama_kendaraan,
+                    fotoKendaraan: uploadedFotoKendaraan,
+                    fotoSTNK: uploadedFotoSTNK,
+                    statusVerif: false,
+                    status_pengajuan: 'MENUNGGU',
+                    feedback: null,
+                    deletedAt: null
+                }
+            });
+        } else {
+            kendaraan = await prisma.kendaraan.create({
+                data: {
+                    plat_nomor,
+                    nama_kendaraan,
+                    id_user: id_user, // Menggunakan id_user dari token (req.user)
+                    fotoKendaraan: uploadedFotoKendaraan,
+                    fotoSTNK: uploadedFotoSTNK,
+                    statusVerif: false,
+                    status_pengajuan: 'MENUNGGU'
+                },
+            });
+        }
     } catch (error) {
         // Cleanup uploaded files on database failure
         for (const fotoUrl of uploadedFotoKendaraan) {
@@ -134,12 +174,30 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             console.error(`Failed to cleanup foto STNK: ${cleanupError.message}`);
         }
 
+        // Lost a race for the same plate (unique violation, or the soft-deleted row was reused first)
+        if (error.code === 'P2002' || error.code === 'P2025') {
+            return res.status(409).json({
+                status: "error",
+                message: "Plat nomor already registered"
+            });
+        }
+
         console.error('Failed to save kendaraan:', error.message);
         return res.status(500).json({
             status: "error",
             message: GENERIC_SERVER_ERROR
         });
     }
+
+    if (reusableKendaraan) {
+        discardFiles([...(reusableKendaraan.fotoKendaraan || []), reusableKendaraan.fotoSTNK]);
+    }
+
+    res.status(201).json({
+        status: "success",
+        message: "Kendaraan registered successfully",
+        data: kendaraan
+    });
 });
 
 exports.getKendaraan = asyncHandler(async (req, res) => {
@@ -177,6 +235,15 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
     });
     if (!kendaraan || kendaraan.deletedAt) {
         return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+    }
+
+    // Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus. Ini menjamin bahwa menolak permintaan hapus
+    // (rejectKendaraan) selalu mengembalikan kendaraan ke keadaan DISETUJUI yang benar.
+    if (kendaraan.status_pengajuan !== 'DISETUJUI') {
+        return res.status(409).json({
+            status: "error",
+            message: "Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus"
+        });
     }
 
     // Set status to MENUNGGU dengan format feedback khusus untuk permintaan penghapusan
@@ -280,8 +347,10 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
     }
 
     if (search) {
+        // Plates are stored normalised, so match the normalised term (and the raw one, for rows saved before that)
+        const plateTerms = [...new Set([normalizePlate(search), search].filter(Boolean))];
         whereClause.OR = [
-            { plat_nomor: { contains: search, mode: 'insensitive' } },
+            ...plateTerms.map((term) => ({ plat_nomor: { contains: term, mode: 'insensitive' } })),
             { nama_kendaraan: { contains: search, mode: 'insensitive' } },
             {
                 user: {
@@ -393,7 +462,9 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
         });
     }
 
-    // Jika ini adalah penolakan permintaan hapus kendaraan
+    // Jika ini adalah penolakan permintaan hapus kendaraan.
+    // deleteKendaraan hanya menerima permintaan dari kendaraan DISETUJUI (statusVerif true), jadi mengembalikan
+    // DISETUJUI + statusVerif true di sini selalu memulihkan keadaan sebelum permintaan diajukan.
     if (kendaraan.feedback && kendaraan.feedback.startsWith('DELETE_REQUEST:')) {
         const updatedKendaraan = await prisma.kendaraan.update({
             where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },

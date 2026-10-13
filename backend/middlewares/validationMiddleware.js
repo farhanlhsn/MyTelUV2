@@ -5,8 +5,9 @@ exports.sanitizeInput = (req, res, next) => {
     for (let key in req.body) {
         if (typeof req.body[key] === 'string') {
             req.body[key] = req.body[key].trim();
-            // Skip sanitization for password and content fields
-            const skipEscape = ['password', 'oldPassword', 'newPassword', 'new_password', 'content'];
+            // Skip sanitization for password and content fields, and for plates: they are normalised
+            // (non-alphanumerics dropped) later, and escaping first would turn "B 1234/XYZ" into "B1234X2FXYZ"
+            const skipEscape = ['password', 'oldPassword', 'newPassword', 'new_password', 'content', 'plat_nomor', 'plate_text'];
             if (!skipEscape.includes(key)) {
                 req.body[key] = validator.escape(req.body[key]);
             }

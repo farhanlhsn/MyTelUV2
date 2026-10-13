@@ -18,13 +18,16 @@ const allowedTypes = {
   }
 };
 
+// Masalah upload adalah kesalahan klien: beri statusCode 400 agar global error handler tidak menjadikannya 500.
+const badRequest = (message) => Object.assign(new Error(message), { statusCode: 400 });
+
 // File filter: cek mime + extension dan tulis metadata ke file
 const fileFilter = (req, file, cb) => {
   // Gunakan fieldname dari multer (fotoKendaraan, fotoSTNK, dll)
   const uploadType = file.fieldname;
   
   if (!uploadType || !allowedTypes[uploadType]) {
-    return cb(new Error(`Invalid upload field: ${uploadType || '(empty)'}. Allowed: ${Object.keys(allowedTypes).join(', ')}`), false);
+    return cb(badRequest(`Field upload tidak valid: ${uploadType || '(kosong)'}. Yang diizinkan: ${Object.keys(allowedTypes).join(', ')}`), false);
   }
 
   const cfg = allowedTypes[uploadType];
@@ -33,7 +36,7 @@ const fileFilter = (req, file, cb) => {
   const validExt  = cfg.extensions.includes(ext);
 
   if (!validMime || !validExt) {
-    return cb(new Error(`Invalid file type for ${uploadType}. Allowed: ${cfg.extensions.join(', ')}`), false);
+    return cb(badRequest(`Jenis file tidak valid untuk ${uploadType}. Yang diizinkan: ${cfg.extensions.join(', ')}`), false);
   }
 
   file.uploadType = uploadType;
@@ -75,9 +78,9 @@ const validateFileSize = (req, res, next) => {
   for (const f of filesToValidate) {
     if (f.maxSize && f.size > f.maxSize) {
       const maxMB = Math.round(f.maxSize / (1024 * 1024));
-      const msg = `File size exceeds ${maxMB}MB limit for ${f.uploadType}`;
+      const msg = `Ukuran file melebihi batas ${maxMB}MB untuk ${f.uploadType}`;
       // lempar ke global error handler
-      return next(new Error(msg));
+      return next(badRequest(msg));
     }
   }
   
@@ -92,7 +95,7 @@ const requireFile = (req, res, next) => {
     ));
     
   if (!hasFile) {
-    return next(new Error('No file uploaded'));
+    return next(badRequest('Tidak ada file yang diunggah'));
   }
   next();
 };
