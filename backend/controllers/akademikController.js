@@ -1,12 +1,31 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { Prisma } = require('../generated/prisma');
-const { parsePagination, buildPaginationResponse, isDosenAuthorizedForKelas, haversineDistance, isCountableSession, isUniqueViolation } = require('../utils/akademikHelpers');
+const {
+    parsePagination,
+    buildPaginationResponse,
+    isDosenAuthorizedForKelas,
+    haversineDistance,
+    isCountableSession,
+    sessionParticipants,
+    isUniqueViolation,
+    STATUS_KEHADIRAN,
+    isPresentStatus,
+    absensiStatus,
+    summarizeKehadiran,
+    checkInStatus
+} = require('../utils/akademikHelpers');
 const { parsePagination: clampPagination } = require('../utils/paginationHelper');
-const { jakartaWeekday, jakartaDayRange, jakartaWeekRange, jakartaDateString, jakartaTimeString } = require('../utils/timezone');
-const { sendAbsensiNotification } = require('../utils/firebase');
+const { jakartaWeekday, jakartaDayRange, jakartaWeekRange, jakartaDateString, jakartaTimeString, parseJakartaDateTime } = require('../utils/timezone');
+const { sendAbsensiNotification, sendJadwalPenggantiNotification } = require('../utils/firebase');
+const { logAudit } = require('../utils/auditLogger');
 
 const ABSENSI_DUPLIKAT_MESSAGE = "Anda sudah melakukan absensi untuk sesi ini";
+const ABSENSI_OVERRIDE_ACTION = 'ABSENSI_OVERRIDE';
+
+// Attendance percentage in the format the API has always used: "66.7" (a string), or the number 0
+// when nothing is left to count (no counted sessions / students, or all of them excused)
+const formatPersentase = (rekap) => (rekap.total - rekap.izin - rekap.sakit > 0 ? rekap.persentase.toFixed(1) : 0);
 
 // ==================== MATAKULIAH CONTROLLERS ====================
 exports.createMatakuliah = asyncHandler(async (req, res) => {
@@ -221,6 +240,24 @@ const HARI_TIDAK_VALID_MESSAGE = "Hari harus bernilai 1 (Senin) sampai 7 (Minggu
 const timeToSeconds = (time) => {
     const [hours, minutes, seconds] = String(time).split(':').map(Number);
     return hours * 3600 + minutes * 60 + seconds;
+};
+
+const NAMA_HARI = ['', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+// Replacement times of a jadwal pengganti: HH:MM or HH:MM:SS, normalised to HH:MM:SS (null when invalid)
+const JAM_GANTI_REGEX = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$/;
+const normalizeJam = (value) => {
+    const match = JAM_GANTI_REGEX.exec(String(value).trim());
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}:${match[3] || '00'}` : null;
+};
+
+// JadwalPengganti.jam_*_ganti are @db.Time columns: Prisma reads and writes them as a Date whose UTC
+// clock is the time of day (no time-zone conversion; "09:00:00" is 09:00 WIB on the replacement day)
+const jamToTimeColumn = (jam) => new Date(`1970-01-01T${jam}.000Z`);
+const timeColumnToJam = (value) => {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(11, 19);
+    return String(value);
 };
 
 // Kelas.hari is optional; when given it must be 1 (Senin) .. 7 (Minggu). Returns null when absent, NaN when invalid.
@@ -619,29 +656,11 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
         if (hasOverride && override.status === 'GANTI_JADWAL' && override.tanggal_ganti) {
             const gantiIsToday = isToday(override.tanggal_ganti);
             if (gantiIsToday) {
-                // It is TODAY because of this override
-                if (override.jam_mulai_ganti) displayJamMulai = override.jam_mulai_ganti;
-                // We don't store jam_berakhir_ganti separately usually? Or do we?
-                // Schema check: JadwalPengganti has jam_mulai_ganti and jam_berakhir_ganti?
-                // Looking at schema inspection earlier... we saw createJadwalPengganti only takes 'jam_mulai_ganti' maybe?
-                // Let's assume we use duration or similar.
-                // Wait, Prisma schema `JadwalPengganti` usually has both if `Kelas` has both.
-                // But in `createJadwalPengganti` controller I saw update?
-                // Checking previous context... `createJadwalPengganti` only accepted `tanggal_ganti` and `ruangan_ganti`.
-                // It did NOT seem to accept `jam_mulai_ganti`. 
-                // Wait, let's double check `createJadwalPengganti` implementation.
-                // It only takes `tanggal_ganti` (Date). Date object includes time? 
-                // "tanggal_ganti: new Date(tanggal_ganti)". 
-                // If it's a DateTime, it includes time.
-                // So the "jam" is extracted from `tanggal_ganti`?
-                // Or are there separate fields?
-                // In `getKelasWithHari`, `override` had `jam_mulai_ganti`.
-                // Let's assume `jam_mulai_ganti` exists if it was in the schema.
-                // If not, maybe it relies on `tanggal_ganti` having time component.
-
-                // For now, let's keep original logic but be aware.
-                // If `tanggal_ganti` is a DateTime, we can extract time.
-
+                // It is TODAY because of this override: use its time and room when it has them
+                const jamMulaiGanti = timeColumnToJam(override.jam_mulai_ganti);
+                const jamBerakhirGanti = timeColumnToJam(override.jam_berakhir_ganti);
+                if (jamMulaiGanti) displayJamMulai = jamMulaiGanti;
+                if (jamBerakhirGanti) displayJamBerakhir = jamBerakhirGanti;
                 if (override.ruangan_ganti) displayRuangan = override.ruangan_ganti;
             }
         }
@@ -900,21 +919,32 @@ exports.updateKelas = asyncHandler(async (req, res) => {
     const targetRuangan = ruangan ? ruangan.trim() : kelas.ruangan;
     const targetHari = newHari !== null ? newHari : kelas.hari;
 
-    // Any change to when, where or by whom the class is taught must be checked for clashes
-    const scheduleChanged = Boolean(jam_mulai || jam_berakhir || ruangan || id_dosen || newHari !== null);
-
-    // jam_* are Unsupported("time") columns: read the stored values to validate a one-sided change
-    let targetJamMulai = jam_mulai;
-    let targetJamBerakhir = jam_berakhir;
-    if (scheduleChanged && (!jam_mulai || !jam_berakhir)) {
+    // jam_* are Unsupported("time") columns: read the stored values to validate a one-sided change and
+    // to tell a real schedule change from re-sent values (the mobile form always sends every field)
+    const scheduleFieldsGiven = Boolean(jam_mulai || jam_berakhir || ruangan || id_dosen || newHari !== null);
+    let storedJamMulai = null;
+    let storedJamBerakhir = null;
+    if (scheduleFieldsGiven) {
         const storedTimes = await prisma.$queryRaw`
             SELECT jam_mulai::text AS jam_mulai, jam_berakhir::text AS jam_berakhir
             FROM kelas
             WHERE id_kelas = ${idKelas}
         `;
-        targetJamMulai = jam_mulai || storedTimes[0]?.jam_mulai;
-        targetJamBerakhir = jam_berakhir || storedTimes[0]?.jam_berakhir;
+        storedJamMulai = storedTimes[0]?.jam_mulai ?? null;
+        storedJamBerakhir = storedTimes[0]?.jam_berakhir ?? null;
     }
+    const targetJamMulai = jam_mulai || storedJamMulai;
+    const targetJamBerakhir = jam_berakhir || storedJamBerakhir;
+
+    // Only a real change to when, where or by whom the class is taught needs the clash check
+    // ("8:00:00" equals "08:00:00"; a room that only differs in case or spaces is the same room)
+    const sameJam = (a, b) => (a && b ? timeToSeconds(a) === timeToSeconds(b) : a === b);
+    const sameRuangan = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+    const scheduleChanged = targetHari !== kelas.hari
+        || targetDosenId !== kelas.id_dosen
+        || !sameRuangan(targetRuangan, kelas.ruangan)
+        || !sameJam(targetJamMulai, storedJamMulai)
+        || !sameJam(targetJamBerakhir, storedJamBerakhir);
 
     if (targetJamMulai && targetJamBerakhir && timeToSeconds(targetJamBerakhir) <= timeToSeconds(targetJamMulai)) {
         return res.status(400).json({
@@ -1111,9 +1141,25 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
     const idKelas = parseInt(id_kelas);
 
     // Capacity check and insert run in one transaction. The class row lock makes concurrent
-    // enrollments (here and in adminAddPeserta) wait, so the count cannot go stale before the insert.
+    // enrollments (here and in adminAddPeserta) and kelas updates wait, so neither the count nor the
+    // kapasitas can go stale before the insert. kapasitas, hari and the times are read from the locked row.
     const result = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
+        const [lockedKelas] = await tx.$queryRaw`
+            SELECT kapasitas, hari, "deletedAt", jam_mulai::text AS jam_mulai, jam_berakhir::text AS jam_berakhir
+            FROM kelas
+            WHERE id_kelas = ${idKelas}
+            FOR UPDATE
+        `;
+
+        if (!lockedKelas || lockedKelas.deletedAt) {
+            return {
+                code: 404,
+                body: {
+                    status: "error",
+                    message: "Kelas tidak ditemukan"
+                }
+            };
+        }
 
         // 1. Class Capacity Check (BF20)
         const currentEnrolledCount = await tx.pesertaKelas.count({
@@ -1123,7 +1169,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
             }
         });
 
-        if (currentEnrolledCount >= kelas.kapasitas) {
+        if (currentEnrolledCount >= lockedKelas.kapasitas) {
             return {
                 code: 400,
                 body: {
@@ -1134,15 +1180,9 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
         }
 
         // 2. Schedule Conflict Check (BF18)
-        if (kelas.hari) {
-            // Fetch target class times
-            const targetTimeData = await tx.$queryRaw`
-                SELECT jam_mulai::text, jam_berakhir::text 
-                FROM kelas 
-                WHERE id_kelas = ${idKelas}
-            `;
-            const targetJamMulai = targetTimeData[0]?.jam_mulai;
-            const targetJamBerakhir = targetTimeData[0]?.jam_berakhir;
+        if (lockedKelas.hari) {
+            const targetJamMulai = lockedKelas.jam_mulai;
+            const targetJamBerakhir = lockedKelas.jam_berakhir;
 
             if (targetJamMulai && targetJamBerakhir) {
                 const conflictingClasses = await tx.$queryRaw`
@@ -1152,7 +1192,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
                     WHERE pk.id_mahasiswa = ${id_mahasiswa}
                     AND pk."deletedAt" IS NULL
                     AND k."deletedAt" IS NULL
-                    AND k.hari = ${kelas.hari}
+                    AND k.hari = ${lockedKelas.hari}
                     AND k.id_kelas != ${idKelas}
                     AND (
                         (k.jam_mulai <= ${targetJamMulai}::time AND k.jam_berakhir > ${targetJamMulai}::time)
@@ -1490,9 +1530,19 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
     const validStudentIds = new Set(validStudents.map(u => u.id_user));
     const idKelas = parseInt(id_kelas);
 
-    // Capacity check and inserts run in one transaction under the class row lock (see daftarKelas)
+    // Capacity check and inserts run in one transaction under the class row lock (see daftarKelas);
+    // kapasitas is read from the locked row
     const result = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
+        const [lockedKelas] = await tx.$queryRaw`
+            SELECT kapasitas, "deletedAt"
+            FROM kelas
+            WHERE id_kelas = ${idKelas}
+            FOR UPDATE
+        `;
+
+        if (!lockedKelas || lockedKelas.deletedAt) {
+            return { notFound: true };
+        }
 
         // Check existing enrollments (both active and soft-deleted)
         const existingEnrollments = await tx.pesertaKelas.findMany({
@@ -1535,9 +1585,9 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
         });
         const requested = validToCreate.length + validToRestore.length;
 
-        if (currentEnrolledCount + requested > kelas.kapasitas) {
+        if (currentEnrolledCount + requested > lockedKelas.kapasitas) {
             return {
-                error: `Kapasitas kelas tidak mencukupi. Sisa kuota: ${Math.max(0, kelas.kapasitas - currentEnrolledCount)}, diminta: ${requested}`
+                error: `Kapasitas kelas tidak mencukupi. Sisa kuota: ${Math.max(0, lockedKelas.kapasitas - currentEnrolledCount)}, diminta: ${requested}`
             };
         }
 
@@ -1569,6 +1619,13 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
             skipped_already_enrolled: alreadyEnrolled.length
         };
     });
+
+    if (result.notFound) {
+        return res.status(404).json({
+            status: "error",
+            message: "Kelas tidak ditemukan"
+        });
+    }
 
     if (result.error) {
         return res.status(400).json({
@@ -1856,11 +1913,13 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
     }
 
     // Step 6: Server-Side Heuristics & Impossible Travel Check
+    // (records entered by a dosen have no location and are skipped)
     const prevAbsensi = await prisma.$queryRaw`
         SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
         FROM absensi 
         WHERE id_user = ${id_user} 
         AND "deletedAt" IS NULL 
+        AND koordinat IS NOT NULL
         ORDER BY "createdAt" DESC 
         LIMIT 1
     `;
@@ -1911,9 +1970,12 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
+    // TELAT when checking in more than LATE_THRESHOLD_MINUTES after the session start
+    const statusKehadiran = checkInStatus(sesi.mulai, now);
+
     try {
         await prisma.$executeRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, status, "updatedAt")
             VALUES (
               ${id_user},
               ${parseInt(id_kelas)},
@@ -1921,6 +1983,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
               ${sesi.type_absensi}::"TypeAbsensi",
               POINT(${lng}, ${lat}),
               ${isMock},
+              ${statusKehadiran}::"StatusKehadiran",
               NOW()
             )
         `;
@@ -2130,6 +2193,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
                 id_user: true,
                 id_sesi_absensi: true,
                 type_absensi: true,
+                status: true,
                 user: { select: { role: true } }
             }
         })
@@ -2144,17 +2208,22 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
         return !!sesi && isCountableSession(sesi, enrolledAtByUser.get(a.id_user), now);
     });
 
+    // Every status of the counted records; only HADIR/TELAT records are attendance
+    const absensiByStatus = Object.fromEntries(STATUS_KEHADIRAN.map(status => [status, 0]));
+    countedAbsensi.forEach(a => { absensiByStatus[absensiStatus(a)] += 1; });
+    const presentAbsensi = countedAbsensi.filter(a => isPresentStatus(absensiStatus(a)));
+
     const totalPeserta = pesertaList.filter(p => !p.deletedAt).length;
     const totalSesi = sesiList.filter(s => isCountableSession(s, null, now)).length;
 
-    const absensiByType = countedAbsensi.reduce((acc, item) => {
+    const absensiByType = presentAbsensi.reduce((acc, item) => {
         acc[item.type_absensi] = (acc[item.type_absensi] || 0) + 1;
         return acc;
     }, {});
 
     // Absensi per mahasiswa
     const absensiPerMahasiswa = new Map();
-    countedAbsensi
+    presentAbsensi
         .filter(a => a.user?.role === 'MAHASISWA')
         .forEach(a => absensiPerMahasiswa.set(a.id_user, (absensiPerMahasiswa.get(a.id_user) || 0) + 1));
     const totalAbsensiMahasiswa = [...absensiPerMahasiswa.values()].reduce((sum, count) => sum + count, 0);
@@ -2164,8 +2233,9 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
         data: {
             totalPeserta,
             totalSesi,
-            totalAbsensi: countedAbsensi.length,
+            totalAbsensi: presentAbsensi.length,
             absensiByType,
+            absensiByStatus,
             totalMahasiswaAbsensi: absensiPerMahasiswa.size,
             averageAbsensiPerMahasiswa: absensiPerMahasiswa.size > 0
                 ? (totalAbsensiMahasiswa / absensiPerMahasiswa.size).toFixed(2)
@@ -2207,14 +2277,6 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
         });
     }
 
-    // Get total peserta for this kelas
-    const totalPeserta = await prisma.pesertaKelas.count({
-        where: {
-            id_kelas: parseInt(id),
-            deletedAt: null
-        }
-    });
-
     const where = {
         id_kelas: parseInt(id),
         deletedAt: null
@@ -2244,12 +2306,40 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
         prisma.sesiAbsensi.count({ where })
     ]);
 
-    // Add total_peserta to each sesi
-    const sesiWithStats = sesiList.map(sesi => ({
-        ...sesi,
-        total_peserta: totalPeserta,
-        jumlah_hadir: sesi._count.absensi
-    }));
+    // Per sesi: the students it belongs to (enrolled by its start, or with a record for it) and how
+    // many of them were present (HADIR/TELAT) - the same numbers as GET /absensi/sesi/:id
+    let pesertaList = [];
+    let absensiList = [];
+    if (sesiList.length > 0) {
+        [pesertaList, absensiList] = await Promise.all([
+            prisma.pesertaKelas.findMany({
+                where: { id_kelas: parseInt(id), deletedAt: null },
+                select: { id_mahasiswa: true, createdAt: true }
+            }),
+            prisma.absensi.findMany({
+                where: { id_sesi_absensi: { in: sesiList.map(s => s.id_sesi_absensi) }, deletedAt: null },
+                select: { id_user: true, id_sesi_absensi: true, status: true }
+            })
+        ]);
+    }
+
+    const absensiBySesi = new Map();
+    absensiList.forEach(a => {
+        if (!absensiBySesi.has(a.id_sesi_absensi)) absensiBySesi.set(a.id_sesi_absensi, new Map());
+        absensiBySesi.get(a.id_sesi_absensi).set(a.id_user, a);
+    });
+
+    const sesiWithStats = sesiList.map(sesi => {
+        const absensiByUser = absensiBySesi.get(sesi.id_sesi_absensi) || new Map();
+        const peserta = sessionParticipants(sesi, pesertaList, absensiByUser);
+        const rekap = summarizeKehadiran(peserta.map(p => absensiStatus(absensiByUser.get(p.id_mahasiswa))));
+
+        return {
+            ...sesi,
+            total_peserta: rekap.total,
+            jumlah_hadir: rekap.hadir
+        };
+    });
 
     res.status(200).json({
         status: "success",
@@ -2333,24 +2423,40 @@ exports.getSesiAbsensiDetail = asyncHandler(async (req, res) => {
         },
         select: {
             id_user: true,
-            createdAt: true
+            createdAt: true,
+            status: true,
+            keterangan: true,
+            diubah_oleh: true
         }
     });
 
     // Create a map for quick lookup
     const absensiMap = new Map();
     absensiRecords.forEach(a => {
-        absensiMap.set(a.id_user, a.createdAt);
+        absensiMap.set(a.id_user, a);
     });
 
-    // Build peserta list with hadir status
-    const pesertaWithStatus = pesertaList.map(p => ({
-        id_user: p.mahasiswa.id_user,
-        nama: p.mahasiswa.nama,
-        username: p.mahasiswa.username,
-        hadir: absensiMap.has(p.mahasiswa.id_user),
-        waktu_absen: absensiMap.get(p.mahasiswa.id_user) || null
-    }));
+    // The students this sesi belongs to: enrolled by its start (students who joined the class later
+    // are left out, like in the statistics) plus anyone with a record for it
+    const sesiPeserta = sessionParticipants(sesi, pesertaList, absensiMap);
+
+    // status: HADIR | TELAT | IZIN | SAKIT | ALPHA, or null when there is no record (absent);
+    // hadir: present (HADIR or TELAT); waktu_absen: check-in time of a present student
+    const pesertaWithStatus = sesiPeserta.map(p => {
+        const record = absensiMap.get(p.mahasiswa.id_user);
+        const status = absensiStatus(record);
+        return {
+            id_user: p.mahasiswa.id_user,
+            nama: p.mahasiswa.nama,
+            username: p.mahasiswa.username,
+            status,
+            hadir: isPresentStatus(status),
+            keterangan: record?.keterangan ?? null,
+            diubah_oleh: record?.diubah_oleh ?? null,
+            waktu_absen: isPresentStatus(status) ? record.createdAt : null
+        };
+    });
+    const rekap = summarizeKehadiran(pesertaWithStatus.map(p => p.status));
 
     res.status(200).json({
         status: "success",
@@ -2364,13 +2470,16 @@ exports.getSesiAbsensiDetail = asyncHandler(async (req, res) => {
                 kelas: sesi.kelas
             },
             peserta: pesertaWithStatus,
+            // total_tidak_hadir = ALPHA + no record; IZIN/SAKIT are excused (not absent) and left out
+            // of the percentage: hadir / (total_peserta - izin - sakit)
             stats: {
-                total_peserta: pesertaList.length,
-                total_hadir: absensiRecords.length,
-                total_tidak_hadir: pesertaList.length - absensiRecords.length,
-                persentase: pesertaList.length > 0
-                    ? ((absensiRecords.length / pesertaList.length) * 100).toFixed(1)
-                    : 0
+                total_peserta: rekap.total,
+                total_hadir: rekap.hadir,
+                total_telat: rekap.telat,
+                total_izin: rekap.izin,
+                total_sakit: rekap.sakit,
+                total_tidak_hadir: rekap.tidak_hadir,
+                persentase: formatPersentase(rekap)
             }
         }
     });
@@ -2427,6 +2536,117 @@ exports.closeSesiAbsensi = asyncHandler(async (req, res) => {
 });
 
 /**
+ * PUT /absensi/sesi/:id/mahasiswa/:id_user - the DOSEN of the class (or an ADMIN) sets a student's
+ * attendance status by hand, e.g. while the face service is down. Creates the student's record for
+ * the sesi when there is none (without a location), otherwise updates it; audited as ABSENSI_OVERRIDE.
+ * Body (overrideAbsensiSchema): { status: HADIR|TELAT|IZIN|SAKIT|ALPHA, keterangan?: string <= 255 }
+ */
+exports.overrideAbsensi = asyncHandler(async (req, res) => {
+    const idSesi = Number(req.params.id);
+    const idMahasiswa = Number(req.params.id_user);
+    const { status } = req.body;
+    // A missing or empty keterangan clears the previous one: it explains this status
+    const keterangan = typeof req.body.keterangan === 'string' && req.body.keterangan.trim() !== ''
+        ? req.body.keterangan.trim()
+        : null;
+    const actorId = req.user.id_user;
+
+    if (!Number.isInteger(idSesi) || idSesi <= 0 || !Number.isInteger(idMahasiswa) || idMahasiswa <= 0) {
+        return res.status(400).json({
+            status: "error",
+            message: "ID sesi atau ID mahasiswa tidak valid"
+        });
+    }
+
+    const sesi = await prisma.sesiAbsensi.findFirst({
+        where: { id_sesi_absensi: idSesi, deletedAt: null },
+        include: { kelas: true }
+    });
+
+    if (!sesi || !sesi.kelas || sesi.kelas.deletedAt) {
+        return res.status(404).json({
+            status: "error",
+            message: "Sesi absensi tidak ditemukan"
+        });
+    }
+
+    // Only the dosen teaching the class, or an admin
+    const isOwnDosen = req.user.role === 'DOSEN' && sesi.kelas.id_dosen === actorId;
+    if (!isOwnDosen && req.user.role !== 'ADMIN') {
+        return res.status(403).json({
+            status: "error",
+            message: "Anda hanya dapat mengubah kehadiran pada kelas yang Anda ajar"
+        });
+    }
+
+    const enrollment = await prisma.pesertaKelas.findFirst({
+        where: { id_kelas: sesi.id_kelas, id_mahasiswa: idMahasiswa, deletedAt: null }
+    });
+
+    if (!enrollment) {
+        return res.status(404).json({
+            status: "error",
+            message: "Mahasiswa tidak terdaftar di kelas ini"
+        });
+    }
+
+    // Lock and read the current record (for the audit trail), then insert-or-update it in one statement.
+    // ON CONFLICT also covers a check-in that lands between the two (unique uq_absensi_user_sesi), and
+    // restores a soft-deleted record. A new record has no location (koordinat NULL).
+    const { idAbsensi, statusLama } = await prisma.$transaction(async (tx) => {
+        const [current] = await tx.$queryRaw`
+            SELECT id_absensi, status::text AS status, "deletedAt"
+            FROM absensi
+            WHERE id_user = ${idMahasiswa} AND id_sesi_absensi = ${idSesi}
+            FOR UPDATE
+        `;
+
+        const [saved] = await tx.$queryRaw`
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, status, keterangan, diubah_oleh, "updatedAt")
+            VALUES (
+                ${idMahasiswa},
+                ${sesi.id_kelas},
+                ${idSesi},
+                ${sesi.type_absensi}::"TypeAbsensi",
+                NULL,
+                ${status}::"StatusKehadiran",
+                ${keterangan},
+                ${actorId},
+                NOW()
+            )
+            ON CONFLICT (id_user, id_sesi_absensi) DO UPDATE SET
+                status = EXCLUDED.status,
+                keterangan = EXCLUDED.keterangan,
+                diubah_oleh = EXCLUDED.diubah_oleh,
+                "deletedAt" = NULL,
+                "updatedAt" = NOW()
+            RETURNING id_absensi
+        `;
+
+        return {
+            idAbsensi: saved.id_absensi,
+            statusLama: current && !current.deletedAt ? current.status : null
+        };
+    });
+
+    const absensi = await prisma.absensi.findUnique({ where: { id_absensi: idAbsensi } });
+
+    logAudit({
+        action: ABSENSI_OVERRIDE_ACTION,
+        performedBy: actorId,
+        targetUserId: idMahasiswa,
+        details: `id_sesi_absensi=${idSesi} id_kelas=${sesi.id_kelas} status_lama=${statusLama || '-'} status_baru=${status}`,
+        ip: req.ip
+    });
+
+    res.status(200).json({
+        status: "success",
+        message: "Status kehadiran berhasil diperbarui",
+        data: absensi
+    });
+});
+
+/**
  * Get mahasiswa attendance history with all sessions (hadir/tidak hadir)
  */
 exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
@@ -2474,7 +2694,9 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
             id_sesi_absensi: true,
             id_kelas: true,
             createdAt: true,
-            type_absensi: true
+            type_absensi: true,
+            status: true,
+            keterangan: true
         }
     });
 
@@ -2500,45 +2722,51 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
 
         const absensiMap = new Map();
         kelasAbsensi.forEach(a => {
-            absensiMap.set(a.id_sesi_absensi, {
-                waktu: a.createdAt,
-                type: a.type_absensi
-            });
+            absensiMap.set(a.id_sesi_absensi, a);
         });
 
-        // Sessions held before the student enrolled are not theirs to attend (keep one they did attend)
+        // Sessions held before the student enrolled are not theirs to attend (keep one they have a record for)
         const enrolledAt = pk.createdAt ? new Date(pk.createdAt) : null;
         const relevantSesi = kelasSesi.filter(sesi =>
             !enrolledAt || new Date(sesi.mulai) >= enrolledAt || absensiMap.has(sesi.id_sesi_absensi));
 
-        const sessions = relevantSesi.map(sesi => ({
-            id_sesi: sesi.id_sesi_absensi,
-            id_sesi_absensi: sesi.id_sesi_absensi,
-            tanggal: sesi.mulai,
-            mulai: sesi.mulai,
-            selesai: sesi.selesai,
-            status: sesi.status,
-            is_active: sesi.status === true && sesi.mulai <= now && sesi.selesai >= now,
-            hadir: absensiMap.has(sesi.id_sesi_absensi),
-            type_absensi: absensiMap.get(sesi.id_sesi_absensi)?.type || null,
-            waktu_absen: absensiMap.get(sesi.id_sesi_absensi)?.waktu || null
-        }));
+        // status: the student's attendance, HADIR | TELAT | IZIN | SAKIT | ALPHA, or null without a record
+        // (same field as on the absensi objects); status_sesi: the sesi is open (true) / closed (false)
+        const sessions = relevantSesi.map(sesi => {
+            const record = absensiMap.get(sesi.id_sesi_absensi);
+            const statusKehadiran = absensiStatus(record);
+            return {
+                id_sesi: sesi.id_sesi_absensi,
+                id_sesi_absensi: sesi.id_sesi_absensi,
+                tanggal: sesi.mulai,
+                mulai: sesi.mulai,
+                selesai: sesi.selesai,
+                status: statusKehadiran,
+                status_sesi: sesi.status,
+                is_active: sesi.status === true && sesi.mulai <= now && sesi.selesai >= now,
+                hadir: isPresentStatus(statusKehadiran),
+                keterangan: record?.keterangan ?? null,
+                type_absensi: record?.type_absensi || null,
+                waktu_absen: isPresentStatus(statusKehadiran) ? record.createdAt : null
+            };
+        });
 
-        // Stats count only closed sessions that started on/after the enrollment
+        // Stats count only closed sessions that started on/after the enrollment; IZIN/SAKIT are
+        // excused (not absent, and left out of the percentage), a session without a record is absent
         const countedSesi = relevantSesi.filter(sesi => isCountableSession(sesi, pk.createdAt, now));
-        const totalSesi = countedSesi.length;
-        const totalHadir = countedSesi.filter(sesi => absensiMap.has(sesi.id_sesi_absensi)).length;
+        const rekap = summarizeKehadiran(countedSesi.map(sesi => absensiStatus(absensiMap.get(sesi.id_sesi_absensi))));
 
         return {
             kelas: pk.kelas,
             sessions,
             stats: {
-                total_sesi: totalSesi,
-                total_hadir: totalHadir,
-                total_tidak_hadir: totalSesi - totalHadir,
-                persentase: totalSesi > 0
-                    ? ((totalHadir / totalSesi) * 100).toFixed(1)
-                    : 100
+                total_sesi: rekap.total,
+                total_hadir: rekap.hadir,
+                total_telat: rekap.telat,
+                total_izin: rekap.izin,
+                total_sakit: rekap.sakit,
+                total_tidak_hadir: rekap.tidak_hadir,
+                persentase: formatPersentase(rekap)
             }
         };
     });
@@ -2549,13 +2777,21 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
 // ==================== JADWAL PENGGANTI CONTROLLERS ====================
 
 // Create jadwal pengganti (schedule override)
+// POST /kelas/:id/jadwal-pengganti - the class is the :id route parameter (an id_kelas in the body is
+// stripped by createJadwalPenggantiSchema). Dates without an offset are WIB (parseJakartaDateTime).
 exports.createJadwalPengganti = asyncHandler(async (req, res) => {
-    const { id_kelas, tanggal_asli, status, tanggal_ganti, ruangan_ganti, alasan } = req.body;
+    const { status, alasan } = req.body;
     const userId = req.user.id_user;
+    const idKelas = Number(req.params.id);
+
+    if (!Number.isInteger(idKelas) || idKelas <= 0) {
+        return res.status(400).json({ status: "error", message: "ID kelas tidak valid" });
+    }
 
     // Validate kelas exists and user is authorized
     const kelas = await prisma.kelas.findFirst({
-        where: { id_kelas: parseInt(id_kelas), deletedAt: null }
+        where: { id_kelas: idKelas, deletedAt: null },
+        include: { matakuliah: true }
     });
 
     if (!kelas) {
@@ -2572,18 +2808,62 @@ exports.createJadwalPengganti = asyncHandler(async (req, res) => {
         return res.status(400).json({ status: "error", message: "Status harus LIBUR atau GANTI_JADWAL" });
     }
 
-    // If GANTI_JADWAL, tanggal_ganti is required
-    if (status === 'GANTI_JADWAL' && !tanggal_ganti) {
-        return res.status(400).json({ status: "error", message: "tanggal_ganti wajib diisi untuk status GANTI_JADWAL" });
+    const tanggalAsli = parseJakartaDateTime(req.body.tanggal_asli);
+    if (!tanggalAsli) {
+        return res.status(400).json({ status: "error", message: "Format tanggal asli tidak valid" });
+    }
+
+    // The replaced meeting must be one the class actually has: its Jakarta weekday is the class hari
+    // (a class without hari is not on the weekly schedule, so there is nothing to check against)
+    if (kelas.hari && jakartaWeekday(tanggalAsli) !== kelas.hari) {
+        return res.status(400).json({
+            status: "error",
+            message: `Tanggal asli harus jatuh pada hari ${NAMA_HARI[kelas.hari]} sesuai jadwal kelas`
+        });
+    }
+
+    // GANTI_JADWAL: new date (required), optional new start/end time (both or neither) and room.
+    // LIBUR keeps none of them.
+    let tanggalGanti = null;
+    let jamMulaiGanti = null;
+    let jamBerakhirGanti = null;
+    let ruanganGanti = null;
+    if (status === 'GANTI_JADWAL') {
+        if (!req.body.tanggal_ganti) {
+            return res.status(400).json({ status: "error", message: "tanggal_ganti wajib diisi untuk status GANTI_JADWAL" });
+        }
+        tanggalGanti = parseJakartaDateTime(req.body.tanggal_ganti);
+        if (!tanggalGanti) {
+            return res.status(400).json({ status: "error", message: "Format tanggal ganti tidak valid" });
+        }
+
+        const { jam_mulai_ganti, jam_berakhir_ganti } = req.body;
+        if (jam_mulai_ganti || jam_berakhir_ganti) {
+            if (!jam_mulai_ganti || !jam_berakhir_ganti) {
+                return res.status(400).json({ status: "error", message: "Jam mulai dan jam berakhir pengganti harus diisi keduanya" });
+            }
+            jamMulaiGanti = normalizeJam(jam_mulai_ganti);
+            jamBerakhirGanti = normalizeJam(jam_berakhir_ganti);
+            if (!jamMulaiGanti || !jamBerakhirGanti) {
+                return res.status(400).json({ status: "error", message: "Format jam pengganti tidak valid. Gunakan HH:MM atau HH:MM:SS" });
+            }
+            if (timeToSeconds(jamBerakhirGanti) <= timeToSeconds(jamMulaiGanti)) {
+                return res.status(400).json({ status: "error", message: JAM_TIDAK_URUT_MESSAGE });
+            }
+        }
+
+        ruanganGanti = req.body.ruangan_ganti ? req.body.ruangan_ganti.trim() || null : null;
     }
 
     const jadwalPengganti = await prisma.jadwalPengganti.create({
         data: {
-            id_kelas: parseInt(id_kelas),
-            tanggal_asli: new Date(tanggal_asli),
+            id_kelas: idKelas,
+            tanggal_asli: tanggalAsli,
             status,
-            tanggal_ganti: tanggal_ganti ? new Date(tanggal_ganti) : null,
-            ruangan_ganti: ruangan_ganti || null,
+            tanggal_ganti: tanggalGanti,
+            jam_mulai_ganti: jamMulaiGanti ? jamToTimeColumn(jamMulaiGanti) : null,
+            jam_berakhir_ganti: jamBerakhirGanti ? jamToTimeColumn(jamBerakhirGanti) : null,
+            ruangan_ganti: ruanganGanti,
             alasan,
             createdBy: userId
         },
@@ -2594,10 +2874,28 @@ exports.createJadwalPengganti = asyncHandler(async (req, res) => {
         }
     });
 
+    // Tell the enrolled students; fire-and-forget after the record is saved
+    sendJadwalPenggantiNotification(idKelas, {
+        idJadwalPengganti: jadwalPengganti.id_jadwal_pengganti,
+        namaKelas: kelas.nama_kelas,
+        namaMatakuliah: kelas.matakuliah?.nama_matakuliah || 'Mata Kuliah',
+        status,
+        tanggalAsli,
+        tanggalGanti,
+        jamMulaiGanti,
+        jamBerakhirGanti,
+        ruanganGanti,
+        alasan
+    }).catch(err => console.error('Error triggering jadwal pengganti notification:', err.message));
+
     res.status(201).json({
         status: "success",
         message: status === 'LIBUR' ? 'Kelas dibatalkan/diliburkan' : 'Jadwal kelas diganti',
-        data: jadwalPengganti
+        data: {
+            ...jadwalPengganti,
+            jam_mulai_ganti: timeColumnToJam(jadwalPengganti.jam_mulai_ganti),
+            jam_berakhir_ganti: timeColumnToJam(jadwalPengganti.jam_berakhir_ganti)
+        }
     });
 });
 
@@ -2650,7 +2948,12 @@ exports.getJadwalPenggantiByKelas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        data: jadwalPengganti
+        // Replacement times as "HH:MM:SS" (like Kelas.jam_mulai), not as 1970-01-01 dates
+        data: jadwalPengganti.map(j => ({
+            ...j,
+            jam_mulai_ganti: timeColumnToJam(j.jam_mulai_ganti),
+            jam_berakhir_ganti: timeColumnToJam(j.jam_berakhir_ganti)
+        }))
     });
 });
 
@@ -2811,8 +3114,10 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
                     targetDayIndex = jakartaWeekday(override.tanggal_ganti);
 
                     // Update display time/room
-                    if (override.jam_mulai_ganti) jamMulai = override.jam_mulai_ganti;
-                    // jamBerakhir assumed from duration or same?
+                    const jamMulaiGanti = timeColumnToJam(override.jam_mulai_ganti);
+                    const jamBerakhirGanti = timeColumnToJam(override.jam_berakhir_ganti);
+                    if (jamMulaiGanti) jamMulai = jamMulaiGanti;
+                    if (jamBerakhirGanti) jamBerakhir = jamBerakhirGanti;
                     if (override.ruangan_ganti) ruangan = override.ruangan_ganti;
 
                 } else {
@@ -2850,7 +3155,8 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
                     status: override.status,
                     tanggal_asli: override.tanggal_asli,
                     tanggal_ganti: override.tanggal_ganti,
-                    jam_mulai_ganti: override.jam_mulai_ganti,
+                    jam_mulai_ganti: timeColumnToJam(override.jam_mulai_ganti),
+                    jam_berakhir_ganti: timeColumnToJam(override.jam_berakhir_ganti),
                     ruangan_ganti: override.ruangan_ganti,
                     alasan: override.alasan
                 } : null
@@ -2888,6 +3194,7 @@ exports.getAbsensiKuStats = asyncHandler(async (req, res) => {
             select: {
                 id_kelas: true,
                 type_absensi: true,
+                status: true,
                 sesiAbsensi: { select: { mulai: true, selesai: true, status: true, deletedAt: true } }
             }
         })
@@ -2896,9 +3203,11 @@ exports.getAbsensiKuStats = asyncHandler(async (req, res) => {
     const now = new Date();
     const enrolledAtByKelas = new Map(enrollments.map(e => [e.id_kelas, e.createdAt]));
 
-    // Same shape as the former groupBy: [{ id_kelas, type_absensi, _count: { type_absensi } }]
+    // Same shape as the former groupBy: [{ id_kelas, type_absensi, _count: { type_absensi } }].
+    // Only attendance (HADIR/TELAT) is counted; IZIN/SAKIT/ALPHA records set by a dosen are not.
     const statsByKey = new Map();
     absensiList.forEach(a => {
+        if (!isPresentStatus(absensiStatus(a))) return;
         if (!a.sesiAbsensi || a.sesiAbsensi.deletedAt) return;
         if (!isCountableSession(a.sesiAbsensi, enrolledAtByKelas.get(a.id_kelas), now)) return;
 

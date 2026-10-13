@@ -240,10 +240,10 @@ const schemaCases = [
         }
     },
     {
+        // The class comes from the :id route parameter; an id_kelas in the body is stripped (see below)
         schema: 'createJadwalPenggantiSchema',
         consumer: 'akademikController.createJadwalPengganti',
         body: {
-            id_kelas: 5,
             tanggal_asli: '2026-10-14',
             status: 'GANTI_JADWAL',
             alasan: 'Dosen dinas luar',
@@ -285,6 +285,11 @@ const schemaCases = [
             longitude: 107.63,
             is_mock_location: true
         }
+    },
+    {
+        schema: 'overrideAbsensiSchema',
+        consumer: 'akademikController.overrideAbsensi',
+        body: { status: 'IZIN', keterangan: 'Surat izin orang tua' }
     }
 ];
 
@@ -381,6 +386,60 @@ describe('zodSchemas boolean and numeric coercion', () => {
             expect(next).not.toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(400);
         }
+    });
+});
+
+describe('createJadwalPenggantiSchema', () => {
+    test('strips the id_kelas the mobile app still sends in the body (the route parameter is used)', async () => {
+        const { req, next } = await run(schemas.createJadwalPenggantiSchema, {
+            id_kelas: 99,
+            tanggal_asli: '2026-10-14T00:00:00.000',
+            status: 'LIBUR',
+            alasan: 'Rapat'
+        });
+
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(req.body).not.toHaveProperty('id_kelas');
+    });
+});
+
+describe('overrideAbsensiSchema', () => {
+    test.each(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA'])('accepts status %s without keterangan', async (status) => {
+        const { req, next } = await run(schemas.overrideAbsensiSchema, { status });
+
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(req.body).toEqual({ status });
+    });
+
+    test.each([
+        ['an unknown status', { status: 'BOLOS' }],
+        ['a lower-case status', { status: 'hadir' }],
+        ['no status', {}],
+        ['a keterangan over 255 characters', { status: 'IZIN', keterangan: 'a'.repeat(256) }],
+        ['a non-string keterangan', { status: 'IZIN', keterangan: 12 }]
+    ])('rejects %s with 400', async (_label, body) => {
+        const { res, next } = await run(schemas.overrideAbsensiSchema, body);
+
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    test('the status error is in Indonesian', async () => {
+        const { res } = await run(schemas.overrideAbsensiSchema, { status: 'BOLOS' });
+
+        expect(res.json).toHaveBeenCalledWith({
+            status: 'error',
+            message: 'Status harus salah satu dari HADIR, TELAT, IZIN, SAKIT, ALPHA'
+        });
+    });
+
+    test('a keterangan of exactly 255 characters is accepted, and null clears it', async () => {
+        const full = await run(schemas.overrideAbsensiSchema, { status: 'IZIN', keterangan: 'a'.repeat(255) });
+        expect(full.next).toHaveBeenCalledTimes(1);
+
+        const cleared = await run(schemas.overrideAbsensiSchema, { status: 'IZIN', keterangan: null });
+        expect(cleared.next).toHaveBeenCalledTimes(1);
+        expect(cleared.req.body.keterangan).toBeNull();
     });
 });
 

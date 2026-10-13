@@ -8,7 +8,7 @@ const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
 const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
 const { pythonClient } = require("../utils/pythonClient");
-const { isUniqueViolation } = require("../utils/akademikHelpers");
+const { isUniqueViolation, checkInStatus } = require("../utils/akademikHelpers");
 const {
   translateFaceServiceError,
   isFaceServiceInternalError,
@@ -937,11 +937,13 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     }
 
     // Step 6: Server-Side Heuristics & Impossible Travel Check
+    // (records entered by a dosen have no location and are skipped)
     const prevAbsensi = await prisma.$queryRaw`
             SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
             FROM absensi
             WHERE id_user = ${id_user}
             AND "deletedAt" IS NULL
+            AND koordinat IS NOT NULL
             ORDER BY "createdAt" DESC
             LIMIT 1
         `;
@@ -1009,10 +1011,11 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       // Tetap lanjutkan absensi meskipun gagal upload foto
     }
 
-    // Step 8: Create attendance record
+    // Step 8: Create attendance record (TELAT when more than LATE_THRESHOLD_MINUTES after the start)
+    const statusKehadiran = checkInStatus(activeSesi.mulai, now);
     try {
       await prisma.$executeRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, "updatedAt")
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, status, "updatedAt")
             VALUES (
                 ${id_user},
                 ${activeSesi.id_kelas},
@@ -1021,6 +1024,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 point(${lng}::float, ${lat}::float),
                 ${isMock},
                 ${absenPhotoUrl},
+                ${statusKehadiran}::"StatusKehadiran",
                 NOW()
             )
         `;
@@ -1064,6 +1068,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         ruangan: activeSesi.kelas.ruangan,
         waktu: absensi.createdAt,
         type: activeSesi.type_absensi,
+        status: statusKehadiran,
         match: true,
       },
     });

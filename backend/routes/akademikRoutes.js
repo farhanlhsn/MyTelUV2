@@ -37,6 +37,7 @@ const {
     getSesiAbsensiByKelas,
     getSesiAbsensiDetail,
     closeSesiAbsensi,
+    overrideAbsensi,
     getAbsensiKuWithHistory,
 
     // Jadwal Pengganti
@@ -46,7 +47,7 @@ const {
 } = require('../controllers/akademikController');
 
 const { validateZod } = require('../middlewares/validationMiddleware');
-const { createMatakuliahSchema, createKelasSchema, createJadwalPenggantiSchema, daftarKelasSchema, adminAddPesertaSchema, openAbsensiSchema, createAbsensiSchema } = require('../middlewares/zodSchemas');
+const { createMatakuliahSchema, createKelasSchema, createJadwalPenggantiSchema, daftarKelasSchema, adminAddPesertaSchema, openAbsensiSchema, createAbsensiSchema, overrideAbsensiSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const {
@@ -277,6 +278,14 @@ router.put('/absensi/sesi/:id/close',
     protect,
     authorize('DOSEN', 'ADMIN'),
     closeSesiAbsensi
+);
+
+// Set a student's attendance status for a sesi by hand (dosen of the class or admin; audited)
+router.put('/absensi/sesi/:id/mahasiswa/:id_user',
+    protect,
+    authorize('DOSEN', 'ADMIN'),
+    validateZod(overrideAbsensiSchema),
+    overrideAbsensi
 );
 
 // Get mahasiswa attendance history with all sessions

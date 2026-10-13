@@ -98,4 +98,62 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
         // '-' marks a session that does not count for this student (before enrollment or still running)
         expect(rowValues(sheet, 5)).toEqual([1, '1301', 'Budi', '-', '✓', '-', 1, '100%']);
     });
+
+    test('per-session export shows each status, counts IZIN/SAKIT as excused and leaves out late enrollees', async () => {
+        prisma.sesiAbsensi.findUnique.mockResolvedValue({
+            id_sesi_absensi: 9,
+            id_kelas: 1,
+            mulai: new Date('2026-10-14T01:00:00Z'),
+            kelas: { id_dosen: 5, nama_kelas: 'A', matakuliah: { nama_matakuliah: 'Basis Data' } }
+        });
+        const enrolled = new Date('2026-10-01T00:00:00Z');
+        prisma.pesertaKelas.findMany.mockResolvedValue([
+            { id_mahasiswa: 10, createdAt: enrolled, mahasiswa: { username: '1301', nama: 'Budi' } },
+            { id_mahasiswa: 11, createdAt: enrolled, mahasiswa: { username: '1302', nama: 'Cici' } },
+            { id_mahasiswa: 12, createdAt: enrolled, mahasiswa: { username: '1303', nama: 'Dedi' } },
+            { id_mahasiswa: 13, createdAt: enrolled, mahasiswa: { username: '1304', nama: 'Eka' } },
+            // Enrolled after the session without a record: not part of this session
+            { id_mahasiswa: 14, createdAt: new Date('2026-10-20T00:00:00Z'), mahasiswa: { username: '1305', nama: 'Fafa' } }
+        ]);
+        prisma.absensi.findMany.mockResolvedValue([
+            { id_user: 10, status: 'HADIR', createdAt: new Date('2026-10-14T01:05:00Z') },
+            { id_user: 11, status: 'TELAT', createdAt: new Date('2026-10-14T01:25:00Z') },
+            { id_user: 12, status: 'SAKIT', createdAt: new Date('2026-10-14T05:00:00Z') }
+        ]);
+
+        const { sheet } = await runExcelExport(generateLaporanSesiExcel, { params: { id: '9' }, user: admin });
+
+        expect(rowValues(sheet, 5)).toEqual([1, '1301', 'Budi', 'HADIR', '08.05.00']);
+        expect(rowValues(sheet, 6)).toEqual([2, '1302', 'Cici', 'TELAT', '08.25.00']);
+        expect(rowValues(sheet, 7)).toEqual([3, '1303', 'Dedi', 'SAKIT', '-']);
+        expect(rowValues(sheet, 8)).toEqual([4, '1304', 'Eka', 'TIDAK HADIR', '-']);
+        // Summary after one empty row
+        expect(rowValues(sheet, 10)).toEqual(['', '', 'Total: 4 Mahasiswa', 'Hadir: 2', 'Tidak Hadir: 1', 'Izin/Sakit: 1']);
+    });
+
+    test('class recap marks TELAT/IZIN/SAKIT and leaves excused sessions out of the percentage', async () => {
+        prisma.kelas.findUnique.mockResolvedValue({
+            id_kelas: 1, id_dosen: 5, nama_kelas: 'A',
+            matakuliah: { nama_matakuliah: 'Basis Data' }, dosen: { nama: 'Dosen' }
+        });
+        const closed = (id, day) => ({
+            id_sesi_absensi: id, status: false,
+            mulai: new Date(`2020-03-${day}T01:00:00Z`), selesai: new Date(`2020-03-${day}T03:00:00Z`)
+        });
+        prisma.sesiAbsensi.findMany.mockResolvedValue([closed(1, '02'), closed(2, '09'), closed(3, '16'), closed(4, '23'), closed(5, '30')]);
+        prisma.pesertaKelas.findMany.mockResolvedValue([
+            { id_mahasiswa: 10, createdAt: new Date('2020-02-01T00:00:00Z'), mahasiswa: { username: '1301', nama: 'Budi' } }
+        ]);
+        prisma.absensi.findMany.mockResolvedValue([
+            { id_user: 10, id_sesi_absensi: 1, status: 'HADIR' },
+            { id_user: 10, id_sesi_absensi: 2, status: 'TELAT' },
+            { id_user: 10, id_sesi_absensi: 3, status: 'IZIN' },
+            { id_user: 10, id_sesi_absensi: 4, status: 'ALPHA' }
+        ]);
+
+        const { sheet } = await runExcelExport(generateLaporanKelasExcel, { params: { id: '1' }, user: admin });
+
+        // 2 present of 5 sessions minus 1 excused = 50%
+        expect(rowValues(sheet, 5)).toEqual([1, '1301', 'Budi', '✓', 'T', 'I', '✗', '✗', 2, '50%']);
+    });
 });

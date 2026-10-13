@@ -13,7 +13,8 @@ const {
     jakartaWeekRange,
     jakartaDateString,
     jakartaTimeString,
-    formatJakarta
+    formatJakarta,
+    parseJakartaDateTime
 } = require('../utils/timezone');
 
 // 01:30 WIB on Wednesday 14 October 2026, which is still Tuesday 13 October in UTC
@@ -104,6 +105,26 @@ describe('utils/timezone', () => {
         test('formatJakarta uses the report style', () => {
             expect(formatJakarta(AFTER_MIDNIGHT_WIB, { withTime: true })).toBe('14/10/2026 01:30');
             expect(formatJakarta(AFTER_MIDNIGHT_WIB)).toBe('14/10/2026');
+        });
+    });
+
+    describe('parseJakartaDateTime (client dates; no offset = WIB wall-clock time)', () => {
+        test('a date-only value is 00:00 WIB of that day', () => {
+            expect(parseJakartaDateTime('2026-10-14')).toEqual(new Date('2026-10-13T17:00:00.000Z'));
+        });
+
+        test('a date-time without offset (what the mobile app sends) is read as WIB', () => {
+            expect(parseJakartaDateTime('2026-10-14T00:00:00.000')).toEqual(new Date('2026-10-13T17:00:00.000Z'));
+            expect(parseJakartaDateTime('2026-10-14T09:30')).toEqual(new Date('2026-10-14T02:30:00.000Z'));
+        });
+
+        test('a value with Z or an offset is that instant', () => {
+            expect(parseJakartaDateTime('2026-10-13T17:30:00.000Z')).toEqual(new Date('2026-10-13T17:30:00.000Z'));
+            expect(parseJakartaDateTime('2026-10-14T08:00:00+08:00')).toEqual(new Date('2026-10-14T00:00:00.000Z'));
+        });
+
+        test.each([['besok'], [''], ['14/10/2026'], ['2026-13-40'], ['2026-02-30'], ['2026-10-14T25:00'], [null], [undefined], [20261014]])('%p is not a date (null)', (value) => {
+            expect(parseJakartaDateTime(value)).toBeNull();
         });
     });
 });

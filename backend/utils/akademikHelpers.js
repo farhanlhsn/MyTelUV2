@@ -113,8 +113,95 @@ const isCountableSession = (sesi, enrolledAt, now = new Date()) => {
     const closed = sesi.status === false || ended;
     if (!closed) return false;
 
+    return startedAfterEnrollment(sesi, enrolledAt);
+};
+
+/**
+ * The enrollment-date rule of isCountableSession on its own: the session started on/after the
+ * enrollment. null/undefined enrolledAt means "unknown" and passes.
+ */
+const startedAfterEnrollment = (sesi, enrolledAt) => {
     if (enrolledAt === null || enrolledAt === undefined) return true;
     return new Date(sesi.mulai).getTime() >= new Date(enrolledAt).getTime();
+};
+
+/**
+ * The students a session belongs to: active enrollments made on/before the session start (same rule
+ * as isCountableSession), plus anyone who has an attendance record for it — a recorded check-in or
+ * a status set by the dosen is never hidden.
+ *
+ * @param {{mulai: Date|string}} sesi
+ * @param {Array<{id_mahasiswa: number, createdAt?: Date|string}>} pesertaList - active PesertaKelas rows
+ * @param {Map<number, object>} absensiByUser - this session's Absensi rows by id_user
+ */
+const sessionParticipants = (sesi, pesertaList, absensiByUser) => pesertaList.filter((p) =>
+    startedAfterEnrollment(sesi, p.createdAt) || absensiByUser.has(p.id_mahasiswa));
+
+// ==================== ATTENDANCE STATUS (StatusKehadiran) ====================
+
+const STATUS_KEHADIRAN = Object.freeze(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA']);
+const PRESENT_STATUSES = new Set(['HADIR', 'TELAT']);
+const EXCUSED_STATUSES = new Set(['IZIN', 'SAKIT']);
+
+/** HADIR and TELAT count as present. */
+const isPresentStatus = (status) => PRESENT_STATUSES.has(status);
+
+/** IZIN and SAKIT are excused: not absent, and left out of the attendance percentage. */
+const isExcusedStatus = (status) => EXCUSED_STATUSES.has(status);
+
+/**
+ * Status of an Absensi row, or null when there is no row (no check-in and no status set by hand).
+ * A row without a status field (written before statuses existed) is a check-in, i.e. HADIR.
+ */
+const absensiStatus = (absensi) => (absensi ? absensi.status || 'HADIR' : null);
+
+/**
+ * Counts for a list of statuses (null = no Absensi row, which counts as absent like ALPHA).
+ *
+ * hadir = HADIR + TELAT, tidak_hadir = ALPHA + no row, IZIN/SAKIT are excused. The percentage is
+ * hadir / (total - excused) * 100; it is 0 when nothing is left to count (no sessions, or all excused).
+ *
+ * @param {Array<string|null>} statuses
+ * @returns {{total: number, hadir: number, telat: number, izin: number, sakit: number,
+ *            tidak_hadir: number, persentase: number}}
+ */
+const summarizeKehadiran = (statuses) => {
+    const summary = { total: 0, hadir: 0, telat: 0, izin: 0, sakit: 0, tidak_hadir: 0, persentase: 0 };
+    for (const status of statuses) {
+        summary.total++;
+        if (isPresentStatus(status)) {
+            summary.hadir++;
+            if (status === 'TELAT') summary.telat++;
+        } else if (status === 'IZIN') {
+            summary.izin++;
+        } else if (status === 'SAKIT') {
+            summary.sakit++;
+        } else {
+            summary.tidak_hadir++;
+        }
+    }
+    const denominator = summary.total - summary.izin - summary.sakit;
+    summary.persentase = denominator > 0 ? (summary.hadir / denominator) * 100 : 0;
+    return summary;
+};
+
+const DEFAULT_LATE_THRESHOLD_MINUTES = 15;
+
+/** LATE_THRESHOLD_MINUTES from the environment (minutes, >= 0), default 15. Read on every call. */
+const lateThresholdMinutes = (env = process.env) => {
+    const raw = env.LATE_THRESHOLD_MINUTES;
+    if (raw === undefined || raw === null || String(raw).trim() === '') return DEFAULT_LATE_THRESHOLD_MINUTES;
+    const minutes = Number(raw);
+    return Number.isFinite(minutes) && minutes >= 0 ? minutes : DEFAULT_LATE_THRESHOLD_MINUTES;
+};
+
+/**
+ * Status of a check-in: TELAT when it happens more than `thresholdMinutes` after the session start,
+ * otherwise HADIR.
+ */
+const checkInStatus = (sesiMulai, attendedAt = new Date(), thresholdMinutes = lateThresholdMinutes()) => {
+    const lateByMs = new Date(attendedAt).getTime() - new Date(sesiMulai).getTime();
+    return lateByMs > thresholdMinutes * 60 * 1000 ? 'TELAT' : 'HADIR';
 };
 
 /**
@@ -134,5 +221,14 @@ module.exports = {
     requireKelasOwnership,
     haversineDistance,
     isCountableSession,
-    isUniqueViolation
+    startedAfterEnrollment,
+    sessionParticipants,
+    isUniqueViolation,
+    STATUS_KEHADIRAN,
+    isPresentStatus,
+    isExcusedStatus,
+    absensiStatus,
+    summarizeKehadiran,
+    lateThresholdMinutes,
+    checkInStatus
 };

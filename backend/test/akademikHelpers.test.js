@@ -1,8 +1,20 @@
 /**
- * Unit Testing - akademikHelpers: which sessions count, unique-violation detection
+ * Unit Testing - akademikHelpers: which sessions count, unique-violation detection, attendance status
  */
 
-const { isCountableSession, isUniqueViolation } = require('../utils/akademikHelpers');
+const {
+    isCountableSession,
+    isUniqueViolation,
+    startedAfterEnrollment,
+    sessionParticipants,
+    STATUS_KEHADIRAN,
+    isPresentStatus,
+    isExcusedStatus,
+    absensiStatus,
+    summarizeKehadiran,
+    lateThresholdMinutes,
+    checkInStatus
+} = require('../utils/akademikHelpers');
 
 const NOW = new Date('2026-10-14T10:00:00Z');
 const ENROLLED_AT = new Date('2026-10-01T00:00:00Z');
@@ -85,5 +97,93 @@ describe('isUniqueViolation', () => {
         expect(isUniqueViolation({ code: 'P2010', meta: { code: '23503' } })).toBe(false);
         expect(isUniqueViolation(new Error('boom'))).toBe(false);
         expect(isUniqueViolation(undefined)).toBe(false);
+    });
+});
+
+describe('startedAfterEnrollment / sessionParticipants', () => {
+    const s = sesi({ mulai: new Date('2026-10-07T01:00:00Z') });
+
+    test('a session counts for a student who enrolled before or exactly at its start', () => {
+        expect(startedAfterEnrollment(s, new Date('2026-10-07T00:59:59Z'))).toBe(true);
+        expect(startedAfterEnrollment(s, new Date('2026-10-07T01:00:00Z'))).toBe(true);
+        expect(startedAfterEnrollment(s, new Date('2026-10-07T01:00:01Z'))).toBe(false);
+        expect(startedAfterEnrollment(s, null)).toBe(true);
+    });
+
+    test('lists students enrolled by the session start, plus late enrollees who have a record for it', () => {
+        const peserta = [
+            { id_mahasiswa: 1, createdAt: new Date('2026-10-01T00:00:00Z') },
+            { id_mahasiswa: 2, createdAt: new Date('2026-10-08T00:00:00Z') },
+            { id_mahasiswa: 3, createdAt: new Date('2026-10-08T00:00:00Z') },
+            { id_mahasiswa: 4 }
+        ];
+        const absensiByUser = new Map([[3, { status: 'IZIN' }]]);
+
+        expect(sessionParticipants(s, peserta, absensiByUser).map((p) => p.id_mahasiswa)).toEqual([1, 3, 4]);
+    });
+});
+
+describe('attendance status', () => {
+    test('the five statuses', () => {
+        expect(STATUS_KEHADIRAN).toEqual(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA']);
+    });
+
+    test('HADIR and TELAT are present, IZIN and SAKIT are excused, ALPHA and no record are neither', () => {
+        expect(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA', null].map(isPresentStatus))
+            .toEqual([true, true, false, false, false, false]);
+        expect(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA', null].map(isExcusedStatus))
+            .toEqual([false, false, true, true, false, false]);
+    });
+
+    test('absensiStatus: no row is null, a row without a status is a check-in (HADIR)', () => {
+        expect(absensiStatus(undefined)).toBeNull();
+        expect(absensiStatus({ id_user: 1 })).toBe('HADIR');
+        expect(absensiStatus({ status: 'SAKIT' })).toBe('SAKIT');
+    });
+
+    test('summarizeKehadiran: excused sessions leave the percentage denominator, no record is absent', () => {
+        expect(summarizeKehadiran(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA', null])).toEqual({
+            total: 6, hadir: 2, telat: 1, izin: 1, sakit: 1, tidak_hadir: 2, persentase: 50
+        });
+    });
+
+    test('summarizeKehadiran: 0% when there is nothing to count (no sessions, or every session excused)', () => {
+        expect(summarizeKehadiran([]).persentase).toBe(0);
+        expect(summarizeKehadiran(['IZIN', 'SAKIT'])).toMatchObject({ total: 2, hadir: 0, tidak_hadir: 0, persentase: 0 });
+    });
+
+    test('LATE_THRESHOLD_MINUTES defaults to 15 and ignores invalid values', () => {
+        expect(lateThresholdMinutes({})).toBe(15);
+        expect(lateThresholdMinutes({ LATE_THRESHOLD_MINUTES: '' })).toBe(15);
+        expect(lateThresholdMinutes({ LATE_THRESHOLD_MINUTES: 'abc' })).toBe(15);
+        expect(lateThresholdMinutes({ LATE_THRESHOLD_MINUTES: '-5' })).toBe(15);
+        expect(lateThresholdMinutes({ LATE_THRESHOLD_MINUTES: '30' })).toBe(30);
+        expect(lateThresholdMinutes({ LATE_THRESHOLD_MINUTES: '0' })).toBe(0);
+    });
+
+    test('checkInStatus: TELAT only when more than the threshold after the session start', () => {
+        const mulai = new Date('2026-10-14T01:00:00Z');
+        const at = (minutes) => new Date(mulai.getTime() + minutes * 60 * 1000);
+
+        expect(checkInStatus(mulai, at(0), 15)).toBe('HADIR');
+        expect(checkInStatus(mulai, at(15), 15)).toBe('HADIR');
+        expect(checkInStatus(mulai, at(15.01), 15)).toBe('TELAT');
+        expect(checkInStatus(mulai, at(20), 15)).toBe('TELAT');
+        expect(checkInStatus(mulai, at(20), 30)).toBe('HADIR');
+    });
+
+    test('checkInStatus reads LATE_THRESHOLD_MINUTES when no threshold is passed', () => {
+        const previous = process.env.LATE_THRESHOLD_MINUTES;
+        const mulai = new Date('2026-10-14T01:00:00Z');
+        const twentyMinutesLater = new Date('2026-10-14T01:20:00Z');
+        try {
+            delete process.env.LATE_THRESHOLD_MINUTES;
+            expect(checkInStatus(mulai, twentyMinutesLater)).toBe('TELAT');
+            process.env.LATE_THRESHOLD_MINUTES = '25';
+            expect(checkInStatus(mulai, twentyMinutesLater)).toBe('HADIR');
+        } finally {
+            if (previous === undefined) delete process.env.LATE_THRESHOLD_MINUTES;
+            else process.env.LATE_THRESHOLD_MINUTES = previous;
+        }
     });
 });

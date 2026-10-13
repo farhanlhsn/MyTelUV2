@@ -621,6 +621,48 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             );
             expect(res.json.mock.calls[0][0].data).not.toHaveProperty('similarity');
         });
+
+        test('TC010b - A check-in more than LATE_THRESHOLD_MINUTES (default 15) after the start is TELAT', async () => {
+            const previousThreshold = process.env.LATE_THRESHOLD_MINUTES;
+            delete process.env.LATE_THRESHOLD_MINUTES;
+            const now = new Date();
+
+            pythonClient.post.mockResolvedValueOnce({ data: { success: true, embedding: [0.1, 0.2, 0.3] } });
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1, id_user: 1, face_embedding: [0.1, 0.2, 0.3], deletedAt: null,
+                user: { id_user: 1, nama: 'John Doe', username: 'johndoe' }
+            });
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }]);
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
+                id_sesi_absensi: 1, id_kelas: 1,
+                latitude: null, longitude: null, radius_meter: null,
+                type_absensi: 'LOKAL_ABSENSI',
+                mulai: new Date(now.getTime() - 20 * 60 * 1000),
+                selesai: new Date(now.getTime() + 60 * 60 * 1000),
+                kelas: { nama_kelas: 'Algoritma A', ruangan: 'R.101', matakuliah: { nama_matakuliah: 'Algoritma Pemrograman' } }
+            }]);
+            prisma.absensi.findFirst
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce({ id_absensi: 1, createdAt: now, status: 'TELAT' });
+            prisma.$executeRaw.mockResolvedValueOnce(1);
+
+            const res = createMockRes();
+            try {
+                await biometrikAbsen(createMockReq(), res, jest.fn());
+            } finally {
+                if (previousThreshold === undefined) delete process.env.LATE_THRESHOLD_MINUTES;
+                else process.env.LATE_THRESHOLD_MINUTES = previousThreshold;
+            }
+
+            expect(res.status).toHaveBeenCalledWith(201);
+            const [strings, ...values] = prisma.$executeRaw.mock.calls[0];
+            expect(strings.join('?')).toMatch(/"StatusKehadiran"/);
+            expect(values).toContain('TELAT');
+            expect(res.json.mock.calls[0][0].data).toMatchObject({ status: 'TELAT' });
+            // The impossible-travel check skips records that have no location (entered by a dosen)
+            const previousQuery = prisma.$queryRaw.mock.calls.find(([s]) => s.join('?').includes('koordinat[0]'));
+            expect(previousQuery[0].join('?')).toMatch(/koordinat IS NOT NULL/);
+        });
     });
 
     /**

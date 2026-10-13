@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const { normalizePlate } = require('../utils/plate');
+const { STATUS_KEHADIRAN } = require('../utils/akademikHelpers');
 
 // The parsed output of these schemas replaces req.body (see validateZod), so every body field
 // a controller reads MUST be declared here, otherwise it is stripped and arrives as undefined.
@@ -148,8 +149,8 @@ const createKelasSchema = z.object({
 });
 
 const createJadwalPenggantiSchema = z.object({
-    // The controller still reads id_kelas from the body (mobile sends it as well as the :id route param).
-    id_kelas: z.union([z.number(), z.string()]).optional(),
+    // No id_kelas: the class comes from the :id route parameter. The id_kelas the mobile app still
+    // sends in the body is stripped here.
     tanggal_asli: z.string().min(1, "Tanggal asli wajib diisi"),
     status: z.string().min(1, "Status wajib diisi"),
     alasan: z.string().min(1, "Alasan wajib diisi"),
@@ -190,6 +191,17 @@ const createAbsensiSchema = z.object({
     is_mock_location: booleanLike.optional()
 });
 
+// PUT /absensi/sesi/:id/mahasiswa/:id_user - attendance status set by the DOSEN of the class or an ADMIN.
+// The status check is a refine so its message is explicit (validateZod's fallback map would otherwise
+// replace an enum error with the generic "status tidak valid").
+const overrideAbsensiSchema = z.object({
+    status: z.unknown().refine(
+        (value) => STATUS_KEHADIRAN.includes(value),
+        `Status harus salah satu dari ${STATUS_KEHADIRAN.join(', ')}`
+    ),
+    keterangan: z.string().max(255, "Keterangan maksimal 255 karakter").nullable().optional()
+});
+
 module.exports = {
     registerSchema,
     adminCreateUserSchema,
@@ -212,5 +224,6 @@ module.exports = {
     daftarKelasSchema,
     adminAddPesertaSchema,
     openAbsensiSchema,
-    createAbsensiSchema
+    createAbsensiSchema,
+    overrideAbsensiSchema
 };

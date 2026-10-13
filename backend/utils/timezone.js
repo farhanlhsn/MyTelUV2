@@ -105,6 +105,34 @@ const formatJakarta = (date = new Date(), { withTime = false } = {}) => {
     return withTime ? `${datePart} ${pad2(hour)}:${pad2(minute)}` : datePart;
 };
 
+// ISO date, optionally with a time: 2026-10-14, 2026-10-14T09:30, 2026-10-14T09:30:00.000(Z|+07:00)
+const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:\d{2})?$/i;
+
+/**
+ * Parse an ISO date or date-time sent by a client. Without a time-zone designator it is a Jakarta
+ * wall-clock time, so "2026-10-14" and "2026-10-14T00:00:00.000" (what the mobile app sends) are both
+ * 00:00 WIB on 14/10/2026, whatever the server time zone. With "Z" or an offset it is that instant.
+ * @returns {Date|null} null when the value is not a valid ISO date
+ */
+const parseJakartaDateTime = (value) => {
+    if (typeof value !== 'string') return null;
+    const match = ISO_DATE_TIME.exec(value.trim());
+    if (!match) return null;
+
+    const [, year, month, day, timePart = 'T00:00:00', zone = '+07:00'] = match;
+
+    // A real calendar day (no 2026-02-30 rolling over into March)
+    const calendarDay = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (calendarDay.getUTCFullYear() !== Number(year)
+        || calendarDay.getUTCMonth() !== Number(month) - 1
+        || calendarDay.getUTCDate() !== Number(day)) {
+        return null;
+    }
+
+    const date = new Date(`${year}-${month}-${day}${timePart}${zone}`);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
 module.exports = {
     TZ,
     jakartaParts,
@@ -113,5 +141,6 @@ module.exports = {
     jakartaWeekRange,
     jakartaDateString,
     jakartaTimeString,
-    formatJakarta
+    formatJakarta,
+    parseJakartaDateTime
 };

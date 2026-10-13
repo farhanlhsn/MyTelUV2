@@ -5,7 +5,14 @@ const fs = require('fs');
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma'); // Use shared instance
 const { TZ, formatJakarta, jakartaDateString } = require('../utils/timezone');
-const { isCountableSession } = require('../utils/akademikHelpers');
+const {
+    isCountableSession,
+    sessionParticipants,
+    absensiStatus,
+    isPresentStatus,
+    isExcusedStatus,
+    summarizeKehadiran
+} = require('../utils/akademikHelpers');
 
 // ==========================================
 // HELPER: Validate ID Parameter
@@ -35,26 +42,50 @@ const getStatusStyle = (status) => {
 // ==========================================
 // HELPER: One student's row of the class recap
 // ==========================================
-// '✓' attended, '✗' absent from a session that counts, '-' a session that does not count for this
-// student (held before they enrolled, or still running). Total and % use the counted sessions only.
+// Recorded status: '✓' HADIR, 'T' TELAT, 'I' IZIN, 'S' SAKIT, '✗' ALPHA. No record: '✗' for a session
+// that counts, '-' for one that does not count for this student (held before they enrolled, or still
+// running). Total = present (HADIR/TELAT) in the counted sessions; % leaves excused (IZIN/SAKIT) out.
+const REKAP_SYMBOL = { HADIR: '✓', TELAT: 'T', IZIN: 'I', SAKIT: 'S', ALPHA: '✗' };
+
+// absensiMap: "userId_sesiId" -> status of that Absensi row
 const buildRekapKehadiran = (peserta, sessions, absensiMap, now = new Date()) => {
-    let hadir = 0;
-    let dihitung = 0;
+    const countedStatuses = [];
 
     const cells = sessions.map((s) => {
-        const isHadir = absensiMap.has(`${peserta.id_mahasiswa}_${s.id_sesi_absensi}`);
+        const status = absensiMap.get(`${peserta.id_mahasiswa}_${s.id_sesi_absensi}`) || null;
         const counted = isCountableSession(s, peserta.createdAt, now);
-        if (counted) {
-            dihitung++;
-            if (isHadir) hadir++;
-        }
-        if (isHadir) return '✓';
+        if (counted) countedStatuses.push(status);
+        if (status) return REKAP_SYMBOL[status] || '✓';
         return counted ? '✗' : '-';
     });
 
-    const persen = dihitung > 0 ? Math.round((hadir / dihitung) * 100) : 0;
-    return { cells, hadir, persen };
+    const rekap = summarizeKehadiran(countedStatuses);
+    return { cells, hadir: rekap.hadir, persen: Math.round(rekap.persentase) };
 };
+
+const REKAP_LEGEND = '✓ = Hadir, T = Telat, I = Izin, S = Sakit, ✗ = Tidak Hadir, - = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)';
+
+// ==========================================
+// HELPER: The students of one session with their status
+// ==========================================
+// Students enrolled by the session start, plus late enrollees who have a record for it (same rule as
+// GET /absensi/sesi/:id). status null = no record (absent).
+const buildKehadiranSesi = (sesi, peserta, absensi) => {
+    const absensiByUser = new Map(absensi.map((a) => [a.id_user, a]));
+    const rows = sessionParticipants(sesi, peserta, absensiByUser).map((p) => {
+        const record = absensiByUser.get(p.id_mahasiswa);
+        return { peserta: p, record, status: absensiStatus(record) };
+    });
+    return { rows, summary: summarizeKehadiran(rows.map((r) => r.status)) };
+};
+
+// Status column of the per-session reports (ALPHA and no record are both TIDAK HADIR)
+const statusLabel = (status) => (isPresentStatus(status) || isExcusedStatus(status) ? status : 'TIDAK HADIR');
+
+// Check-in time of a present student, '-' otherwise
+const waktuAbsenLabel = (row) => (row.record && isPresentStatus(row.status)
+    ? new Date(row.record.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ })
+    : '-');
 
 // ==========================================
 // DESIGN CONSTANTS
@@ -67,6 +98,7 @@ const COLORS = {
     successLight: '#E8F5E9', // Light green background
     danger: '#B71C1C',        // Dark red for TIDAK HADIR
     dangerLight: '#FFEBEE',   // Light red background
+    warning: '#FF8F00',       // Orange for IZIN / SAKIT
     dark: '#212121',          // Almost black
     gray: '#616161',          // Medium gray
     lightGray: '#F5F5F5',     // Background gray
@@ -186,7 +218,6 @@ const addFooter = (doc, isLandscape = false) => {
 const addSummaryBox = (doc, stats, isLandscape = false) => {
     const margin = 40;
     const pageWidth = doc.page.width;
-    const boxWidth = isLandscape ? 180 : 150;
     const boxHeight = 50;
     const boxY = doc.y;
     const spacing = 15;
@@ -196,6 +227,11 @@ const addSummaryBox = (doc, stats, isLandscape = false) => {
         { label: 'Hadir', value: stats.hadir, color: COLORS.success },
         { label: 'Tidak Hadir', value: stats.tidakHadir, color: COLORS.danger }
     ];
+    if (stats.izinSakit !== undefined) {
+        boxes.push({ label: 'Izin / Sakit', value: stats.izinSakit, color: COLORS.warning });
+    }
+    // Four boxes still fit the 515pt content width of a portrait page
+    const boxWidth = isLandscape ? 180 : (boxes.length > 3 ? 115 : 150);
 
     const totalWidth = (boxWidth * boxes.length) + (spacing * (boxes.length - 1));
     let startX = (pageWidth - totalWidth) / 2;
@@ -275,17 +311,8 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
         })
     ]);
 
-    // Map existing attendance
-    const attendanceMap = new Map();
-    absensi.forEach(a => {
-        attendanceMap.set(a.id_user, a);
-    });
-
-    // Calculate stats
-    let hadirCount = 0;
-    peserta.forEach(p => {
-        if (attendanceMap.has(p.id_mahasiswa)) hadirCount++;
-    });
+    // The students of this session with their status, and the counts
+    const { rows: kehadiran, summary } = buildKehadiranSesi(sesi, peserta, absensi);
 
     // 2. Generate PDF
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -305,23 +332,25 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
 
     // Summary Stats Box
     addSummaryBox(doc, {
-        total: peserta.length,
-        hadir: hadirCount,
-        tidakHadir: peserta.length - hadirCount
+        total: summary.total,
+        hadir: summary.hadir,
+        tidakHadir: summary.tidak_hadir,
+        izinSakit: summary.izin + summary.sakit
     });
 
     // Table Data
-    const tableData = peserta.map((p, index) => {
-        const record = attendanceMap.get(p.id_mahasiswa);
-        const status = record ? '✓ HADIR' : '✗ TIDAK HADIR';
-        const waktu = record ? new Date(record.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ }) : '-';
+    const tableData = kehadiran.map((row, index) => {
+        const label = statusLabel(row.status);
+        let status = label;
+        if (isPresentStatus(row.status)) status = `✓ ${label}`;
+        else if (!isExcusedStatus(row.status)) status = `✗ ${label}`;
 
         return [
             (index + 1).toString(),
-            p.mahasiswa.username, // NIM
-            p.mahasiswa.nama,
+            row.peserta.mahasiswa.username, // NIM
+            row.peserta.mahasiswa.nama,
             status,
-            waktu
+            waktuAbsenLabel(row)
         ];
     });
 
@@ -349,6 +378,8 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
             if (i === 3) {
                 if (rowData[3] && rowData[3].includes('TIDAK HADIR')) {
                     doc.font("Helvetica-Bold").fillColor(COLORS.danger);
+                } else if (rowData[3] === 'IZIN' || rowData[3] === 'SAKIT') {
+                    doc.font("Helvetica-Bold").fillColor(COLORS.warning);
                 } else if (rowData[3]) {
                     doc.font("Helvetica-Bold").fillColor(COLORS.success);
                 }
@@ -404,9 +435,9 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
     ]);
 
     // Matrix Processing
-    const absensiMap = new Map(); // key: "userId_sesiId" -> true
+    const absensiMap = new Map(); // key: "userId_sesiId" -> status
     allAbsensi.forEach(a => {
-        absensiMap.set(`${a.id_user}_${a.id_sesi_absensi}`, true);
+        absensiMap.set(`${a.id_user}_${a.id_sesi_absensi}`, absensiStatus(a));
     });
 
     // 5. Generate PDF
@@ -441,7 +472,7 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
             p.mahasiswa.nama
         ];
 
-        // ✓ = Hadir, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
+        // ✓ = Hadir, T = Telat, I = Izin, S = Sakit, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
         const rekap = buildRekapKehadiran(p, sessions, absensiMap, now);
         row.push(...rekap.cells);
 
@@ -475,11 +506,13 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
         prepareRow: (row, i, j, rect, rowData) => {
             doc.font("Helvetica").fontSize(8).fillColor(COLORS.dark);
 
-            // Conditional Coloring for ✓/✗
+            // Conditional Coloring for ✓/T, I/S and ✗
             if (i >= 3 && i < headers.length - 2) {
                 const val = rowData[i];
-                if (val === '✓') {
+                if (val === '✓' || val === 'T') {
                     doc.fillColor(COLORS.success).font("Helvetica-Bold");
+                } else if (val === 'I' || val === 'S') {
+                    doc.fillColor(COLORS.warning).font("Helvetica-Bold");
                 } else if (val === '✗') {
                     doc.fillColor(COLORS.danger).font("Helvetica-Bold");
                 }
@@ -504,8 +537,11 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
     doc.font('Helvetica').fontSize(9).fillColor(COLORS.gray);
     doc.text('Keterangan: ', 40, legendY);
     doc.font('Helvetica-Bold').fillColor(COLORS.success).text('✓ = Hadir', 110, legendY);
-    doc.font('Helvetica-Bold').fillColor(COLORS.danger).text('✗ = Tidak Hadir', 170, legendY);
-    doc.font('Helvetica').fillColor(COLORS.gray).text('- = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)', 260, legendY);
+    doc.font('Helvetica-Bold').fillColor(COLORS.success).text('T = Telat', 165, legendY);
+    doc.font('Helvetica-Bold').fillColor(COLORS.warning).text('I = Izin', 215, legendY);
+    doc.font('Helvetica-Bold').fillColor(COLORS.warning).text('S = Sakit', 260, legendY);
+    doc.font('Helvetica-Bold').fillColor(COLORS.danger).text('✗ = Tidak Hadir', 310, legendY);
+    doc.font('Helvetica').fillColor(COLORS.gray).text('- = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)', 400, legendY);
 
     // Footer
     addFooter(doc, true);
@@ -554,8 +590,8 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
         })
     ]);
 
-    const attendanceMap = new Map();
-    absensi.forEach(a => attendanceMap.set(a.id_user, a));
+    // The students of this session with their status, and the counts
+    const { rows: kehadiran, summary } = buildKehadiranSesi(sesi, peserta, absensi);
 
     // Create Excel Workbook
     const workbook = new ExcelJS.Workbook();
@@ -597,26 +633,25 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
     });
 
     // Data rows
-    peserta.forEach((p, index) => {
-        const record = attendanceMap.get(p.id_mahasiswa);
-        const status = record ? 'HADIR' : 'TIDAK HADIR';
-        const waktu = record ? new Date(record.createdAt).toLocaleTimeString('id-ID', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ
-        }) : '-';
+    kehadiran.forEach((kehadiranRow, index) => {
+        const status = statusLabel(kehadiranRow.status);
 
         const row = worksheet.addRow([
             index + 1,
-            p.mahasiswa.username,
-            p.mahasiswa.nama,
+            kehadiranRow.peserta.mahasiswa.username,
+            kehadiranRow.peserta.mahasiswa.nama,
             status,
-            waktu
+            waktuAbsenLabel(kehadiranRow)
         ]);
 
         // Style status cell
         const statusCell = row.getCell(4);
-        if (status === 'HADIR') {
+        if (isPresentStatus(kehadiranRow.status)) {
             statusCell.font = { bold: true, color: { argb: 'FF1B5E20' } };
             statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
+        } else if (isExcusedStatus(kehadiranRow.status)) {
+            statusCell.font = { bold: true, color: { argb: 'FFFF8F00' } };
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3E0' } };
         } else {
             statusCell.font = { bold: true, color: { argb: 'FFB71C1C' } };
             statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBEE' } };
@@ -633,14 +668,21 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
         { width: 15 },  // NIM
         { width: 30 },  // Nama
         { width: 15 },  // Status
-        { width: 15 }   // Waktu
+        { width: 15 },  // Waktu
+        { width: 15 }   // Izin/Sakit (summary row)
     ];
 
-    // Summary row
+    // Summary row: Hadir = HADIR + TELAT, Tidak Hadir = ALPHA + no record, Izin/Sakit are excused
     worksheet.addRow([]);
-    const hadirCount = absensi.length;
-    const summary = worksheet.addRow(['', '', `Total: ${peserta.length} Mahasiswa`, `Hadir: ${hadirCount}`, `Tidak Hadir: ${peserta.length - hadirCount}`]);
-    summary.font = { bold: true };
+    const summaryRow = worksheet.addRow([
+        '',
+        '',
+        `Total: ${summary.total} Mahasiswa`,
+        `Hadir: ${summary.hadir}`,
+        `Tidak Hadir: ${summary.tidak_hadir}`,
+        `Izin/Sakit: ${summary.izin + summary.sakit}`
+    ]);
+    summaryRow.font = { bold: true };
 
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -690,8 +732,8 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
         })
     ]);
 
-    const absensiMap = new Map();
-    allAbsensi.forEach(a => absensiMap.set(`${a.id_user}_${a.id_sesi_absensi}`, true));
+    const absensiMap = new Map(); // key: "userId_sesiId" -> status
+    allAbsensi.forEach(a => absensiMap.set(`${a.id_user}_${a.id_sesi_absensi}`, absensiStatus(a)));
 
     // Create Excel Workbook
     const workbook = new ExcelJS.Workbook();
@@ -742,7 +784,7 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
     peserta.forEach((p, idx) => {
         const rowData = [idx + 1, p.mahasiswa.username, p.mahasiswa.nama];
 
-        // ✓ = Hadir, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
+        // ✓ = Hadir, T = Telat, I = Izin, S = Sakit, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
         const rekap = buildRekapKehadiran(p, sessions, absensiMap, now);
         rowData.push(...rekap.cells);
 
@@ -754,16 +796,18 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
         // Style attendance cells
         for (let i = 4; i <= 3 + sessions.length; i++) {
             const cell = row.getCell(i);
-            if (cell.value === '✓') {
+            if (cell.value === '✓' || cell.value === 'T') {
                 cell.font = { bold: true, color: { argb: 'FF1B5E20' } };
+            } else if (cell.value === 'I' || cell.value === 'S') {
+                cell.font = { bold: true, color: { argb: 'FFFF8F00' } };
             } else if (cell.value === '✗') {
                 cell.font = { bold: true, color: { argb: 'FFB71C1C' } };
             }
             cell.alignment = { horizontal: 'center' };
         }
 
-        // Style percentage cell
-        const percentCell = row.getCell(4 + sessions.length);
+        // Style percentage cell (after the Total column)
+        const percentCell = row.getCell(5 + sessions.length);
         if (percentage >= 80) {
             percentCell.font = { bold: true, color: { argb: 'FF1B5E20' } };
             percentCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
@@ -782,7 +826,7 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
 
     // Legend
     worksheet.addRow([]);
-    worksheet.addRow(['Keterangan: ✓ = Hadir, ✗ = Tidak Hadir, - = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)']);
+    worksheet.addRow([`Keterangan: ${REKAP_LEGEND}`]);
 
     // Set column widths
     const columns = [

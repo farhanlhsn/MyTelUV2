@@ -1,5 +1,6 @@
 const admin = require('firebase-admin');
 const prisma = require('./prisma');
+const { formatJakarta } = require('./timezone');
 const path = require('path');
 const fs = require('fs');
 
@@ -201,12 +202,17 @@ const sendSocialNotification = async (userId, type, actorName, postPreview) => {
 };
 
 /**
- * Send push notification to all students in a class when attendance is opened
+ * Send a push notification to every student enrolled in a class (multicast).
+ * Shared by the class-wide notifications (absensi opened, jadwal pengganti).
  * @param {number} classId - Class ID
- * @param {string} className - Class name (e.g. IF-45-01)
- * @param {string} matakuliahName - Subject name (e.g. Alpro)
+ * @param {object} notification
+ * @param {string} notification.title
+ * @param {string} notification.body
+ * @param {object} notification.data - string values only (FCM data payload)
+ * @param {string} [notification.channelId='absensi_notifications'] - Android channel
+ * @param {string} [notification.label='Kelas'] - name used in the log lines
  */
-const sendAbsensiNotification = async (classId, className, matakuliahName) => {
+const sendKelasNotification = async (classId, { title, body, data, channelId = 'absensi_notifications', label = 'Kelas' }) => {
     try {
         // Fetch all students enrolled in the class with FCM tokens
         const peserta = await prisma.pesertaKelas.findMany({
@@ -229,15 +235,6 @@ const sendAbsensiNotification = async (classId, className, matakuliahName) => {
             return { success: false, error: 'No FCM tokens' };
         }
 
-        const title = '📝 Sesi Absensi Dibuka!';
-        const body = `Sesi absensi untuk kelas ${className} (${matakuliahName}) telah dibuka. Silakan lakukan presensi.`;
-
-        const data = {
-            type: 'ABSENSI_NOTIFICATION',
-            id_kelas: String(classId),
-            timestamp: new Date().toISOString()
-        };
-
         if (!firebaseInitialized) {
             console.warn('Firebase not initialized, skipping notification');
             return { success: false, error: 'Firebase not initialized' };
@@ -254,7 +251,7 @@ const sendAbsensiNotification = async (classId, className, matakuliahName) => {
                 priority: 'high',
                 notification: {
                     sound: 'default',
-                    channelId: 'absensi_notifications'
+                    channelId
                 }
             },
             apns: {
@@ -269,19 +266,93 @@ const sendAbsensiNotification = async (classId, className, matakuliahName) => {
         };
 
         const response = await admin.messaging().sendEachForMulticast(message);
-        console.log(`✅ Absensi notification sent. Success count: ${response.successCount}, Failure count: ${response.failureCount}`);
+        console.log(`✅ ${label} notification sent. Success count: ${response.successCount}, Failure count: ${response.failureCount}`);
         return { success: true, response };
 
     } catch (error) {
-        console.error('❌ Error in sendAbsensiNotification:', error.message);
+        console.error(`❌ Error in ${label} notification:`, error.message);
         return { success: false, error: error.message };
     }
 };
+
+/**
+ * Send push notification to all students in a class when attendance is opened
+ * @param {number} classId - Class ID
+ * @param {string} className - Class name (e.g. IF-45-01)
+ * @param {string} matakuliahName - Subject name (e.g. Alpro)
+ */
+const sendAbsensiNotification = async (classId, className, matakuliahName) => sendKelasNotification(classId, {
+    title: '📝 Sesi Absensi Dibuka!',
+    body: `Sesi absensi untuk kelas ${className} (${matakuliahName}) telah dibuka. Silakan lakukan presensi.`,
+    data: {
+        type: 'ABSENSI_NOTIFICATION',
+        id_kelas: String(classId),
+        timestamp: new Date().toISOString()
+    },
+    label: 'Absensi'
+});
+
+/**
+ * Text of the jadwal pengganti notification (dates and times in WIB).
+ * @param {object} jadwal - see sendJadwalPenggantiNotification
+ * @returns {{title: string, body: string}}
+ */
+const jadwalPenggantiMessage = ({ namaKelas, namaMatakuliah, status, tanggalAsli, tanggalGanti, jamMulaiGanti, jamBerakhirGanti, ruanganGanti, alasan }) => {
+    const kelas = `${namaKelas} (${namaMatakuliah})`;
+    const tanggal = formatJakarta(tanggalAsli);
+
+    if (status === 'LIBUR') {
+        return {
+            title: '📅 Kelas Diliburkan',
+            body: `Kelas ${kelas} pada ${tanggal} diliburkan. Alasan: ${alasan}`
+        };
+    }
+
+    const jam = jamMulaiGanti && jamBerakhirGanti
+        ? ` pukul ${jamMulaiGanti.slice(0, 5)}-${jamBerakhirGanti.slice(0, 5)} WIB`
+        : '';
+    const ruangan = ruanganGanti ? ` di ruang ${ruanganGanti}` : '';
+    return {
+        title: '📅 Jadwal Kelas Diganti',
+        body: `Kelas ${kelas} pada ${tanggal} dipindah ke ${formatJakarta(tanggalGanti)}${jam}${ruangan}. Alasan: ${alasan}`
+    };
+};
+
+/**
+ * Notify the students of a class about a jadwal pengganti (class cancelled or moved).
+ * @param {number} classId - Class ID
+ * @param {object} jadwal
+ * @param {number} jadwal.idJadwalPengganti
+ * @param {string} jadwal.namaKelas
+ * @param {string} jadwal.namaMatakuliah
+ * @param {'LIBUR'|'GANTI_JADWAL'} jadwal.status
+ * @param {Date} jadwal.tanggalAsli
+ * @param {Date|null} [jadwal.tanggalGanti]
+ * @param {string|null} [jadwal.jamMulaiGanti] - "HH:MM:SS"
+ * @param {string|null} [jadwal.jamBerakhirGanti] - "HH:MM:SS"
+ * @param {string|null} [jadwal.ruanganGanti]
+ * @param {string} jadwal.alasan
+ */
+// async: a message that cannot be built (e.g. invalid date) rejects instead of throwing synchronously
+const sendJadwalPenggantiNotification = async (classId, jadwal) => sendKelasNotification(classId, {
+    ...jadwalPenggantiMessage(jadwal),
+    data: {
+        type: 'JADWAL_PENGGANTI_NOTIFICATION',
+        id_kelas: String(classId),
+        id_jadwal_pengganti: String(jadwal.idJadwalPengganti),
+        status: jadwal.status,
+        timestamp: new Date().toISOString()
+    },
+    label: 'Jadwal pengganti'
+});
 
 module.exports = {
     initializeFirebase,
     sendPushNotification,
     sendParkingNotification,
     sendSocialNotification,
-    sendAbsensiNotification
+    sendKelasNotification,
+    sendAbsensiNotification,
+    jadwalPenggantiMessage,
+    sendJadwalPenggantiNotification
 };
