@@ -5,7 +5,7 @@ const { sendParkingNotification } = require('../utils/firebase');
 const { uploadFile } = require('../utils/r2FileHandler');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const FormData = require('form-data');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const CircuitBreaker = require('../utils/CircuitBreaker');
 const { logAudit } = require('../utils/auditLogger');
 const { normalizePlate } = require('../utils/plate');
@@ -451,7 +451,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
             const apiHeaders = pythonServiceHeaders('plate', form.getHeaders());
 
             const response = await plateApiBreaker.fire(async () => {
-                return await axios.post(`${PLATE_SERVICE_URL}/api/recognize-plate`, form, {
+                return await pythonClient.post(`${PLATE_SERVICE_URL}/api/recognize-plate`, form, {
                     headers: apiHeaders,
                     timeout: PLATE_SERVICE_TIMEOUT
                 });

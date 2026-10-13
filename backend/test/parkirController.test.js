@@ -28,10 +28,11 @@ jest.mock('../utils/auditLogger', () => ({
     logAudit: jest.fn(),
 }));
 
-jest.mock('axios');
+// Python AI service calls go through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { get: jest.fn(), post: jest.fn() } }));
 
 // Import modules
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const prisma = require('../utils/prisma');
 const { uploadFile } = require('../utils/r2FileHandler');
 const { sendParkingNotification } = require('../utils/firebase');
@@ -1005,7 +1006,7 @@ describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode'
     beforeEach(() => {
         jest.clearAllMocks();
         process.env.EDGE_DEVICE_SECRET = 'secret123';
-        axios.post.mockReset().mockResolvedValue({ data: { success: false } });
+        pythonClient.post.mockReset().mockResolvedValue({ data: { success: false } });
         prisma.kendaraan.findFirst.mockReset().mockResolvedValue(null);
     });
 
@@ -1024,8 +1025,8 @@ describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode'
         );
         req.files = { image: [{ buffer: Buffer.from('img'), originalname: 'plate.jpg', mimetype: 'image/jpeg', size: 3 }] };
         await parkirController.processEdgeEntry(req, createMockRes());
-        expect(axios.post).toHaveBeenCalledTimes(1);
-        return axios.post.mock.calls[0][2].headers;
+        expect(pythonClient.post).toHaveBeenCalledTimes(1);
+        return pythonClient.post.mock.calls[0][2].headers;
     };
 
     test('does not forward the client x-test-mode header to the plate service', async () => {

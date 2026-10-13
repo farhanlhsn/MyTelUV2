@@ -14,7 +14,8 @@ jest.mock('../utils/prisma', () => ({
     dataBiometrik: { findMany: jest.fn(), findUnique: jest.fn() },
 }));
 
-jest.mock('axios');
+// Python AI service calls go through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { get: jest.fn(), post: jest.fn() } }));
 
 jest.mock('../utils/r2FileHandler', () => ({
     uploadFile: jest.fn().mockResolvedValue({ fileUrl: 'https://example.com/face.jpg' }),
@@ -28,7 +29,7 @@ jest.mock('form-data', () => function FormDataMock() {
 });
 
 const prisma = require('../utils/prisma');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const embeddingCache = require('../utils/embeddingCache');
 const { scanWajah, verifyWajah } = require('../controllers/biometrikController');
 
@@ -88,7 +89,7 @@ describe('scanWajah - who may scan and against whom', () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'File gambar wajib diisi' });
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(pythonClient.post).not.toHaveBeenCalled();
     });
 
     test('DOSEN without id_kelas is rejected with 400 before the face service is called', async () => {
@@ -99,7 +100,7 @@ describe('scanWajah - who may scan and against whom', () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(pythonClient.post).not.toHaveBeenCalled();
     });
 
     test('DOSEN with a non numeric id_kelas is rejected with 400', async () => {
@@ -110,7 +111,7 @@ describe('scanWajah - who may scan and against whom', () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(prisma.kelas.findFirst).not.toHaveBeenCalled();
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(pythonClient.post).not.toHaveBeenCalled();
     });
 
     test("DOSEN scanning another dosen's class gets 403 and the face service is not called", async () => {
@@ -121,7 +122,7 @@ describe('scanWajah - who may scan and against whom', () => {
         await scanWajah(req, res, jest.fn());
 
         expect(res.status).toHaveBeenCalledWith(403);
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(pythonClient.post).not.toHaveBeenCalled();
     });
 
     test('DOSEN scanning a class that does not exist gets 404', async () => {
@@ -132,14 +133,14 @@ describe('scanWajah - who may scan and against whom', () => {
         await scanWajah(req, res, jest.fn());
 
         expect(res.status).toHaveBeenCalledWith(404);
-        expect(axios.post).not.toHaveBeenCalled();
+        expect(pythonClient.post).not.toHaveBeenCalled();
     });
 
     test("DOSEN scanning their own class only matches that class's active participants", async () => {
         prisma.kelas.findFirst.mockResolvedValue({ id_kelas: 5, id_dosen: 2 });
         // Only user 11 is enrolled: the detected face [1,0,0] belongs to user 10 who is NOT in the class.
         prisma.pesertaKelas.findMany.mockResolvedValue([{ id_mahasiswa: 11 }]);
-        axios.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
+        pythonClient.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
 
         const req = createReq({ user: { id_user: 2, role: 'DOSEN' }, body: { id_kelas: '5' } });
         const res = createRes();
@@ -160,7 +161,7 @@ describe('scanWajah - who may scan and against whom', () => {
     test('DOSEN scanning their own class identifies an enrolled student without exposing similarity', async () => {
         prisma.kelas.findFirst.mockResolvedValue({ id_kelas: 5, id_dosen: 2 });
         prisma.pesertaKelas.findMany.mockResolvedValue([{ id_mahasiswa: 10 }, { id_mahasiswa: 11 }]);
-        axios.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
+        pythonClient.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
 
         const req = createReq({ user: { id_user: 2, role: 'DOSEN' }, body: { id_kelas: '5' } });
         const res = createRes();
@@ -177,7 +178,7 @@ describe('scanWajah - who may scan and against whom', () => {
     });
 
     test('ADMIN without id_kelas scans against every active embedding and still sees similarity', async () => {
-        axios.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
+        pythonClient.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
 
         const req = createReq({ user: { id_user: 1, role: 'ADMIN' } });
         const res = createRes();
@@ -194,7 +195,7 @@ describe('scanWajah - who may scan and against whom', () => {
     test('ADMIN with id_kelas is limited to that class', async () => {
         prisma.kelas.findFirst.mockResolvedValue({ id_kelas: 7, id_dosen: 99 });
         prisma.pesertaKelas.findMany.mockResolvedValue([{ id_mahasiswa: 12 }]);
-        axios.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
+        pythonClient.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0]]));
 
         const req = createReq({ user: { id_user: 1, role: 'ADMIN' }, body: { id_kelas: '7' } });
         const res = createRes();
@@ -208,7 +209,7 @@ describe('scanWajah - who may scan and against whom', () => {
     test('a class with no enrolled biometric candidates returns an empty result', async () => {
         prisma.kelas.findFirst.mockResolvedValue({ id_kelas: 5, id_dosen: 2 });
         prisma.pesertaKelas.findMany.mockResolvedValue([]);
-        axios.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0], [0, 1, 0]]));
+        pythonClient.post.mockResolvedValueOnce(detectMultiple([[1, 0, 0], [0, 1, 0]]));
 
         const req = createReq({ user: { id_user: 2, role: 'DOSEN' }, body: { id_kelas: '5' } });
         const res = createRes();
@@ -230,7 +231,7 @@ describe('verifyWajah - similarity is only for ADMIN', () => {
 
     test('MAHASISWA match response has no similarity or confidence', async () => {
         prisma.dataBiometrik.findUnique.mockResolvedValue(row(10, [1, 0, 0]));
-        axios.post
+        pythonClient.post
             .mockResolvedValueOnce(faceDetected)
             .mockResolvedValueOnce({ data: { is_match: true, best_match_index: 0, similarity: 0.93 } });
 
@@ -249,7 +250,7 @@ describe('verifyWajah - similarity is only for ADMIN', () => {
 
     test('MAHASISWA no-match response has no best_similarity', async () => {
         prisma.dataBiometrik.findUnique.mockResolvedValue(row(10, [0, 1, 0]));
-        axios.post
+        pythonClient.post
             .mockResolvedValueOnce(faceDetected)
             .mockResolvedValueOnce({ data: { is_match: false, best_match_index: 0, similarity: 0.12 } });
 
@@ -265,7 +266,7 @@ describe('verifyWajah - similarity is only for ADMIN', () => {
     });
 
     test('ADMIN still receives similarity and confidence', async () => {
-        axios.post
+        pythonClient.post
             .mockResolvedValueOnce(faceDetected)
             .mockResolvedValueOnce({ data: { is_match: true, best_match_index: 0, similarity: 0.93 } });
 

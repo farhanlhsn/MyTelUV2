@@ -18,7 +18,8 @@ jest.mock('../utils/prisma', () => ({
     $queryRaw: jest.fn().mockResolvedValue([]),
 }));
 
-jest.mock('axios');
+// Python AI service calls go through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { get: jest.fn(), post: jest.fn() } }));
 
 jest.mock('fs', () => ({
     ...jest.requireActual('fs'),
@@ -47,7 +48,7 @@ jest.mock('form-data', () => {
 
 // Import mocked modules
 const prisma = require('../utils/prisma');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const fs = require('fs');
 const embeddingCache = require('../utils/embeddingCache');
 
@@ -84,7 +85,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        axios.post.mockReset();
+        pythonClient.post.mockReset();
         embeddingCache.invalidateCache();
         prisma.dataBiometrik.findUnique.mockReset();
         prisma.pesertaKelas.findMany.mockReset();
@@ -259,7 +260,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: false, error: 'No face detected' }
             });
 
@@ -272,7 +273,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'No face detected'
+                message: expect.stringMatching(/Wajah tidak terdeteksi/)
             });
         });
 
@@ -284,7 +285,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: false, error: null }
             });
 
@@ -311,7 +312,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 4: User Not Registered Biometric', () => {
         test('TC004a - Should return 400 when user has no biometric data', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [0.1, 0.2, 0.3] }
             });
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce(null);
@@ -330,7 +331,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         });
 
         test('TC004b - Should return 400 when biometric is soft deleted', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [0.1, 0.2, 0.3] }
             });
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
@@ -361,7 +362,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 5: Face Not Matched', () => {
         test('TC005 - Should return 400 when face does not match', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [1, 0, 0] }
             });
 
@@ -399,7 +400,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 6: Not Enrolled in Any Class', () => {
         test('TC006 - Should return 400 when user not enrolled in any class', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -436,7 +437,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 7: No Active Session', () => {
         test('TC007 - Should return 400 when no active session', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -474,7 +475,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 8: Already Marked Attendance', () => {
         test('TC008 - Should return 409 when already marked attendance', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -517,7 +518,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 9: Location Out of Area', () => {
         test('TC009 - Should return 403 when location is out of area', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -567,7 +568,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC010 - Should return 201 when all checks pass with location', async () => {
             const now = new Date();
 
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -633,7 +634,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC011 - Should return 201 when all checks pass without location', async () => {
             const now = new Date();
 
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -709,7 +710,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC012 - client x-test-mode header is ignored: the face service is called and a mismatch is rejected', async () => {
             delete process.env.TEST_MODE;
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [1, 0, 0] }
             });
 
@@ -719,8 +720,8 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
             await biometrikAbsen(req, res, next);
 
-            expect(axios.post).toHaveBeenCalledTimes(1);
-            expect(axios.post.mock.calls[0][0]).toMatch(/\/detect-face$/);
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
+            expect(pythonClient.post.mock.calls[0][0]).toMatch(/\/detect-face$/);
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 message: 'Wajah tidak cocok'
@@ -732,12 +733,12 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             process.env.FACE_API_KEY = 'face-secret-key';
             delete process.env.TEST_MODE;
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
-            axios.post.mockResolvedValueOnce({ data: { success: true, embedding: [1, 0, 0] } });
+            pythonClient.post.mockResolvedValueOnce({ data: { success: true, embedding: [1, 0, 0] } });
 
             await biometrikAbsen(createMockReq(), createMockRes(), jest.fn());
 
-            expect(axios.post).toHaveBeenCalledTimes(1);
-            const sentHeaders = axios.post.mock.calls[0][2].headers;
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
+            const sentHeaders = pythonClient.post.mock.calls[0][2].headers;
             expect(sentHeaders['X-API-Key']).toBe('face-secret-key');
             expect(Object.keys(sentHeaders).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
         });
@@ -745,7 +746,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC013 - client x-test-mode header is ignored: a failed detection is rejected', async () => {
             delete process.env.TEST_MODE;
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: false, error: 'No face detected' }
             });
 
@@ -754,11 +755,11 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
             await biometrikAbsen(req, res, jest.fn());
 
-            expect(axios.post).toHaveBeenCalledTimes(1);
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'No face detected'
+                message: expect.stringMatching(/Wajah tidak terdeteksi/)
             });
         });
 
@@ -772,7 +773,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
             await biometrikAbsen(req, res, jest.fn());
 
-            expect(axios.post).not.toHaveBeenCalled();
+            expect(pythonClient.post).not.toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
@@ -795,7 +796,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockRejectedValueOnce(new Error('Service unavailable'));
+            pythonClient.post.mockRejectedValueOnce(new Error('Service unavailable'));
 
             const req = createMockReq();
             const res = createMockRes();

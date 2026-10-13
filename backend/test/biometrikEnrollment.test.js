@@ -15,7 +15,8 @@ jest.mock('../utils/prisma', () => ({
     },
 }));
 
-jest.mock('axios');
+// Python AI service calls go through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { get: jest.fn(), post: jest.fn() } }));
 
 jest.mock('../utils/r2FileHandler', () => ({
     uploadFile: jest.fn().mockResolvedValue({ fileUrl: 'https://example.com/face.jpg' }),
@@ -34,7 +35,7 @@ jest.mock('form-data', () => function FormDataMock() {
 });
 
 const prisma = require('../utils/prisma');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const { uploadFile } = require('../utils/r2FileHandler');
 const { addBiometrik, editBiometrik } = require('../controllers/biometrikController');
 
@@ -79,7 +80,7 @@ describe('addBiometrik - duplicate face guard', () => {
     });
 
     test("rejects with 409 when the face matches another active user's embedding", async () => {
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
         const req = createReq({ body: { id_user: '20' } });
         const res = createRes();
 
@@ -92,7 +93,7 @@ describe('addBiometrik - duplicate face guard', () => {
     });
 
     test('only other users active biometric rows are candidates', async () => {
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
         const req = createReq({ body: { id_user: '20' } });
 
         await addBiometrik(req, createRes(), jest.fn());
@@ -103,7 +104,7 @@ describe('addBiometrik - duplicate face guard', () => {
     });
 
     test('registers the face when it matches nobody else', async () => {
-        axios.post.mockResolvedValueOnce(faceDetected([0, 0, 1]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([0, 0, 1]));
         prisma.dataBiometrik.upsert.mockResolvedValue({
             id_biometrik: 5, id_user: 20, photo_url: 'https://example.com/face.jpg', createdAt: new Date(),
         });
@@ -118,7 +119,7 @@ describe('addBiometrik - duplicate face guard', () => {
 
     test('registers the face when there are no other enrolled users', async () => {
         prisma.dataBiometrik.findMany.mockResolvedValue([]);
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
         prisma.dataBiometrik.upsert.mockResolvedValue({
             id_biometrik: 5, id_user: 20, photo_url: 'https://example.com/face.jpg', createdAt: new Date(),
         });
@@ -136,7 +137,7 @@ describe('editBiometrik - duplicate face guard', () => {
     });
 
     test("rejects with 409 when the new face matches another active user's embedding", async () => {
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0]));
         const req = createReq({ params: { id_user: '20' } });
         const res = createRes();
 
@@ -152,7 +153,7 @@ describe('editBiometrik - duplicate face guard', () => {
     });
 
     test('updates the face when it matches nobody else', async () => {
-        axios.post.mockResolvedValueOnce(faceDetected([0, 1, 0]));
+        pythonClient.post.mockResolvedValueOnce(faceDetected([0, 1, 0]));
         prisma.dataBiometrik.update.mockResolvedValue({
             id_biometrik: 7, id_user: 20, photo_url: 'https://example.com/face.jpg', updatedAt: new Date(),
         });
@@ -182,7 +183,7 @@ describe('duplicate face guard is skipped in TEST_MODE', () => {
     test('addBiometrik enrolls a face identical to another user without querying other embeddings', async () => {
         prisma.user.findUnique.mockResolvedValue({ id_user: 20, nama: 'Mhs 20' });
         prisma.dataBiometrik.findUnique.mockResolvedValue(null);
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
         prisma.dataBiometrik.upsert.mockResolvedValue({
             id_biometrik: 5, id_user: 20, photo_url: 'https://example.com/face.jpg', createdAt: new Date(),
         });
@@ -196,7 +197,7 @@ describe('duplicate face guard is skipped in TEST_MODE', () => {
 
     test('editBiometrik updates to a face identical to another user without querying other embeddings', async () => {
         prisma.dataBiometrik.findUnique.mockResolvedValue({ id_biometrik: 7, id_user: 20, deletedAt: null });
-        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
+        pythonClient.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
         prisma.dataBiometrik.update.mockResolvedValue({
             id_biometrik: 7, id_user: 20, photo_url: 'https://example.com/face.jpg', updatedAt: new Date(),
         });

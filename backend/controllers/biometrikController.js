@@ -1,14 +1,14 @@
 const prisma = require("../utils/prisma");
 const asyncHandler = require("express-async-handler");
 const FormData = require("form-data");
-const axios = require("axios");
-const axiosRetry = require("axios-retry").default;
 const { uploadFile, deleteFile } = require("../utils/r2FileHandler");
 const embeddingCache = require("../utils/embeddingCache");
 const { logAudit, BIOMETRIK_ACTIONS } = require("../utils/auditLogger");
 const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
 const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
+const { pythonClient } = require("../utils/pythonClient");
+const { translateFaceServiceError } = require("../utils/faceServiceMessages");
 
 const PYTHON_SERVICE_URL = process.env.FACE_API_URL || "http://localhost:5051";
 const PYTHON_SERVICE_TIMEOUT = parseInt(
@@ -24,27 +24,18 @@ const faceApiBreaker = new CircuitBreaker("FaceAPI", {
   recoveryTimeout: parseInt(process.env.FACE_CB_RECOVERY_TIMEOUT || "30000"),
 });
 
-// Configure axios retry with exponential backoff
-axiosRetry(axios, {
-  retries: 3,
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) =>
-    axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-    error.code === "ECONNABORTED",
-  onRetry: (retryCount, error, requestConfig) => {
-    console.log(
-      `[PythonService] Retry attempt ${retryCount} for ${requestConfig.url}: ${error.message}`,
-    );
-  },
-});
-
 /**
- * Helper function to call Python service with retry, timeout and circuit breaker
+ * Helper function to call the Python face service with timeout and circuit breaker.
+ * Uses the dedicated pythonClient (retries GET/HEAD only), never the global axios.
+ *
+ * The service answers HTTP 400 {success:false, error} for input problems (no face, several faces,
+ * unreadable image). That is a result for the caller, not an outage, so it is returned instead of
+ * thrown: the caller turns it into a 400 and the circuit breaker is not charged with a failure.
  */
 const callPythonService = async (endpoint, formData) => {
   return faceApiBreaker.fire(async () => {
     try {
-      const response = await axios.post(
+      const response = await pythonClient.post(
         `${PYTHON_SERVICE_URL}${endpoint}`,
         formData,
         {
@@ -61,6 +52,14 @@ const callPythonService = async (endpoint, formData) => {
       );
       return response.data;
     } catch (error) {
+      const serviceData = error.response?.data;
+      if (
+        error.response?.status === 400 &&
+        serviceData &&
+        serviceData.success === false
+      ) {
+        return serviceData;
+      }
       console.error(
         "Python service error:",
         error.response?.data || error.message,
@@ -208,7 +207,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
       });
     }
 
@@ -366,7 +365,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
       });
     }
 
@@ -454,7 +453,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
       });
     }
 
@@ -501,7 +500,8 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     });
 
     if (matchResult.error) {
-      throw new Error(matchResult.error);
+      console.error("[Biometrik] find-match error:", matchResult.error);
+      throw new Error(translateFaceServiceError(matchResult.error));
     }
 
     const isAdmin = req.user.role === "ADMIN";
@@ -616,7 +616,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
     if (!facesResult.success) {
       return res.status(400).json({
         status: "error",
-        message: facesResult.error,
+        message: translateFaceServiceError(facesResult.error),
       });
     }
 
@@ -801,7 +801,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       if (!faceResult.success) {
         return res.status(400).json({
           status: "error",
-          message: faceResult.error || "Gagal mendeteksi wajah. Coba ambil foto ulang.",
+          message: translateFaceServiceError(faceResult.error),
         });
       }
     }
