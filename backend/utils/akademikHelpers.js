@@ -158,15 +158,16 @@ const absensiStatus = (absensi) => (absensi ? absensi.status || 'HADIR' : null);
 /**
  * Counts for a list of statuses (null = no Absensi row, which counts as absent like ALPHA).
  *
- * hadir = HADIR + TELAT, tidak_hadir = ALPHA + no row, IZIN/SAKIT are excused. The percentage is
- * hadir / (total - excused) * 100; it is 0 when nothing is left to count (no sessions, or all excused).
+ * hadir = HADIR + TELAT, tidak_hadir = ALPHA + no row, IZIN/SAKIT are excused. dihitung is the
+ * percentage denominator, total - excused; the percentage is hadir / dihitung * 100, and 0 when
+ * dihitung is 0 (no sessions, or all excused).
  *
  * @param {Array<string|null>} statuses
  * @returns {{total: number, hadir: number, telat: number, izin: number, sakit: number,
- *            tidak_hadir: number, persentase: number}}
+ *            tidak_hadir: number, dihitung: number, persentase: number}}
  */
 const summarizeKehadiran = (statuses) => {
-    const summary = { total: 0, hadir: 0, telat: 0, izin: 0, sakit: 0, tidak_hadir: 0, persentase: 0 };
+    const summary = { total: 0, hadir: 0, telat: 0, izin: 0, sakit: 0, tidak_hadir: 0, dihitung: 0, persentase: 0 };
     for (const status of statuses) {
         summary.total++;
         if (isPresentStatus(status)) {
@@ -180,8 +181,8 @@ const summarizeKehadiran = (statuses) => {
             summary.tidak_hadir++;
         }
     }
-    const denominator = summary.total - summary.izin - summary.sakit;
-    summary.persentase = denominator > 0 ? (summary.hadir / denominator) * 100 : 0;
+    summary.dihitung = summary.total - summary.izin - summary.sakit;
+    summary.persentase = summary.dihitung > 0 ? (summary.hadir / summary.dihitung) * 100 : 0;
     return summary;
 };
 

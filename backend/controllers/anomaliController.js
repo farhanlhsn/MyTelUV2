@@ -5,6 +5,7 @@ const { logAudit } = require('../utils/auditLogger'); // Opsional, jika Anda men
 const CircuitBreaker = require('../utils/CircuitBreaker');
 const { globalAnomalyQueue } = require('../utils/TaskQueue');
 const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
+const { isCountableSession, absensiStatus, summarizeKehadiran } = require('../utils/akademikHelpers');
 
 // URL Service Python (Port 5003 sesuai setup anomaly_detection)
 // Gunakan environment variable atau fallback ke localhost
@@ -62,8 +63,8 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 } 
             }
         }),
-        // Ambil record absensi valid
-        prisma.$queryRaw`SELECT id_user, id_sesi_absensi, "createdAt" FROM absensi WHERE id_kelas = ${parseInt(id_kelas)} AND "deletedAt" IS NULL`,
+        // Ambil record absensi valid (with the attendance status: HADIR/TELAT/IZIN/SAKIT/ALPHA)
+        prisma.$queryRaw`SELECT id_user, id_sesi_absensi, "createdAt", status::text AS status FROM absensi WHERE id_kelas = ${parseInt(id_kelas)} AND "deletedAt" IS NULL`,
         // Ambil list semua sesi yang valid
         prisma.sesiAbsensi.findMany({
             where: { 
@@ -74,7 +75,8 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
             select: {
                 id_sesi_absensi: true,
                 mulai: true,
-                selesai: true
+                selesai: true,
+                status: true
             }
         })
     ]);
@@ -117,16 +119,22 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         const anomalies = [];
 
         // Rule 1: TIDAK_HADIR_BERULANG (Jarang Hadir)
-        const attendanceCounts = {};
+        // Per student, over the closed sessions held on/after their enrollment: HADIR/TELAT present,
+        // IZIN/SAKIT excused (left out of the rate), ALPHA or no record absent
+        const now = new Date();
+        const statusByUserSesi = new Map();
         absensi.forEach(a => {
-            attendanceCounts[a.id_user] = (attendanceCounts[a.id_user] || 0) + 1;
+            statusByUserSesi.set(`${a.id_user}_${a.id_sesi_absensi}`, absensiStatus(a));
         });
 
         for (const p of peserta) {
             const uid = p.mahasiswa.id_user;
             const nama = p.mahasiswa.nama;
-            const jumlahHadir = attendanceCounts[uid] || 0;
-            const attendanceRate = totalSesi > 0 ? (jumlahHadir / totalSesi) : 1.0;
+            const rekap = summarizeKehadiran(sesiList
+                .filter(s => isCountableSession(s, p.createdAt, now))
+                .map(s => statusByUserSesi.get(`${uid}_${s.id_sesi_absensi}`) || null));
+            // Nothing to count yet (no closed session since enrollment, or all excused): not an anomaly
+            const attendanceRate = rekap.dihitung > 0 ? (rekap.hadir / rekap.dihitung) : 1.0;
 
             if (attendanceRate <= thresholdJarangHadir) {
                 const confidence = thresholdJarangHadir > 0 ? 1.0 - (attendanceRate / thresholdJarangHadir) : 1.0;

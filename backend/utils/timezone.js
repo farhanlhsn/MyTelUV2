@@ -105,8 +105,9 @@ const formatJakarta = (date = new Date(), { withTime = false } = {}) => {
     return withTime ? `${datePart} ${pad2(hour)}:${pad2(minute)}` : datePart;
 };
 
-// ISO date, optionally with a time: 2026-10-14, 2026-10-14T09:30, 2026-10-14T09:30:00.000(Z|+07:00)
-const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)?(Z|[+-]\d{2}:\d{2})?$/i;
+// ISO date, optionally with a time: 2026-10-14, 2026-10-14T09:30, 2026-10-14T09:30:00.000(Z|+07:00).
+// Seconds may have 1-9 fractional digits (Dart sends microseconds); they are cut to milliseconds.
+const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)?(Z|[+-]\d{2}:\d{2})?$/i;
 
 /**
  * Parse an ISO date or date-time sent by a client. Without a time-zone designator it is a Jakarta
@@ -129,7 +130,8 @@ const parseJakartaDateTime = (value) => {
         return null;
     }
 
-    const date = new Date(`${year}-${month}-${day}${timePart}${zone}`);
+    const millisecondTime = timePart.replace(/(\.\d{3})\d+$/, '$1');
+    const date = new Date(`${year}-${month}-${day}${millisecondTime}${zone}`);
     return Number.isNaN(date.getTime()) ? null : date;
 };
 

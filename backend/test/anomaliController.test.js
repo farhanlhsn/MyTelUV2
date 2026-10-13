@@ -89,8 +89,9 @@ describe('Anomaly Controller Tests', () => {
             const mockAbsensi = [
                 { id_user: 10, id_sesi_absensi: 1, createdAt: new Date() }
             ];
+            // A session that has ended (only ended or closed sessions count)
             const mockSesi = [
-                { id_sesi_absensi: 1, mulai: new Date(), selesai: new Date() }
+                { id_sesi_absensi: 1, mulai: new Date(Date.now() - 3 * 60 * 60 * 1000), selesai: new Date(Date.now() - 60 * 60 * 1000), status: false }
             ];
 
             prisma.$transaction.mockResolvedValue([mockPeserta, mockAbsensi, mockSesi]);
@@ -103,6 +104,92 @@ describe('Anomaly Controller Tests', () => {
             expect(prisma.laporanAnomali.updateMany).toHaveBeenCalled();
             expect(prisma.laporanAnomali.createMany).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        /**
+         * TIDAK_HADIR_BERULANG follows the attendance statuses: HADIR/TELAT present, IZIN/SAKIT excused
+         * (out of the denominator), ALPHA or no record absent; only closed sessions on/after enrollment count
+         */
+        describe('TIDAK_HADIR_BERULANG uses attendance statuses', () => {
+            const closed = (id, day) => ({
+                id_sesi_absensi: id,
+                status: false,
+                mulai: new Date(`2026-09-${day}T01:00:00Z`),
+                selesai: new Date(`2026-09-${day}T03:00:00Z`)
+            });
+            const SESSIONS = [closed(1, '02'), closed(2, '09'), closed(3, '16'), closed(4, '23')];
+            const peserta = (id, createdAt = new Date('2026-09-01T00:00:00Z')) => ({
+                id_mahasiswa: id, createdAt, mahasiswa: { id_user: id, nama: `Mahasiswa ${id}` }
+            });
+            const row = (id_user, id_sesi_absensi, status) => ({
+                id_user, id_sesi_absensi, status, createdAt: new Date('2026-09-02T01:05:00Z')
+            });
+
+            const analyze = async (pesertaList, absensiList, sesiList = SESSIONS) => {
+                prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
+                prisma.systemSetting.findUnique.mockResolvedValue(null); // default threshold 50%
+                prisma.$transaction.mockResolvedValue([pesertaList, absensiList, sesiList]);
+                prisma.laporanAnomali.updateMany.mockResolvedValue({ count: 0 });
+                prisma.laporanAnomali.createMany.mockResolvedValue({ count: 0 });
+
+                const res = createMockRes();
+                await anomaliController.analyzeKelasAttendance(
+                    createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res
+                );
+                expect(res.status).toHaveBeenCalledWith(200);
+                return res.json.mock.calls[0][0].data.filter((a) => a.type_anomali === 'TIDAK_HADIR_BERULANG');
+            };
+
+            test('the attendance query reads each record status', async () => {
+                await analyze([peserta(10)], []);
+
+                const [sql] = prisma.$queryRaw.mock.calls[0];
+                expect(sql.join('?')).toMatch(/status/);
+            });
+
+            test('ALPHA records set by a dosen are not attendance', async () => {
+                // 1 present of 4: 25%, although the student has 3 records
+                const anomalies = await analyze([peserta(10)], [row(10, 1, 'ALPHA'), row(10, 2, 'ALPHA'), row(10, 3, 'HADIR')]);
+
+                expect(anomalies).toHaveLength(1);
+                expect(anomalies[0]).toMatchObject({ id_user: 10 });
+                expect(anomalies[0].description).toContain('Kehadiran rendah: 25%');
+            });
+
+            test('IZIN/SAKIT leave the denominator; TELAT is present', async () => {
+                const anomalies = await analyze([peserta(10), peserta(11)], [
+                    // 1 present of 4 sessions minus 1 excused: 33%
+                    row(10, 1, 'HADIR'), row(10, 2, 'IZIN'), row(10, 3, 'ALPHA'), row(10, 4, 'ALPHA'),
+                    // 2 present of 4 minus 2 excused: 100% (50%, an anomaly, if excused counted as absent)
+                    row(11, 1, 'HADIR'), row(11, 2, 'TELAT'), row(11, 3, 'IZIN'), row(11, 4, 'SAKIT')
+                ]);
+
+                expect(anomalies.map((a) => a.id_user)).toEqual([10]);
+                expect(anomalies[0].description).toContain('Kehadiran rendah: 33%');
+            });
+
+            test('only closed sessions held on/after the enrollment count', async () => {
+                const running = {
+                    id_sesi_absensi: 5,
+                    status: true,
+                    mulai: new Date(Date.now() - 60 * 60 * 1000),
+                    selesai: new Date(Date.now() + 60 * 60 * 1000)
+                };
+                // Enrolled after sessions 1 and 2; present at 3 and 4; session 5 still running: 100%
+                const anomalies = await analyze(
+                    [peserta(10, new Date('2026-09-10T00:00:00Z'))],
+                    [row(10, 3, 'HADIR'), row(10, 4, 'TELAT')],
+                    [...SESSIONS, running]
+                );
+
+                expect(anomalies).toEqual([]);
+            });
+
+            test('a student with nothing to count yet is not flagged', async () => {
+                const anomalies = await analyze([peserta(10, new Date('2026-09-30T00:00:00Z'))], []);
+
+                expect(anomalies).toEqual([]);
+            });
         });
     });
 

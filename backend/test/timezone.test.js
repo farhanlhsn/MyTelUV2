@@ -123,6 +123,13 @@ describe('utils/timezone', () => {
             expect(parseJakartaDateTime('2026-10-14T08:00:00+08:00')).toEqual(new Date('2026-10-14T00:00:00.000Z'));
         });
 
+        test('accepts 1 to 9 fractional digits (microseconds and nanoseconds are cut to milliseconds)', () => {
+            expect(parseJakartaDateTime('2026-10-14T09:30:00.123456')).toEqual(new Date('2026-10-14T02:30:00.123Z'));
+            expect(parseJakartaDateTime('2026-10-13T17:30:00.987654321Z')).toEqual(new Date('2026-10-13T17:30:00.987Z'));
+            expect(parseJakartaDateTime('2026-10-14T09:30:00.5')).toEqual(new Date('2026-10-14T02:30:00.500Z'));
+            expect(parseJakartaDateTime('2026-10-14T09:30:00.1234567890')).toBeNull();
+        });
+
         test.each([['besok'], [''], ['14/10/2026'], ['2026-13-40'], ['2026-02-30'], ['2026-10-14T25:00'], [null], [undefined], [20261014]])('%p is not a date (null)', (value) => {
             expect(parseJakartaDateTime(value)).toBeNull();
         });

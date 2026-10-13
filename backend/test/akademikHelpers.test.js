@@ -143,13 +143,14 @@ describe('attendance status', () => {
 
     test('summarizeKehadiran: excused sessions leave the percentage denominator, no record is absent', () => {
         expect(summarizeKehadiran(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA', null])).toEqual({
-            total: 6, hadir: 2, telat: 1, izin: 1, sakit: 1, tidak_hadir: 2, persentase: 50
+            total: 6, hadir: 2, telat: 1, izin: 1, sakit: 1, tidak_hadir: 2, dihitung: 4, persentase: 50
         });
     });
 
     test('summarizeKehadiran: 0% when there is nothing to count (no sessions, or every session excused)', () => {
         expect(summarizeKehadiran([]).persentase).toBe(0);
-        expect(summarizeKehadiran(['IZIN', 'SAKIT'])).toMatchObject({ total: 2, hadir: 0, tidak_hadir: 0, persentase: 0 });
+        expect(summarizeKehadiran([]).dihitung).toBe(0);
+        expect(summarizeKehadiran(['IZIN', 'SAKIT'])).toMatchObject({ total: 2, hadir: 0, tidak_hadir: 0, dihitung: 0, persentase: 0 });
     });
 
     test('LATE_THRESHOLD_MINUTES defaults to 15 and ignores invalid values', () => {

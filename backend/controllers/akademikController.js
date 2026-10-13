@@ -23,9 +23,9 @@ const { logAudit } = require('../utils/auditLogger');
 const ABSENSI_DUPLIKAT_MESSAGE = "Anda sudah melakukan absensi untuk sesi ini";
 const ABSENSI_OVERRIDE_ACTION = 'ABSENSI_OVERRIDE';
 
-// Attendance percentage in the format the API has always used: "66.7" (a string), or the number 0
-// when nothing is left to count (no counted sessions / students, or all of them excused)
-const formatPersentase = (rekap) => (rekap.total - rekap.izin - rekap.sakit > 0 ? rekap.persentase.toFixed(1) : 0);
+// Attendance percentage of a summarizeKehadiran result in the format the API has always used:
+// "66.7" (a string), or the number 0 when nothing is left to count (rekap.dihitung === 0)
+const formatPersentase = (rekap) => (rekap.dihitung > 0 ? rekap.persentase.toFixed(1) : 0);
 
 // ==================== MATAKULIAH CONTROLLERS ====================
 exports.createMatakuliah = asyncHandler(async (req, res) => {
@@ -2571,8 +2571,7 @@ exports.overrideAbsensi = asyncHandler(async (req, res) => {
     }
 
     // Only the dosen teaching the class, or an admin
-    const isOwnDosen = req.user.role === 'DOSEN' && sesi.kelas.id_dosen === actorId;
-    if (!isOwnDosen && req.user.role !== 'ADMIN') {
+    if (!isDosenAuthorizedForKelas(req.user, sesi.kelas)) {
         return res.status(403).json({
             status: "error",
             message: "Anda hanya dapat mengubah kehadiran pada kelas yang Anda ajar"
@@ -2590,47 +2589,62 @@ exports.overrideAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
-    // Lock and read the current record (for the audit trail), then insert-or-update it in one statement.
-    // ON CONFLICT also covers a check-in that lands between the two (unique uq_absensi_user_sesi), and
-    // restores a soft-deleted record. A new record has no location (koordinat NULL).
+    // Update-or-insert so the audited old status is exactly the one that was replaced:
+    // 1. UPDATE the existing record (active or soft-deleted, which is restored). The FOR UPDATE subquery
+    //    locks it and hands the status it had to RETURNING in the same statement.
+    // 2. No record: INSERT one (no location: koordinat NULL). If a check-in commits in between, the unique
+    //    index (uq_absensi_user_sesi) turns the INSERT into a no-op and the next round updates that
+    //    check-in, reporting HADIR/TELAT as the old status. Each statement sees the latest commits
+    //    (READ COMMITTED), so the second round finds it.
     const { idAbsensi, statusLama } = await prisma.$transaction(async (tx) => {
-        const [current] = await tx.$queryRaw`
-            SELECT id_absensi, status::text AS status, "deletedAt"
-            FROM absensi
-            WHERE id_user = ${idMahasiswa} AND id_sesi_absensi = ${idSesi}
-            FOR UPDATE
-        `;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const [updated] = await tx.$queryRaw`
+                UPDATE absensi AS a
+                SET status = ${status}::"StatusKehadiran",
+                    keterangan = ${keterangan},
+                    diubah_oleh = ${actorId},
+                    "deletedAt" = NULL,
+                    "updatedAt" = NOW()
+                FROM (
+                    SELECT id_absensi, status::text AS status, "deletedAt"
+                    FROM absensi
+                    WHERE id_user = ${idMahasiswa} AND id_sesi_absensi = ${idSesi}
+                    FOR UPDATE
+                ) AS prev
+                WHERE a.id_absensi = prev.id_absensi
+                RETURNING a.id_absensi, prev.status AS status_lama, prev."deletedAt" AS deleted_lama
+            `;
+            if (updated) {
+                return {
+                    idAbsensi: updated.id_absensi,
+                    statusLama: updated.deleted_lama ? null : updated.status_lama
+                };
+            }
 
-        const [saved] = await tx.$queryRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, status, keterangan, diubah_oleh, "updatedAt")
-            VALUES (
-                ${idMahasiswa},
-                ${sesi.id_kelas},
-                ${idSesi},
-                ${sesi.type_absensi}::"TypeAbsensi",
-                NULL,
-                ${status}::"StatusKehadiran",
-                ${keterangan},
-                ${actorId},
-                NOW()
-            )
-            ON CONFLICT (id_user, id_sesi_absensi) DO UPDATE SET
-                status = EXCLUDED.status,
-                keterangan = EXCLUDED.keterangan,
-                diubah_oleh = EXCLUDED.diubah_oleh,
-                "deletedAt" = NULL,
-                "updatedAt" = NOW()
-            RETURNING id_absensi
-        `;
-
-        return {
-            idAbsensi: saved.id_absensi,
-            statusLama: current && !current.deletedAt ? current.status : null
-        };
+            const [inserted] = await tx.$queryRaw`
+                INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, status, keterangan, diubah_oleh, "updatedAt")
+                VALUES (
+                    ${idMahasiswa},
+                    ${sesi.id_kelas},
+                    ${idSesi},
+                    ${sesi.type_absensi}::"TypeAbsensi",
+                    NULL,
+                    ${status}::"StatusKehadiran",
+                    ${keterangan},
+                    ${actorId},
+                    NOW()
+                )
+                ON CONFLICT (id_user, id_sesi_absensi) DO NOTHING
+                RETURNING id_absensi
+            `;
+            if (inserted) {
+                return { idAbsensi: inserted.id_absensi, statusLama: null };
+            }
+        }
+        throw new Error(`Status kehadiran mahasiswa ${idMahasiswa} pada sesi ${idSesi} tidak dapat disimpan`);
     });
 
-    const absensi = await prisma.absensi.findUnique({ where: { id_absensi: idAbsensi } });
-
+    // Committed: audit first, then read the record back for the response
     logAudit({
         action: ABSENSI_OVERRIDE_ACTION,
         performedBy: actorId,
@@ -2638,6 +2652,8 @@ exports.overrideAbsensi = asyncHandler(async (req, res) => {
         details: `id_sesi_absensi=${idSesi} id_kelas=${sesi.id_kelas} status_lama=${statusLama || '-'} status_baru=${status}`,
         ip: req.ip
     });
+
+    const absensi = await prisma.absensi.findUnique({ where: { id_absensi: idAbsensi } });
 
     res.status(200).json({
         status: "success",
