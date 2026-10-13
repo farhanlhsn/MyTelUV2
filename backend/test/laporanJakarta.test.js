@@ -58,7 +58,7 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
             kelas: { id_dosen: 5, nama_kelas: 'A', matakuliah: { nama_matakuliah: 'Basis Data' } }
         });
         prisma.pesertaKelas.findMany.mockResolvedValue([
-            { id_mahasiswa: 10, mahasiswa: { username: '1301', nama: 'Budi' } }
+            { id_mahasiswa: 10, mahasiswa: { username: 'budi', nim_nip: '1301', nama: 'Budi' } }
         ]);
         prisma.absensi.findMany.mockResolvedValue([
             { id_user: 10, createdAt: new Date('2026-10-13T18:35:10Z') }
@@ -69,6 +69,29 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
         expect(headers['content-disposition']).toContain('Sesi_A_2026-10-14.xlsx');
         expect(sheet.getCell('A2').value).toContain('Rabu, 14 Oktober 2026');
         expect(rowValues(sheet, 5)).toEqual([1, '1301', 'Budi', 'HADIR', '01.35.10']);
+    });
+
+    test('the NIM column shows nim_nip, never the username (- when the student has no NIM)', async () => {
+        prisma.sesiAbsensi.findUnique.mockResolvedValue({
+            id_sesi_absensi: 9,
+            id_kelas: 1,
+            mulai: new Date('2026-10-14T01:00:00Z'),
+            kelas: { id_dosen: 5, nama_kelas: 'A', matakuliah: { nama_matakuliah: 'Basis Data' } }
+        });
+        prisma.pesertaKelas.findMany.mockResolvedValue([
+            { id_mahasiswa: 10, mahasiswa: { username: 'budi.s', nim_nip: '1301204455', nama: 'Budi' } },
+            { id_mahasiswa: 11, mahasiswa: { username: 'cici', nim_nip: null, nama: 'Cici' } }
+        ]);
+        prisma.absensi.findMany.mockResolvedValue([]);
+
+        const { sheet } = await runExcelExport(generateLaporanSesiExcel, { params: { id: '9' }, user: admin });
+
+        expect(rowValues(sheet, 5).slice(0, 3)).toEqual([1, '1301204455', 'Budi']);
+        expect(rowValues(sheet, 6).slice(0, 3)).toEqual([2, '-', 'Cici']);
+        // students are listed by NIM
+        expect(prisma.pesertaKelas.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            orderBy: { mahasiswa: { nim_nip: 'asc' } }
+        }));
     });
 
     test('class recap counts only closed sessions on/after each enrollment', async () => {
@@ -86,7 +109,7 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
             { id_sesi_absensi: 3, status: true, mulai: new Date(Date.now() - HOUR), selesai: new Date(Date.now() + HOUR) }
         ]);
         prisma.pesertaKelas.findMany.mockResolvedValue([
-            { id_mahasiswa: 10, createdAt: new Date('2020-02-01T00:00:00Z'), mahasiswa: { username: '1301', nama: 'Budi' } }
+            { id_mahasiswa: 10, createdAt: new Date('2020-02-01T00:00:00Z'), mahasiswa: { username: 'budi', nim_nip: '1301', nama: 'Budi' } }
         ]);
         prisma.absensi.findMany.mockResolvedValue([
             { id_user: 10, id_sesi_absensi: 2 }
@@ -108,12 +131,12 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
         });
         const enrolled = new Date('2026-10-01T00:00:00Z');
         prisma.pesertaKelas.findMany.mockResolvedValue([
-            { id_mahasiswa: 10, createdAt: enrolled, mahasiswa: { username: '1301', nama: 'Budi' } },
-            { id_mahasiswa: 11, createdAt: enrolled, mahasiswa: { username: '1302', nama: 'Cici' } },
-            { id_mahasiswa: 12, createdAt: enrolled, mahasiswa: { username: '1303', nama: 'Dedi' } },
-            { id_mahasiswa: 13, createdAt: enrolled, mahasiswa: { username: '1304', nama: 'Eka' } },
+            { id_mahasiswa: 10, createdAt: enrolled, mahasiswa: { username: 'budi', nim_nip: '1301', nama: 'Budi' } },
+            { id_mahasiswa: 11, createdAt: enrolled, mahasiswa: { username: 'cici', nim_nip: '1302', nama: 'Cici' } },
+            { id_mahasiswa: 12, createdAt: enrolled, mahasiswa: { username: 'dedi', nim_nip: '1303', nama: 'Dedi' } },
+            { id_mahasiswa: 13, createdAt: enrolled, mahasiswa: { username: 'eka', nim_nip: '1304', nama: 'Eka' } },
             // Enrolled after the session without a record: not part of this session
-            { id_mahasiswa: 14, createdAt: new Date('2026-10-20T00:00:00Z'), mahasiswa: { username: '1305', nama: 'Fafa' } }
+            { id_mahasiswa: 14, createdAt: new Date('2026-10-20T00:00:00Z'), mahasiswa: { username: 'fafa', nim_nip: '1305', nama: 'Fafa' } }
         ]);
         prisma.absensi.findMany.mockResolvedValue([
             { id_user: 10, status: 'HADIR', createdAt: new Date('2026-10-14T01:05:00Z') },
@@ -142,7 +165,7 @@ describe('Laporan Excel - Asia/Jakarta and countable sessions', () => {
         });
         prisma.sesiAbsensi.findMany.mockResolvedValue([closed(1, '02'), closed(2, '09'), closed(3, '16'), closed(4, '23'), closed(5, '30')]);
         prisma.pesertaKelas.findMany.mockResolvedValue([
-            { id_mahasiswa: 10, createdAt: new Date('2020-02-01T00:00:00Z'), mahasiswa: { username: '1301', nama: 'Budi' } }
+            { id_mahasiswa: 10, createdAt: new Date('2020-02-01T00:00:00Z'), mahasiswa: { username: 'budi', nim_nip: '1301', nama: 'Budi' } }
         ]);
         prisma.absensi.findMany.mockResolvedValue([
             { id_user: 10, id_sesi_absensi: 1, status: 'HADIR' },

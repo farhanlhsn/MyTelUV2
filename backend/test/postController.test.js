@@ -20,9 +20,14 @@ jest.mock('../utils/r2FileHandler', () => ({
     fileExists: jest.fn(),
 }));
 
+jest.mock('../utils/firebase', () => ({
+    sendSocialNotification: jest.fn().mockResolvedValue({ success: true }),
+}));
+
 // Import modules
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
+const { sendSocialNotification } = require('../utils/firebase');
 const postController = require('../controllers/postController');
 
 // Helper functions
@@ -72,6 +77,62 @@ describe('Post Controller Tests', () => {
                     expect.objectContaining({ id_post: 1, isLiked: true, likeCount: 5 }),
                     expect.objectContaining({ id_post: 2, isLiked: false, likeCount: 0 })
                 ])
+            }));
+        });
+
+        test('the feed does not load the comment rows (only the comment count)', async () => {
+            prisma.$transaction.mockResolvedValue([[], 0]);
+
+            await postController.getAllPosts(createMockReq({}, { id_user: 1 }, {}, {}), createMockRes());
+
+            const [findArgs] = prisma.post.findMany.mock.calls[0];
+            expect(findArgs.include).not.toHaveProperty('comments');
+            expect(findArgs.include._count.select.comments).toEqual({ where: { deletedAt: null } });
+        });
+
+        test('limit is clamped to 1..100', async () => {
+            prisma.$transaction.mockResolvedValue([[], 0]);
+
+            await postController.getAllPosts(createMockReq({}, { id_user: 1 }, {}, { limit: '100000' }), createMockRes());
+
+            expect(prisma.post.findMany.mock.calls[0][0].take).toBe(100);
+        });
+    });
+
+    /**
+     * LIMIT CLAMPING (comments, my posts)
+     */
+    describe('limit clamping', () => {
+        test.each([
+            ['100000', 100],
+            ['-5', 1],
+            ['abc', 20]
+        ])('getComments limit=%s -> take %i (default 20)', async (limit, take) => {
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1 });
+            prisma.$transaction.mockResolvedValue([[], 0]);
+            const res = createMockRes();
+
+            await postController.getComments(createMockReq({}, { id_user: 1 }, { id: '1' }, { page: '2', limit }), res);
+
+            expect(prisma.postComment.findMany).toHaveBeenCalledWith(expect.objectContaining({ take, skip: take }));
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                pagination: expect.objectContaining({ page: 2, limit: take })
+            }));
+        });
+
+        test.each([
+            ['100000', 100],
+            ['0', 10],
+            [undefined, 10]
+        ])('getMyPosts limit=%s -> take %i (default 10)', async (limit, take) => {
+            prisma.$transaction.mockResolvedValue([[], 0]);
+            const res = createMockRes();
+
+            await postController.getMyPosts(createMockReq({}, { id_user: 1 }, {}, { page: '-3', limit }), res);
+
+            expect(prisma.post.findMany).toHaveBeenCalledWith(expect.objectContaining({ take, skip: 0 }));
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                pagination: expect.objectContaining({ page: 1, limit: take })
             }));
         });
     });
@@ -204,6 +265,56 @@ describe('Post Controller Tests', () => {
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ isLiked: false, likeCount: 0 })
             }));
+        });
+
+        test('a like that loses the race to a parallel like (P2002) is treated as already liked: 200', async () => {
+            const req = createMockReq({}, { id_user: 1 }, { id: 1 });
+            const res = createMockRes();
+
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1, id_user: 2, content: 'Hello' });
+            prisma.postLike.findUnique.mockResolvedValue(null); // both requests saw "not liked"
+            prisma.postLike.create.mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+            prisma.postLike.count.mockResolvedValue(1);
+            prisma.user.findUnique.mockResolvedValue({ nama: 'Alice' });
+
+            await postController.toggleLike(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                status: 'success',
+                data: { isLiked: true, likeCount: 1 }
+            }));
+            // the winning request already notified the owner
+            expect(prisma.user.findUnique).not.toHaveBeenCalled();
+            expect(sendSocialNotification).not.toHaveBeenCalled();
+        });
+
+        test('an unlike that loses the race to a parallel unlike (P2025) is treated as not liked: 200', async () => {
+            const req = createMockReq({}, { id_user: 1 }, { id: 1 });
+            const res = createMockRes();
+
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1, id_user: 2, content: 'Hello' });
+            prisma.postLike.findUnique.mockResolvedValue({ id_like: 100 });
+            prisma.postLike.delete.mockRejectedValueOnce(Object.assign(new Error('Record to delete does not exist'), { code: 'P2025' }));
+            prisma.postLike.count.mockResolvedValue(0);
+
+            await postController.toggleLike(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                data: { isLiked: false, likeCount: 0 }
+            }));
+        });
+
+        test('any other error while liking still fails', async () => {
+            const req = createMockReq({}, { id_user: 1 }, { id: 1 });
+            const res = createMockRes();
+
+            prisma.post.findFirst.mockResolvedValue({ id_post: 1, id_user: 2, content: 'Hello' });
+            prisma.postLike.findUnique.mockResolvedValue(null);
+            prisma.postLike.create.mockRejectedValueOnce(new Error('connection lost'));
+
+            await expect(postController.toggleLike(req, res)).rejects.toThrow('connection lost');
         });
     });
 

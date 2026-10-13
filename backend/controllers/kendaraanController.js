@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
-const { sendPushNotification } = require('../utils/firebase');
+const { sendUserNotification } = require('../utils/firebase');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 const { normalizePlate } = require('../utils/plate');
@@ -285,18 +285,13 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
         // Kirim notifikasi penghapusan disetujui ke user
         try {
-            const user = await prisma.user.findUnique({
-                where: { id_user: parseInt(id_user) },
-                select: { fcm_token: true }
-            });
-            if (user?.fcm_token) {
-                await sendPushNotification(
-                    user.fcm_token,
-                    '🗑️ Kendaraan Dihapus',
-                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} telah disetujui admin.`,
-                    { type: 'KENDARAAN_DELETED', id_kendaraan: id_kendaraan.toString() }
-                );
-            }
+            // Skipped by the helper when the user turned push off or the account is deactivated
+            await sendUserNotification(
+                parseInt(id_user),
+                '🗑️ Kendaraan Dihapus',
+                `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} telah disetujui admin.`,
+                { type: 'KENDARAAN_DELETED', id_kendaraan: id_kendaraan.toString() }
+            );
         } catch (notifError) {
             console.error('Failed to send notification:', notifError.message);
         }
@@ -315,18 +310,13 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
     // Send push notification to user
     try {
-        const user = await prisma.user.findUnique({
-            where: { id_user: parseInt(id_user) },
-            select: { fcm_token: true }
-        });
-        if (user?.fcm_token) {
-            await sendPushNotification(
-                user.fcm_token,
-                '✅ Kendaraan Disetujui',
-                `Kendaraan ${kendaraan.plat_nomor} (${kendaraan.nama_kendaraan}) telah disetujui!`,
-                { type: 'KENDARAAN_APPROVED', id_kendaraan: id_kendaraan.toString() }
-            );
-        }
+        // Skipped by the helper when the user turned push off or the account is deactivated
+        await sendUserNotification(
+            parseInt(id_user),
+            '✅ Kendaraan Disetujui',
+            `Kendaraan ${kendaraan.plat_nomor} (${kendaraan.nama_kendaraan}) telah disetujui!`,
+            { type: 'KENDARAAN_APPROVED', id_kendaraan: id_kendaraan.toString() }
+        );
     } catch (notifError) {
         console.error('Failed to send notification:', notifError.message);
     }
@@ -478,18 +468,13 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
 
         // Kirim notifikasi penolakan penghapusan ke user
         try {
-            const user = await prisma.user.findUnique({
-                where: { id_user: parseInt(id_user) },
-                select: { fcm_token: true }
-            });
-            if (user?.fcm_token) {
-                await sendPushNotification(
-                    user.fcm_token,
-                    '❌ Pembatalan Penghapusan Kendaraan',
-                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} ditolak admin. Alasan: ${feedback}`,
-                    { type: 'KENDARAAN_DELETE_REJECTED', id_kendaraan: id_kendaraan.toString() }
-                );
-            }
+            // Skipped by the helper when the user turned push off or the account is deactivated
+            await sendUserNotification(
+                parseInt(id_user),
+                '❌ Pembatalan Penghapusan Kendaraan',
+                `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} ditolak admin. Alasan: ${feedback}`,
+                { type: 'KENDARAAN_DELETE_REJECTED', id_kendaraan: id_kendaraan.toString() }
+            );
         } catch (notifError) {
             console.error('Failed to send notification:', notifError.message);
         }
@@ -515,18 +500,13 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
 
     // Send push notification to user about rejection
     try {
-        const user = await prisma.user.findUnique({
-            where: { id_user: parseInt(id_user) },
-            select: { fcm_token: true }
-        });
-        if (user?.fcm_token) {
-            await sendPushNotification(
-                user.fcm_token,
-                '❌ Kendaraan Ditolak',
-                `Kendaraan ${kendaraan.plat_nomor} ditolak. Alasan: ${feedback}`,
-                { type: 'KENDARAAN_REJECTED', id_kendaraan: id_kendaraan.toString(), feedback: feedback }
-            );
-        }
+        // Skipped by the helper when the user turned push off or the account is deactivated
+        await sendUserNotification(
+            parseInt(id_user),
+            '❌ Kendaraan Ditolak',
+            `Kendaraan ${kendaraan.plat_nomor} ditolak. Alasan: ${feedback}`,
+            { type: 'KENDARAAN_REJECTED', id_kendaraan: id_kendaraan.toString(), feedback: feedback }
+        );
     } catch (notifError) {
         console.error('Failed to send notification:', notifError.message);
     }

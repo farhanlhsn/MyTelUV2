@@ -31,10 +31,7 @@ exports.getAllPosts = asyncHandler(async (req, res) => {
                     where: { id_user: userId },
                     select: { id_user: true }
                 },
-                comments: {
-                    where: { deletedAt: null },
-                    select: { id_comment: true }
-                },
+                // only the number of comments is shown in the feed (commentCount)
                 _count: {
                     select: {
                         likes: true,
@@ -411,24 +408,35 @@ exports.toggleLike = asyncHandler(async (req, res) => {
     });
 
     let isLiked;
+    let likeCreated = false;
     if (existingLike) {
-        // Unlike
-        await prisma.postLike.delete({
-            where: { id_like: existingLike.id_like }
-        });
+        // Unlike. A parallel unlike may have deleted it already (P2025): the post is not liked either way.
+        try {
+            await prisma.postLike.delete({
+                where: { id_like: existingLike.id_like }
+            });
+        } catch (error) {
+            if (error.code !== 'P2025') throw error;
+        }
         isLiked = false;
     } else {
-        // Like
-        await prisma.postLike.create({
-            data: {
-                id_post: parseInt(id),
-                id_user: userId
-            }
-        });
+        // Like. A parallel request (double tap) may have inserted the same like after our check: the
+        // unique index (uq_post_user_like) answers P2002 and the post simply is liked already.
+        try {
+            await prisma.postLike.create({
+                data: {
+                    id_post: parseInt(id),
+                    id_user: userId
+                }
+            });
+            likeCreated = true;
+        } catch (error) {
+            if (error.code !== 'P2002') throw error;
+        }
         isLiked = true;
 
-        // Trigger notification
-        if (post.id_user !== userId) {
+        // Trigger notification (only by the request that created the like)
+        if (likeCreated && post.id_user !== userId) {
             // Get current user's name
             prisma.user.findUnique({ where: { id_user: userId }, select: { nama: true } })
                 .then(user => {
@@ -461,8 +469,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
 // Get comments for a post
 exports.getComments = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 20 });
 
     const post = await prisma.post.findFirst({
         where: {
@@ -485,7 +492,7 @@ exports.getComments = asyncHandler(async (req, res) => {
                 deletedAt: null
             },
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -510,9 +517,9 @@ exports.getComments = asyncHandler(async (req, res) => {
         data: comments,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });
@@ -626,8 +633,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
 // Get my posts
 exports.getMyPosts = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query);
 
     const [posts, total] = await prisma.$transaction([
         prisma.post.findMany({
@@ -636,7 +642,7 @@ exports.getMyPosts = asyncHandler(async (req, res) => {
                 deletedAt: null
             },
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -675,9 +681,9 @@ exports.getMyPosts = asyncHandler(async (req, res) => {
         data: postsWithCounts,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });

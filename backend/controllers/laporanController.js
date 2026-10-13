@@ -28,6 +28,11 @@ const validateId = (id, fieldName = 'ID') => {
 };
 
 // ==========================================
+// HELPER: NIM of a student (User.nim_nip; the username is a login name, not the NIM)
+// ==========================================
+const nimLabel = (mahasiswa) => mahasiswa?.nim_nip || '-';
+
+// ==========================================
 // HELPER: Get Status Style for Table Rows
 // ==========================================
 const getStatusStyle = (status) => {
@@ -304,7 +309,7 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
         prisma.pesertaKelas.findMany({
             where: { id_kelas: sesi.id_kelas, deletedAt: null },
             include: { mahasiswa: true },
-            orderBy: { mahasiswa: { username: 'asc' } }
+            orderBy: { mahasiswa: { nim_nip: 'asc' } }
         }),
         prisma.absensi.findMany({
             where: { id_sesi_absensi: sesiId, deletedAt: null }
@@ -347,7 +352,7 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
 
         return [
             (index + 1).toString(),
-            row.peserta.mahasiswa.username, // NIM
+            nimLabel(row.peserta.mahasiswa),
             row.peserta.mahasiswa.nama,
             status,
             waktuAbsenLabel(row)
@@ -427,7 +432,7 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
         prisma.pesertaKelas.findMany({
             where: { id_kelas: kelasId, deletedAt: null },
             include: { mahasiswa: true },
-            orderBy: { mahasiswa: { username: 'asc' } }
+            orderBy: { mahasiswa: { nim_nip: 'asc' } }
         }),
         prisma.absensi.findMany({
             where: { id_kelas: kelasId, deletedAt: null }
@@ -468,7 +473,7 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
     const rows = peserta.map((p, idx) => {
         const row = [
             (idx + 1).toString(),
-            p.mahasiswa.username,
+            nimLabel(p.mahasiswa),
             p.mahasiswa.nama
         ];
 
@@ -583,7 +588,7 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
         prisma.pesertaKelas.findMany({
             where: { id_kelas: sesi.id_kelas, deletedAt: null },
             include: { mahasiswa: true },
-            orderBy: { mahasiswa: { username: 'asc' } }
+            orderBy: { mahasiswa: { nim_nip: 'asc' } }
         }),
         prisma.absensi.findMany({
             where: { id_sesi_absensi: sesiId, deletedAt: null }
@@ -638,7 +643,7 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
 
         const row = worksheet.addRow([
             index + 1,
-            kehadiranRow.peserta.mahasiswa.username,
+            nimLabel(kehadiranRow.peserta.mahasiswa),
             kehadiranRow.peserta.mahasiswa.nama,
             status,
             waktuAbsenLabel(kehadiranRow)
@@ -725,7 +730,7 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
         prisma.pesertaKelas.findMany({
             where: { id_kelas: kelasId, deletedAt: null },
             include: { mahasiswa: true },
-            orderBy: { mahasiswa: { username: 'asc' } }
+            orderBy: { mahasiswa: { nim_nip: 'asc' } }
         }),
         prisma.absensi.findMany({
             where: { id_kelas: kelasId, deletedAt: null }
@@ -782,7 +787,7 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
     // Data rows
     const now = new Date();
     peserta.forEach((p, idx) => {
-        const rowData = [idx + 1, p.mahasiswa.username, p.mahasiswa.nama];
+        const rowData = [idx + 1, nimLabel(p.mahasiswa), p.mahasiswa.nama];
 
         // ✓ = Hadir, T = Telat, I = Izin, S = Sakit, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
         const rekap = buildRekapKehadiran(p, sessions, absensiMap, now);

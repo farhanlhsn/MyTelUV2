@@ -26,14 +26,15 @@ jest.mock('../utils/r2FileHandler', () => ({
     fileExists: jest.fn(),
 }));
 
+// Push goes through sendUserNotification(id_user, ...), which checks the user's push preference itself
 jest.mock('../utils/firebase', () => ({
-    sendPushNotification: jest.fn(),
+    sendUserNotification: jest.fn(),
 }));
 
 // Import modules
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
-const { sendPushNotification } = require('../utils/firebase');
+const { sendUserNotification } = require('../utils/firebase');
 const kendaraanController = require('../controllers/kendaraanController');
 
 // Helper functions
@@ -390,8 +391,8 @@ describe('Kendaraan Controller Tests', () => {
                 data: expect.objectContaining({ statusVerif: true })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Disetujui'),
                 expect.any(String),
                 expect.anything()
@@ -442,8 +443,8 @@ describe('Kendaraan Controller Tests', () => {
                 })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Kendaraan Dihapus'),
                 expect.any(String),
                 expect.anything()
@@ -478,6 +479,12 @@ describe('Kendaraan Controller Tests', () => {
                     feedback: 'Buram'
                 })
             });
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
+                expect.stringContaining('Ditolak'),
+                expect.any(String),
+                expect.objectContaining({ type: 'KENDARAAN_REJECTED' })
+            );
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -534,8 +541,8 @@ describe('Kendaraan Controller Tests', () => {
                 })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Pembatalan Penghapusan'),
                 expect.any(String),
                 expect.anything()
