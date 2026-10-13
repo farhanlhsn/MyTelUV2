@@ -4,6 +4,8 @@ import 'package:mobile/pages/kendaraan/historyPengajuan/detailuserhistoripengaju
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
+import 'package:mobile/utils/kendaraan_helper.dart';
+import 'package:mobile/pages/common/error_retry_view.dart';
 
 class UserHistoriPengajuan extends StatefulWidget {
   const UserHistoriPengajuan({super.key});
@@ -71,14 +73,16 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
 
     try {
       final histori = await KendaraanService.getHistoriPengajuan();
+      if (!mounted) return;
       setState(() {
         _historiPengajuan = histori;
         _isLoading = false;
       });
     } catch (e) {
       debugLog('Error loading histori pengajuan: $e');
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = kendaraanErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -97,6 +101,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
@@ -104,13 +109,16 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                       }
                     },
                   ),
-                  const Text(
-                    "Pengajuan Register Plat", // Judul disesuaikan
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      height: 1.3,
+                  const Expanded(
+                    child: Text(
+                      "Pengajuan Register Plat", // Judul disesuaikan
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        height: 1.3,
+                      ),
                     ),
                   ),
                 ],
@@ -143,24 +151,9 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 60, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Error: $_errorMessage',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadHistoriPengajuan,
-              child: const Text('Coba Lagi'),
-            ),
-          ],
-        ),
+      return ErrorRetryView(
+        message: _errorMessage!,
+        onRetry: _loadHistoriPengajuan,
       );
     }
 
@@ -204,24 +197,17 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                         licensePlate: pengajuan.platNomor,
                         status: pengajuan.getStatusText(),
                         statusColor: pengajuan.getStatusColor(),
-                        onCheckPressed: pengajuan.canShowDetails()
-                            ? () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => DetailPengajuanPlat(
-                                      idKendaraan: pengajuan.idKendaraan,
-                                      licensePlate: pengajuan.platNomor,
-                                      status: pengajuan.getStatusText(),
-                                      statusColor: pengajuan.getStatusColor(),
-                                      feedback:
-                                          pengajuan.feedback ??
-                                          'Tidak ada feedback',
-                                    ),
-                                  ),
-                                );
-                              }
-                            : null,
+                        statusIcon: pengajuan.getStatusIcon(),
+                        // Every submission opens its detail (status timeline + feedback).
+                        onCheckPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  DetailPengajuanPlat(pengajuan: pengajuan),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
@@ -369,7 +355,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                   PopupMenuItem<String>(
                     value: 'DISETUJUI',
                     child: Text(
-                      'Selesai',
+                      'Disetujui',
                       style: TextStyle(
                         color: _filterType == 'DISETUJUI'
                             ? primaryColor
@@ -395,7 +381,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                       : (_filterType == 'MENUNGGU'
                             ? 'Menunggu'
                             : (_filterType == 'DISETUJUI'
-                                  ? 'Selesai'
+                                  ? 'Disetujui'
                                   : 'Ditolak')),
                   icon: Icons.filter_list_rounded,
                   isActive: _filterType != null,
@@ -495,14 +481,14 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
   }
 }
 
-/// MODIFIKASI:
 /// Widget untuk menampilkan kartu status kendaraan.
-/// Tombol "CEK" sekarang opsional (hanya tampil jika onCheckPressed diisi).
+/// Seluruh kartu dan tombol "DETAIL" membuka detail pengajuan (jika onCheckPressed diisi).
 class VehicleStatusCard extends StatelessWidget {
   final String title;
   final String licensePlate;
   final String status;
   final Color statusColor;
+  final IconData? statusIcon;
   final VoidCallback? onCheckPressed;
 
   const VehicleStatusCard({
@@ -511,6 +497,7 @@ class VehicleStatusCard extends StatelessWidget {
     required this.licensePlate,
     required this.status,
     required this.statusColor,
+    this.statusIcon,
     this.onCheckPressed,
   });
 
@@ -520,95 +507,106 @@ class VehicleStatusCard extends StatelessWidget {
     const Color borderColor = Color(0xFFF76F68);
     const Color subtitleColor = Colors.grey;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20.0),
-        border: Border.all(color: borderColor, width: 2.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            // Bagian kiri: Teks dan Status Badge
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    licensePlate,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: subtitleColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
-                      vertical: 6.0,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(20.0),
-                    ),
-                    child: Text(
-                      status,
+    return GestureDetector(
+      onTap: onCheckPressed,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20.0),
+          border: Border.all(color: borderColor, width: 2.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 5,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              // Bagian kiri: Teks dan Status Badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: 18,
+                        color: Colors.black,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      licensePlate,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: subtitleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0,
+                        vertical: 6.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        borderRadius: BorderRadius.circular(20.0),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (statusIcon != null) ...[
+                            Icon(statusIcon, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            status,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // Bagian kanan: Tombol "CEK" (KONDISIONAL)
-            // Tombol hanya akan tampil jika onCheckPressed TIDAK null
-            if (onCheckPressed != null)
-              ElevatedButton(
-                onPressed: onCheckPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12.0),
+              // Bagian kanan: Tombol "DETAIL"
+              if (onCheckPressed != null)
+                ElevatedButton(
+                  onPressed: onCheckPressed,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 14.0,
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28.0,
-                    vertical: 14.0,
+                  child: const Text(
+                    'DETAIL',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
-                child: const Text(
-                  "CEK",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

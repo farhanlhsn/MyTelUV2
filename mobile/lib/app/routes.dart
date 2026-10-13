@@ -9,8 +9,6 @@ import '../pages/auth/forgot_password_page.dart';
 import '../pages/auth/reset_password_page.dart';
 import '../bindings/auth_binding.dart';
 import '../pages/kendaraan/registerplat.dart';
-import '../pages/kendaraan/pengajuan_list_page.dart';
-import '../pages/auth/otp_verification_page.dart';
 import '../pages/kendaraan/resubmit_kendaraan_page.dart';
 import '../pages/kendaraan/parkir/analitik_parkir.dart';
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
@@ -27,7 +25,6 @@ import '../pages/admin/admin_absensi_monitoring_page.dart';
 import '../pages/splash_page.dart';
 import '../pages/jadwal/jadwal_mingguan_page.dart';
 import '../pages/jadwal/form_jadwal_pengganti_page.dart';
-import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
 import '../pages/admin/admin_anomaly_config_page.dart';
 import 'auth_middleware.dart';
@@ -44,8 +41,6 @@ class AppRoutes {
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
   static const String resubmitKendaraan = '/resubmit-kendaraan';
-  static const String pengajuanList = '/pengajuan-list';
-  static const String otpVerification = '/otp-verification';
   static const String userHistoriPengajuan = '/user-histori-pengajuan';
   static const String absensi = '/absensi';
   static const String analitikParkir = '/analitik-parkir';
@@ -60,7 +55,6 @@ class AppRoutes {
   static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
   static const String jadwalMingguan = '/jadwal-mingguan';
   static const String formJadwalPengganti = '/form-jadwal-pengganti';
-  static const String anomaliResult = '/anomali-result';
   static const String anomaliDashboard = '/anomali-dashboard';
   static const String adminAnomalyConfig = '/admin-anomaly-config';
 
@@ -111,15 +105,6 @@ class AppRoutes {
       name: resubmitKendaraan,
       page: () => const ResubmitKendaraanPage(),
       middlewares: [AuthMiddleware()],
-    ),
-    GetPage<dynamic>(
-      name: pengajuanList,
-      page: () => const PengajuanListPage(),
-      middlewares: [AuthMiddleware()],
-    ),
-    GetPage<dynamic>(
-      name: otpVerification,
-      page: () => OtpVerificationPage(phoneNumber: Get.arguments ?? ""),
     ),
     GetPage<dynamic>(
       name: userHistoriPengajuan,
@@ -212,14 +197,6 @@ class AppRoutes {
     GetPage<dynamic>(
       name: formJadwalPengganti,
       page: () => const FormJadwalPenggantiPage(),
-      middlewares: [
-        AuthMiddleware(),
-        RoleMiddleware(const ['ADMIN', 'DOSEN']),
-      ],
-    ),
-    GetPage<dynamic>(
-      name: anomaliResult,
-      page: () => const AnomaliResultPage(),
       middlewares: [
         AuthMiddleware(),
         RoleMiddleware(const ['ADMIN', 'DOSEN']),

@@ -409,15 +409,6 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                 }
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.history, color: Colors.blue),
-              title: const Text('Lihat Riwayat Perubahan'),
-              onTap: () {
-                Get.back();
-                // TODO: Navigate to history list if needed
-                ErrorHelper.showInfo('Fitur riwayat belum tersedia');
-              },
-            ),
           ],
         ),
       ),

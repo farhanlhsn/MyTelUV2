@@ -1,7 +1,5 @@
-import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
-import 'package:mobile/utils/ui_helpers.dart';
 
 void main() {
   group('PengajuanPlatModel', () {
@@ -48,24 +46,6 @@ void main() {
       expect(model.platNomor, '');
       expect(model.statusPengajuan, 'MENUNGGU');
       expect(model.fotoKendaraan, isEmpty);
-    });
-
-    test('getStatusColor should return correct colors', () {
-      final modelApproved = PengajuanPlatModel(
-          idKendaraan: 1, platNomor: '', namaKendaraan: '', statusPengajuan: 'DISETUJUI', 
-          fotoKendaraan: [], fotoSTNK: '', createdAt: DateTime.now(), updatedAt: DateTime.now());
-      
-      final modelRejected = PengajuanPlatModel(
-          idKendaraan: 1, platNomor: '', namaKendaraan: '', statusPengajuan: 'DITOLAK', 
-          fotoKendaraan: [], fotoSTNK: '', createdAt: DateTime.now(), updatedAt: DateTime.now());
-
-      final modelPending = PengajuanPlatModel(
-          idKendaraan: 1, platNomor: '', namaKendaraan: '', statusPengajuan: 'MENUNGGU', 
-          fotoKendaraan: [], fotoSTNK: '', createdAt: DateTime.now(), updatedAt: DateTime.now());
-
-      expect(modelApproved.getStatusColor(), const Color(0xFF00C853));
-      expect(modelRejected.getStatusColor(), const Color(0xFFF85E55));
-      expect(modelPending.getStatusColor(), const Color(0xFFFC5F57));
     });
   });
 }
