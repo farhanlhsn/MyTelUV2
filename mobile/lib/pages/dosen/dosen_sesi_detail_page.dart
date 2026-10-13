@@ -4,8 +4,10 @@ import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
+import '../../utils/attendance_status.dart';
 import '../../utils/error_helper.dart';
 import '../common/error_retry_view.dart';
+import 'widgets/override_status_sheet.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -30,10 +32,14 @@ class DosenSesiDetailPage extends StatefulWidget {
   final int idSesi;
   final String kelasName;
 
+  /// For tests; the app uses the default one.
+  final DosenService? dosenService;
+
   const DosenSesiDetailPage({
     super.key,
     required this.idSesi,
     required this.kelasName,
+    this.dosenService,
   });
 
   @override
@@ -41,7 +47,7 @@ class DosenSesiDetailPage extends StatefulWidget {
 }
 
 class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
-  final DosenService _dosenService = DosenService();
+  late final DosenService _dosenService;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -52,6 +58,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   @override
   void initState() {
     super.initState();
+    _dosenService = widget.dosenService ?? DosenService();
     _loadSesiDetail();
   }
 
@@ -106,6 +113,119 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
       } catch (e) {
         ErrorHelper.showError(e, title: 'Gagal Menutup Sesi');
       }
+    }
+  }
+
+  List<Map<String, dynamic>> get _peserta =>
+      (_sesiData?['peserta'] as List<dynamic>? ?? const <dynamic>[])
+          .cast<Map<String, dynamic>>();
+
+  /// The session data with one peserta replaced and the header counts worked out again from the
+  /// statuses (the server's rules, see [summarizeAttendance]).
+  Map<String, dynamic> _withPeserta(int idUser, Map<String, dynamic> next) {
+    final List<Map<String, dynamic>> peserta = <Map<String, dynamic>>[
+      for (final Map<String, dynamic> item in _peserta)
+        item['id_user'] == idUser ? next : item,
+    ];
+    final AttendanceSummary summary = summarizeAttendance(
+      peserta.map(attendanceStatusOf),
+    );
+
+    return <String, dynamic>{
+      ..._sesiData!,
+      'peserta': peserta,
+      'stats': <String, dynamic>{
+        ...?(_sesiData!['stats'] as Map<String, dynamic>?),
+        'total_peserta': summary.total,
+        'total_hadir': summary.hadir,
+        'total_telat': summary.telat,
+        'total_izin': summary.izin,
+        'total_sakit': summary.sakit,
+        'total_tidak_hadir': summary.tidakHadir,
+        'persentase': summary.persentaseLabel,
+      },
+    };
+  }
+
+  /// Sets the status of one student: the list shows it at once, and goes back to what it was when
+  /// the server refuses. Returns the error text for the sheet, or null when it was saved.
+  Future<String?> _overridePeserta(
+    Map<String, dynamic> peserta,
+    String status,
+    String? keterangan,
+  ) async {
+    final int idUser = peserta['id_user'] as int;
+    final Map<String, dynamic> before = _sesiData!;
+
+    setState(() {
+      _sesiData = _withPeserta(idUser, <String, dynamic>{
+        ...peserta,
+        'status': status,
+        'hadir': isPresentAttendance(status),
+        'keterangan': keterangan,
+        'waktu_absen': isPresentAttendance(status) ? peserta['waktu_absen'] : null,
+      });
+    });
+
+    try {
+      final Map<String, dynamic> row = await _dosenService.overrideAbsensi(
+        idSesi: widget.idSesi,
+        idUser: idUser,
+        status: status,
+        keterangan: keterangan,
+      );
+      if (mounted && row['diubah_oleh'] != null) {
+        // Keep what the server says about who set it
+        final Map<String, dynamic> current = _peserta.firstWhere(
+          (Map<String, dynamic> item) => item['id_user'] == idUser,
+          orElse: () => peserta,
+        );
+        setState(() {
+          _sesiData = _withPeserta(idUser, <String, dynamic>{
+            ...current,
+            'diubah_oleh': row['diubah_oleh'],
+          });
+        });
+      }
+      _refreshQuietly();
+      return null;
+    } catch (e) {
+      if (mounted) setState(() => _sesiData = before);
+      return ErrorHelper.parseError(e);
+    }
+  }
+
+  /// Fetches the session again without the spinner, to pick up what only the server works out
+  /// (check-in time, the final percentage). A failure keeps what is on screen.
+  Future<void> _refreshQuietly() async {
+    try {
+      final data = await _dosenService.getSesiDetail(widget.idSesi);
+      if (!mounted || data.isEmpty) return;
+      setState(() => _sesiData = data);
+    } catch (e) {
+      debugPrint('Gagal memuat ulang sesi: $e');
+    }
+  }
+
+  Future<void> _openOverrideSheet(Map<String, dynamic> peserta) async {
+    final String nama = peserta['nama']?.toString() ?? '-';
+    final bool? saved = await showOverrideStatusSheet(
+      context,
+      namaMahasiswa: nama,
+      currentStatus: attendanceStatusOf(peserta),
+      currentKeterangan: peserta['keterangan']?.toString(),
+      onSave: (String status, String? keterangan) =>
+          _overridePeserta(peserta, status, keterangan),
+    );
+
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Kehadiran $nama diperbarui'),
+          backgroundColor: Colors.green.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -249,7 +369,6 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
             child: Column(
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildStatItem(
                       'Total',
@@ -260,6 +379,11 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
                       'Hadir',
                       '${stats?['total_hadir'] ?? 0}',
                       Icons.check_circle,
+                    ),
+                    _buildStatItem(
+                      'Izin/Sakit',
+                      '${((stats?['total_izin'] as num?) ?? 0) + ((stats?['total_sakit'] as num?) ?? 0)}',
+                      Icons.assignment_turned_in,
                     ),
                     _buildStatItem(
                       'Tidak Hadir',
@@ -394,56 +518,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
               ),
               itemBuilder: (context, index) {
                 final peserta = pesertaList[index] as Map<String, dynamic>;
-                final bool hadir = peserta['hadir'] == true;
-                final String? waktuAbsen = peserta['waktu_absen']?.toString();
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: hadir ? Colors.green.shade100 : Colors.red.shade100,
-                    child: Icon(
-                      hadir ? Icons.check : Icons.close,
-                      color: hadir ? Colors.green : Colors.red,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    peserta['nama']?.toString() ?? '-',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Text(
-                    peserta['username']?.toString() ?? '-',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: hadir ? Colors.green.shade100 : Colors.red.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          hadir ? 'Hadir' : 'Tidak Hadir',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: hadir ? Colors.green.shade700 : Colors.red.shade700,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (waktuAbsen != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            _formatTime(waktuAbsen),
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
+                return _buildPesertaTile(peserta, isOpen: isOpen);
               },
             ),
           ),
@@ -452,27 +527,118 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
     );
   }
 
+  /// One student: the status chip (colour + icon + label) and, on a tap, the sheet to change it.
+  Widget _buildPesertaTile(Map<String, dynamic> peserta, {required bool isOpen}) {
+    final String? status = attendanceStatusOf(peserta);
+    final Color color = attendanceStatusColor(status);
+    final String label = attendanceStatusLabel(status, sessionOpen: isOpen);
+    final String? waktuAbsen = peserta['waktu_absen']?.toString();
+    final String keterangan = peserta['keterangan']?.toString().trim() ?? '';
+    final bool diubahManual = peserta['diubah_oleh'] != null;
+
+    final Widget tile = ListTile(
+      key: Key('peserta-${peserta['id_user']}'),
+      onTap: () => _openOverrideSheet(peserta),
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.15),
+        child: Icon(attendanceStatusIcon(status), color: color, size: 20),
+      ),
+      title: Text(
+        peserta['nama']?.toString() ?? '-',
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            peserta['username']?.toString() ?? '-',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          if (keterangan.isNotEmpty)
+            Text(
+              keterangan,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          if (diubahManual)
+            Text(
+              'Diubah manual',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+        ],
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            key: Key('peserta-status-${peserta['id_user']}'),
+            padding: const EdgeInsets.only(left: 8, right: 4, top: 2, bottom: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, size: 16, color: color),
+              ],
+            ),
+          ),
+          if (waktuAbsen != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                _formatTime(waktuAbsen),
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    // Own Material: the ink of the tap must not be hidden by the white sheet behind the list
+    return Material(type: MaterialType.transparency, child: tile);
+  }
+
   Widget _buildStatItem(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white, size: 24),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+    // Expanded: four counts have to fit a narrow phone
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.9),
-            fontSize: 12,
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 12,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

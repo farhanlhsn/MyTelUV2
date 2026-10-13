@@ -84,7 +84,10 @@ class AkademikService {
     }
   }
 
-  /// Create jadwal pengganti (override)
+  /// Create jadwal pengganti (override). The class is the route parameter, so the body has no
+  /// `id_kelas`. Dates are sent without an offset (the server reads them as WIB); `jamMulaiGanti`
+  /// and `jamBerakhirGanti` are `HH:MM` and go together. A failure carries the server's message
+  /// (e.g. the date is not on the class's weekday) so the user can read why.
   Future<bool> createJadwalPengganti({
     required int idKelas,
     required DateTime tanggalAsli,
@@ -92,15 +95,18 @@ class AkademikService {
     required String alasan,
     DateTime? tanggalGanti,
     String? ruanganGanti,
+    String? jamMulaiGanti,
+    String? jamBerakhirGanti,
   }) async {
     try {
       final data = {
-        'id_kelas': idKelas,
         'tanggal_asli': tanggalAsli.toIso8601String(),
         'status': status,
         'alasan': alasan,
         if (tanggalGanti != null) 'tanggal_ganti': tanggalGanti.toIso8601String(),
         if (ruanganGanti != null) 'ruangan_ganti': ruanganGanti,
+        if (jamMulaiGanti != null) 'jam_mulai_ganti': jamMulaiGanti,
+        if (jamBerakhirGanti != null) 'jam_berakhir_ganti': jamBerakhirGanti,
       };
 
       final Response<dynamic> response = await _dio.post(
@@ -110,7 +116,7 @@ class AkademikService {
 
       return response.statusCode == 201;
     } on DioException catch (e) {
-      throw Exception('Failed to create jadwal pengganti: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -195,7 +201,7 @@ class AkademikService {
           final int kelasId = m['id_kelas'] as int;
           final String type = m['type_absensi'] as String;
           final int count = (m['_count'] as Map<String, dynamic>)['type_absensi'] as int;
-          grouped.putIfAbsent(kelasId, () => {'HADIR': 0, 'IJIN': 0, 'SAKIT': 0, 'ALPHA': 0});
+          grouped.putIfAbsent(kelasId, () => {'HADIR': 0, 'TELAT': 0, 'IZIN': 0, 'SAKIT': 0, 'ALPHA': 0});
           grouped[kelasId]![type] = count;
         }
         return grouped.map((k, v) => MapEntry(k, AbsensiStatsModel.fromJson(v)));

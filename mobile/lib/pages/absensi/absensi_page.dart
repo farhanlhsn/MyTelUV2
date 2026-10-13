@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../models/kelas_hari_ini.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/attendance_status.dart';
 import '../../utils/error_helper.dart';
 import '../biometrik/biometrik_verification_page.dart';
 import '../common/error_retry_view.dart';
@@ -563,7 +564,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ],
                   const SizedBox(height: 6),
                   Text(
-                    '${stats?['total_hadir'] ?? 0}/${stats?['total_sesi'] ?? 0} sesi hadir',
+                    sesiHadirText(stats),
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
                 ],
@@ -728,6 +729,7 @@ class AbsensiDetailPage extends StatelessWidget {
                           ],
                         ),
                       ),
+                    if (stats != null) _buildStatsBreakdown(),
 
                     const SizedBox(height: 15),
 
@@ -779,12 +781,52 @@ class AbsensiDetailPage extends StatelessWidget {
     );
   }
 
+  /// Telat / Izin / Sakit of the class, only the ones that happened ("Hadir" above includes telat).
+  Widget _buildStatsBreakdown() {
+    int count(String key) => (stats?[key] as num?)?.toInt() ?? 0;
+    final List<(String, int)> parts = <(String, int)>[
+      ('TELAT', count('total_telat')),
+      ('IZIN', count('total_izin')),
+      ('SAKIT', count('total_sakit')),
+    ].where(((String, int) part) => part.$2 > 0).toList();
+    if (parts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          for (final (String status, int total) in parts)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  attendanceStatusIcon(status),
+                  size: 14,
+                  color: attendanceStatusColor(status),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${attendanceStatusLabel(status)}: $total',
+                  style: TextStyle(fontSize: 12, color: attendanceStatusColor(status)),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSessionItem(Map<String, dynamic> session) {
-    final bool hadir = session['hadir'] == true;
-    final Color statusColor = hadir ? Colors.green : Colors.red;
-    final String statusText = hadir ? 'Hadir' : 'Tidak Hadir';
+    final String? status = attendanceStatusOf(session);
+    // Open flag of the session (status_sesi); an older answer only has is_active
+    final bool sessionOpen = session['status_sesi'] == true || session['is_active'] == true;
+    final Color statusColor = attendanceStatusColor(status);
+    final String statusText = attendanceStatusLabel(status, sessionOpen: sessionOpen);
     final int? idSesiAbsensi = _readSessionId(session);
     final bool isActiveSession = session['is_active'] == true;
+    final String keterangan = session['keterangan']?.toString().trim() ?? '';
 
     DateTime? tanggal;
     try {
@@ -796,7 +838,7 @@ class AbsensiDetailPage extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            hadir ? Icons.check_circle : Icons.cancel,
+            attendanceStatusIcon(status),
             color: statusColor,
             size: 24,
           ),
@@ -813,16 +855,27 @@ class AbsensiDetailPage extends StatelessWidget {
                     fontSize: 13,
                   ),
                 ),
-                if (hadir && session['waktu_absen'] != null)
+                if (isPresentAttendance(status) && session['waktu_absen'] != null)
                   Text(
                     'Absen: ${_formatTime(session['waktu_absen'].toString())}',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                if (keterangan.isNotEmpty)
+                  Text(
+                    keterangan,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
               ],
             ),
           ),
           _buildSessionAction(
-            hadir: hadir,
+            hasRecord: status != null,
             isActiveSession: isActiveSession,
             statusColor: statusColor,
             statusText: statusText,
@@ -834,7 +887,7 @@ class AbsensiDetailPage extends StatelessWidget {
   }
 
   Widget _buildSessionAction({
-    required bool hadir,
+    required bool hasRecord,
     required bool isActiveSession,
     required Color statusColor,
     required String statusText,
@@ -857,7 +910,8 @@ class AbsensiDetailPage extends StatelessWidget {
       ),
     );
 
-    if (hadir || !isActiveSession || idSesiAbsensi == null) {
+    // Any status means the dosen or the student already settled this session: no check-in button
+    if (hasRecord || !isActiveSession || idSesiAbsensi == null) {
       return statusBadge;
     }
 

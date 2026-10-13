@@ -143,9 +143,10 @@ class HomeController extends GetxController {
     for (final AbsensiModel absensi in absensiList) {
       final counts = countsByKelas.putIfAbsent(
         absensi.idKelas,
-        () => {'HADIR': 0, 'IJIN': 0, 'SAKIT': 0, 'ALPHA': 0},
+        () => {'HADIR': 0, 'TELAT': 0, 'IZIN': 0, 'SAKIT': 0, 'ALPHA': 0},
       );
-      counts[absensi.typeAbsensi] = (counts[absensi.typeAbsensi] ?? 0) + 1;
+      // Counted by attendance status (typeAbsensi only says how it was recorded)
+      counts[absensi.status] = (counts[absensi.status] ?? 0) + 1;
     }
 
     return countsByKelas.map(
@@ -175,13 +176,10 @@ class HomeController extends GetxController {
     int totalHadir = 0;
     int totalAbsensi = 0;
 
+    // Late counts as present, excused (izin/sakit) leaves the denominator
     for (final AbsensiStatsModel stats in absensiStats.values) {
-      totalHadir += stats.totalHadir;
-      totalAbsensi +=
-          stats.totalHadir +
-          stats.totalIjin +
-          stats.totalSakit +
-          stats.totalAlpha;
+      totalHadir += stats.totalHadir + stats.totalTelat;
+      totalAbsensi += stats.totalDihitung;
     }
 
     if (totalAbsensi == 0) return 100.0;
