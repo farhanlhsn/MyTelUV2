@@ -184,6 +184,17 @@ describe('GET /health', () => {
     });
 });
 
+describe('CORS', () => {
+    test('exposes the CSV export headers so browser clients can read them', async () => {
+        const { app } = base;
+
+        const res = await request(app).get('/').set('Origin', 'http://localhost:3000');
+
+        const exposed = res.headers['access-control-expose-headers'].split(',').map((h) => h.trim());
+        expect(exposed).toEqual(expect.arrayContaining(['X-Export-Truncated', 'Content-Disposition']));
+    });
+});
+
 describe('Swagger UI', () => {
     test('is mounted outside production', async () => {
         const { app } = base; // NODE_ENV=test

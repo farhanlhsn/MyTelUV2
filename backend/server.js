@@ -80,6 +80,7 @@ const corsOptions = {
     optionsSuccessStatus: 200,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['X-Export-Truncated', 'Content-Disposition'],
 };
 
 app.use(cors(corsOptions));

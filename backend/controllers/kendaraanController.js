@@ -62,7 +62,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (existingKendaraan && !existingKendaraan.deletedAt) {
         return res.status(409).json({
             status: "error",
-            message: "Plat nomor already registered"
+            message: "Plat nomor sudah terdaftar"
         });
     }
 
@@ -143,7 +143,8 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
                     statusVerif: false,
                     status_pengajuan: 'MENUNGGU',
                     feedback: null,
-                    deletedAt: null
+                    deletedAt: null,
+                    createdAt: new Date() // the admin pending queue is ordered by createdAt, newest first
                 }
             });
         } else {
@@ -178,7 +179,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         if (error.code === 'P2002' || error.code === 'P2025') {
             return res.status(409).json({
                 status: "error",
-                message: "Plat nomor already registered"
+                message: "Plat nomor sudah terdaftar"
             });
         }
 

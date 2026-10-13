@@ -38,6 +38,15 @@ const { sendParkingNotification } = require('../utils/firebase');
 const { logAudit } = require('../utils/auditLogger');
 const parkirController = require('../controllers/parkirController');
 
+// The controller logs every edge request ([Edge Entry], [Face Upload]); keep the test output clean
+let consoleLogSpy;
+beforeEach(() => {
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+});
+afterEach(() => {
+    consoleLogSpy.mockRestore();
+});
+
 // Helper functions
 const createMockReq = (body = {}, headers = {}, file = null) => ({
     body,
@@ -187,22 +196,73 @@ describe('Parkir Controller - processEdgeEntry', () => {
             }));
         });
 
-        test.each(['MASUK', 'KELUAR'])('denies %s when the vehicle owner account is deactivated', async (gate) => {
-            prisma.kendaraan.findFirst.mockResolvedValue(kendaraanRow({
+        describe('owner account deactivated', () => {
+            const deactivatedOwnerVehicle = () => kendaraanRow({
                 user: { id_user: 1, nama: 'User', deletedAt: new Date('2026-09-01T00:00:00Z') }
-            }));
-            const res = createMockRes();
-
-            await parkirController.processEdgeEntry(createMockReq({ ...validBody, gate_type: gate }, validHeaders), res);
-
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.json).toHaveBeenCalledWith({
-                status: 'error',
-                message: 'Akun pemilik kendaraan tidak aktif',
-                data: { gate_action: 'DENY' }
             });
-            expect(prisma.$transaction).not.toHaveBeenCalled();
-            expect(sendParkingNotification).not.toHaveBeenCalled();
+
+            test('denies MASUK with 403 and writes a PARKIR_PEMILIK_NONAKTIF audit entry', async () => {
+                prisma.kendaraan.findFirst.mockResolvedValue(deactivatedOwnerVehicle());
+                const req = createMockReq(validBody, validHeaders);
+                req.ip = '10.0.0.7';
+                const res = createMockRes();
+
+                await parkirController.processEdgeEntry(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Akun pemilik kendaraan tidak aktif',
+                    data: { gate_action: 'DENY' }
+                });
+                expect(logAudit).toHaveBeenCalledTimes(1);
+                expect(logAudit).toHaveBeenCalledWith({
+                    action: 'PARKIR_PEMILIK_NONAKTIF',
+                    performedBy: null,
+                    targetUserId: 1,
+                    details: 'Plat D1234ABC ditolak masuk di parkiran 1: akun pemilik tidak aktif',
+                    ip: '10.0.0.7'
+                });
+                expect(prisma.$transaction).not.toHaveBeenCalled();
+                expect(sendParkingNotification).not.toHaveBeenCalled();
+            });
+
+            test('lets the car leave on KELUAR when it is inside: exit logged, capacity decremented', async () => {
+                prisma.kendaraan.findFirst.mockResolvedValue(deactivatedOwnerVehicle());
+                prisma.$queryRaw.mockResolvedValueOnce([parkiranRow({ live_kapasitas: 10 })]);
+                tx.logParkir.findFirst.mockResolvedValue({ type: 'MASUK' });
+                tx.logParkir.create.mockResolvedValue({ id_log_parkir: 101 });
+                tx.$executeRaw.mockResolvedValue(1);
+                const res = createMockRes();
+
+                await parkirController.processEdgeEntry(createMockReq({ ...validBody, gate_type: 'KELUAR' }, validHeaders), res);
+
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                    status: 'success',
+                    data: expect.objectContaining({ gate_action: 'OPEN' })
+                }));
+                expect(tx.logParkir.create).toHaveBeenCalledWith({
+                    data: expect.objectContaining({ id_kendaraan: 1, id_parkiran: 1, type: 'KELUAR' })
+                });
+                expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+                expect(tx.$executeRaw.mock.calls[0][0].join('')).toMatch(/live_kapasitas - 1/);
+                expect(logAudit).not.toHaveBeenCalled();
+            });
+
+            test('a KELUAR for a car that is not inside is still denied by the normal exit rule', async () => {
+                prisma.kendaraan.findFirst.mockResolvedValue(deactivatedOwnerVehicle());
+                prisma.$queryRaw.mockResolvedValueOnce([parkiranRow()]);
+                tx.logParkir.findFirst.mockResolvedValue({ type: 'KELUAR' });
+                const res = createMockRes();
+
+                await parkirController.processEdgeEntry(createMockReq({ ...validBody, gate_type: 'KELUAR' }, validHeaders), res);
+
+                expect(res.status).toHaveBeenCalledWith(400);
+                expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { gate_action: 'DENY' } }));
+                expect(tx.logParkir.create).not.toHaveBeenCalled();
+                expect(tx.$executeRaw).not.toHaveBeenCalled();
+            });
         });
 
         test('writes a PARKIR_PLAT_TIDAK_DIKENAL audit entry with the plate and parkiran id for an unknown plate', async () => {
@@ -671,12 +731,14 @@ describe('Parkir Controller - exportParkirLogs & manualOverride', () => {
             await parkirController.exportParkirLogs(req, csvRes());
 
             expect(prisma.logParkir.findMany).toHaveBeenCalledWith(expect.objectContaining({
-                take: 10000,
+                take: 10001, // one more than the cap, to know whether anything was left out
                 orderBy: { timestamp: 'desc' }
             }));
         });
 
-        test('flags a truncated export with X-Export-Truncated when the cap is reached', async () => {
+        const plateCount = (csv) => csv.split('"D1234ABC"').length - 1;
+
+        test('exactly 10,000 matching rows are exported in full and not flagged as truncated', async () => {
             prisma.logParkir.findMany.mockResolvedValue(Array.from({ length: 10000 }, (_, i) => csvRow(i + 1)));
             const req = createMockReq();
             req.query = {};
@@ -684,7 +746,24 @@ describe('Parkir Controller - exportParkirLogs & manualOverride', () => {
 
             await parkirController.exportParkirLogs(req, res);
 
+            expect(res.setHeader).not.toHaveBeenCalledWith('X-Export-Truncated', expect.anything());
+            expect(plateCount(res.send.mock.calls[0][0])).toBe(10000);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('a 10,001st row exports only 10,000 rows and sets X-Export-Truncated', async () => {
+            prisma.logParkir.findMany.mockResolvedValue(Array.from({ length: 10001 }, (_, i) => csvRow(i + 1)));
+            const req = createMockReq();
+            req.query = {};
+            const res = csvRes();
+
+            await parkirController.exportParkirLogs(req, res);
+
             expect(res.setHeader).toHaveBeenCalledWith('X-Export-Truncated', 'true');
+            const csv = res.send.mock.calls[0][0];
+            expect(plateCount(csv)).toBe(10000);
+            expect(csv).toContain('10000,"2026');
+            expect(csv).not.toContain('10001,"2026'); // the extra (oldest) row is dropped
             expect(res.status).toHaveBeenCalledWith(200);
         });
 

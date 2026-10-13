@@ -511,8 +511,16 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
         });
     }
 
-    // A deactivated (soft-deleted) account must not open the gate with a vehicle it registered earlier
-    if (kendaraan.user?.deletedAt) {
+    // A deactivated (soft-deleted) account must not open the gate to enter with a vehicle it registered earlier.
+    // KELUAR is deliberately not blocked: a car that is already inside must always be able to leave.
+    if (gate_type === 'MASUK' && kendaraan.user?.deletedAt) {
+        logAudit({
+            action: 'PARKIR_PEMILIK_NONAKTIF',
+            performedBy: null, // the edge device is not a user
+            targetUserId: kendaraan.user.id_user,
+            details: `Plat ${normalizedPlate} ditolak masuk di parkiran ${parseInt(parkiran_id)}: akun pemilik tidak aktif`,
+            ip: req.ip
+        });
         return res.status(403).json({
             status: "error",
             message: "Akun pemilik kendaraan tidak aktif",
@@ -863,7 +871,7 @@ exports.exportParkirLogs = asyncHandler(async (req, res) => {
             parkiran:  { select: { nama_parkiran: true } }
         },
         orderBy: { timestamp: 'desc' },
-        take: MAX_EXPORT_ROWS
+        take: MAX_EXPORT_ROWS + 1 // the extra row only tells whether the export was cut off
     });
 
     if (logs.length === 0) {
@@ -888,10 +896,10 @@ exports.exportParkirLogs = asyncHandler(async (req, res) => {
     ];
 
     const parser = new Parser({ fields });
-    const csv = parser.parse(logs);
+    const csv = parser.parse(logs.slice(0, MAX_EXPORT_ROWS));
 
     const filename = `log_parkir_${Date.now()}.csv`;
-    if (logs.length >= MAX_EXPORT_ROWS) {
+    if (logs.length > MAX_EXPORT_ROWS) {
         // More rows matched than were exported: tell the client so it can narrow the from/to range
         res.setHeader('X-Export-Truncated', 'true');
     }
