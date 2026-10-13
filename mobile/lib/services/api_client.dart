@@ -62,13 +62,30 @@ class AppConfig {
   static String get envName => _env.toUpperCase();
 }
 
+/// How asking the server for a new access token ended.
+enum _RefreshResult {
+  /// New tokens are stored.
+  refreshed,
+
+  /// The server refused the refresh token (400/401), or there is none: the session is gone.
+  rejected,
+
+  /// No usable answer (timeout, no connection, 5xx, an odd body): nothing is known about the
+  /// session, so it must not be ended.
+  unavailable,
+}
+
 class ApiClient {
   static final String baseUrl = AppConfig.baseUrl;
   static FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   static Dio? _dioInstance;
-  static Completer<bool>? _refreshCompleter;
+  static Completer<_RefreshResult>? _refreshCompleter;
   static bool _isRedirecting = false;
+
+  /// Set when the session is being ended, so requests that fail together end it once (one wipe, one
+  /// login dialog). Cleared by [reset], which every login and logout calls.
+  static bool _sessionEnding = false;
 
   /// `RequestOptions.extra` flag set on a request that was replayed after a token refresh.
   static const String _retriedKey = 'retried';
@@ -113,6 +130,7 @@ class ApiClient {
     _dioInstance = null;
     _refreshCompleter = null;
     _isRedirecting = false;
+    _sessionEnding = false;
   }
 
   static Dio get dio {
@@ -172,9 +190,10 @@ class ApiClient {
 
               // One refresh + one retry per request. A request that already was retried and still
               // gets 401 goes straight to logout (no second refresh, no loop).
+              _RefreshResult refresh = _RefreshResult.rejected;
               if (options.extra[_retriedKey] != true) {
-                final bool refreshed = await _attemptTokenRefresh(options);
-                if (refreshed) {
+                refresh = await _attemptTokenRefresh(options);
+                if (refresh == _RefreshResult.refreshed) {
                   try {
                     final String? newToken = await _secureStorage.read(
                       key: 'token',
@@ -192,12 +211,24 @@ class ApiClient {
                 }
               }
 
-              debugLog(
-                'Token refresh failed, clearing storage and redirecting to login',
-              );
-              await _endSession();
-              _dioInstance = null;
-              onSessionExpired();
+              if (refresh == _RefreshResult.unavailable) {
+                // The refresh could not be asked (timeout, no connection, server error): the session
+                // may well be fine, so nothing is wiped and nobody is logged out. The caller gets
+                // the error of its own request and can try again.
+                debugLog('Token refresh unavailable, keeping the session');
+                return handler.next(error);
+              }
+
+              if (!_sessionEnding) {
+                // Requests that fail together reach this point together: the first ends the session
+                _sessionEnding = true;
+                debugLog(
+                  'Token refresh failed, clearing storage and redirecting to login',
+                );
+                await _endSession();
+                _dioInstance = null;
+                onSessionExpired();
+              }
               // The caller's request must end too (a spinner waiting on it would never stop): it
               // fails with the 401 it got
               return handler.next(error);
@@ -212,26 +243,28 @@ class ApiClient {
     return _dioInstance!;
   }
 
-  static Future<bool> _attemptTokenRefresh(
+  static Future<_RefreshResult> _attemptTokenRefresh(
     RequestOptions requestOptions,
   ) async {
     if (requestOptions.path.contains('/api/v1/auth/refresh')) {
-      return false;
+      return _RefreshResult.rejected;
     }
 
     if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
       return _refreshCompleter!.future;
     }
 
-    _refreshCompleter = Completer<bool>();
+    final Completer<_RefreshResult> completer = Completer<_RefreshResult>();
+    _refreshCompleter = completer;
 
+    _RefreshResult result = _RefreshResult.unavailable;
     try {
       final String? refreshToken = await _secureStorage.read(
         key: 'refresh_token',
       );
       if (refreshToken == null || refreshToken.isEmpty) {
-        _refreshCompleter!.complete(false);
-        return false;
+        result = _RefreshResult.rejected;
+        return result;
       }
 
       debugLog('Attempting to refresh token...');
@@ -240,60 +273,80 @@ class ApiClient {
         refreshDio.httpClientAdapter = httpAdapterOverride!;
       }
 
-      final response = await refreshDio.post(
-        '/api/v1/auth/refresh',
-        data: {'refresh_token': refreshToken},
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data['data'];
-        if (data != null && data['token'] != null) {
-          await _secureStorage.write(key: 'token', value: data['token']);
-          // The route middleware judges the session from its own copy of the token
-          AuthMiddleware.updateToken(data['token'] as String?);
-          if (data['refresh_token'] != null) {
-            await _secureStorage.write(
-              key: 'refresh_token',
-              value: data['refresh_token'],
-            );
-          }
-          debugLog('Token refreshed successfully');
-          _refreshCompleter!.complete(true);
-          return true;
-        }
+      final Response<dynamic> response;
+      try {
+        response = await refreshDio.post<dynamic>(
+          '/api/v1/auth/refresh',
+          data: {'refresh_token': refreshToken},
+        );
+      } on DioException catch (e) {
+        // Only the server saying "this refresh token is no good" (400 missing, 401 invalid, expired
+        // or account deactivated) ends the session; a timeout, no connection or a 5xx says nothing
+        final int? status = e.response?.statusCode;
+        debugLog('Refresh token API error: ${e.type} status=${status ?? '-'}');
+        result = status == 400 || status == 401
+            ? _RefreshResult.rejected
+            : _RefreshResult.unavailable;
+        return result;
       }
-      _refreshCompleter!.complete(false);
-      return false;
+
+      final dynamic body = response.data;
+      final dynamic data = body is Map ? body['data'] : null;
+      if (response.statusCode == 200 && data is Map && data['token'] != null) {
+        await _secureStorage.write(key: 'token', value: data['token']);
+        // The route middleware judges the session from its own copy of the token
+        AuthMiddleware.updateToken(data['token'] as String?);
+        if (data['refresh_token'] != null) {
+          await _secureStorage.write(
+            key: 'refresh_token',
+            value: data['refresh_token'],
+          );
+        }
+        debugLog('Token refreshed successfully');
+        result = _RefreshResult.refreshed;
+      }
+      return result;
     } catch (e) {
-      debugLog('Refresh token API error: $e');
-      _refreshCompleter!.complete(false);
-      return false;
+      debugLog('Refresh token error: $e');
+      result = _RefreshResult.unavailable;
+      return result;
     } finally {
+      completer.complete(result);
       _refreshCompleter = null;
     }
   }
 
+  /// A fresh client (login, logout). A new session can end again, so this also re-arms the guard
+  /// that makes requests failing together end the session once.
   static void reset() {
     _dioInstance = null;
+    _sessionEnding = false;
   }
 
-  /// The session is gone: wipes what belongs to it on this phone, the stored login, the route
-  /// middleware's copy of it and the notification inbox of that user. Never throws, so the caller
-  /// still gets to the login page.
+  /// The session is gone: wipes what belongs to it on this phone, the route middleware's copy of it,
+  /// the notification inbox of that user and, last, the stored login. Every step has its own try, so
+  /// one that fails does not skip the others, and the caller still gets to the login page.
   static Future<void> _endSession() async {
-    try {
-      // Whose inbox to clear: read before the storage is wiped
-      final int? idUser = await NotificationInbox.currentUserId(
-        storage: _secureStorage,
-      );
-      await _secureStorage.deleteAll();
-      AuthMiddleware.clearCredentials();
-      await NotificationInbox.clear(idUser);
+    // Whose inbox to clear: read while the storage still has it (never throws)
+    final int? idUser = await NotificationInbox.currentUserId(
+      storage: _secureStorage,
+    );
+
+    await _guardStep('middleware cache', () => AuthMiddleware.clearCredentials());
+    await _guardStep('notification inbox', () => NotificationInbox.clear(idUser));
+    await _guardStep('inbox on screen', () {
       if (Get.isRegistered<NotificationController>()) {
         Get.find<NotificationController>().reset();
       }
+    });
+    await _guardStep('secure storage', () => _secureStorage.deleteAll());
+  }
+
+  static Future<void> _guardStep(String what, FutureOr<void> Function() step) async {
+    try {
+      await step();
     } catch (e) {
-      debugLog('Failed to clear the ended session: $e');
+      debugLog('Failed to clear the ended session ($what): $e');
     }
   }
 

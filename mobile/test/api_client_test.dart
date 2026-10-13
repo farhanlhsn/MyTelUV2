@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +21,53 @@ String _jwtExpiringAt(DateTime expiry) {
       base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
   return '${part(<String, dynamic>{'alg': 'HS256'})}.'
       '${part(<String, dynamic>{'exp': expiry.millisecondsSinceEpoch ~/ 1000})}.signature';
+}
+
+/// Answers each request with the next step of a script: a `(status, body)` record, or a function
+/// that makes the request fail like a dead network. The last step repeats.
+class _ScriptedAdapter implements HttpClientAdapter {
+  final List<Object> steps;
+  final List<RequestOptions> requests = <RequestOptions>[];
+
+  _ScriptedAdapter(this.steps);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final Object step = steps[requests.length < steps.length ? requests.length : steps.length - 1];
+    requests.add(options);
+    if (step is DioException Function(RequestOptions)) throw step(options);
+    final (int status, Map<String, dynamic> body) = step as (int, Map<String, dynamic>);
+    return ResponseBody.fromString(
+      jsonEncode(body),
+      status,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+DioException _timeout(RequestOptions o) => DioException.connectionTimeout(
+  requestOptions: o,
+  timeout: const Duration(seconds: 30),
+);
+
+DioException _offline(RequestOptions o) =>
+    DioException.connectionError(requestOptions: o, reason: 'Tidak ada koneksi');
+
+/// An inbox on screen that breaks when it is emptied.
+class _BrokenInbox extends NotificationController {
+  _BrokenInbox() : super(userIdProvider: () async => 7);
+
+  @override
+  void reset() => throw StateError('layar sudah tidak ada');
 }
 
 /// The 401 handling of [ApiClient]: only a real expired session may refresh the token and log the
@@ -67,7 +115,7 @@ void main() {
     Get.reset();
   });
 
-  Dio clientWith(StubHttpAdapter adapter) {
+  Dio clientWith(HttpClientAdapter adapter) {
     ApiClient.httpAdapterOverride = adapter;
     ApiClient.reset();
     return ApiClient.dio;
@@ -391,6 +439,158 @@ void main() {
       ]).timeout(const Duration(seconds: 2));
 
       expect(results, everyElement(isA<DioException>()));
+      // both failed together, the session was ended once: one wipe, one login dialog
+      expect(sessionExpiredCalls, 1);
+      verify(storage.deleteAll()).called(1);
+    });
+
+    test('a new login (reset) arms the session end again', () async {
+      Future<void> expire() async {
+        final dio = clientWith(StubHttpAdapter(401, unauthorized));
+        await expectLater(
+          dio.get<dynamic>('/api/v1/akademik/kelas').timeout(const Duration(seconds: 2)),
+          throwsA(isA<DioException>()),
+        );
+      }
+
+      await expire();
+      expect(sessionExpiredCalls, 1);
+
+      // clientWith resets the client, as a login does
+      await expire();
+      expect(sessionExpiredCalls, 2);
+    });
+  });
+
+  group('a refresh that cannot be asked does not end the session', () {
+    Future<Object?> failureOf(Dio dio) =>
+        dio.get<dynamic>('/api/v1/akademik/kelas').then<Object?>((_) => null, onError: (Object e) => e);
+
+    void expectSessionKept() {
+      expect(sessionExpiredCalls, 0);
+      verifyNever(storage.deleteAll());
+      verifyNever(storage.write(key: 'token', value: anyNamed('value')));
+    }
+
+    test('timeout, no connection and a server error leave the login, the cache and the inbox alone',
+        () async {
+      final Map<String, DioException Function(RequestOptions)> deadNetworks =
+          <String, DioException Function(RequestOptions)>{
+            'timeout': _timeout,
+            'offline': _offline,
+          };
+      final Map<String, Object> outages = <String, Object>{
+        ...deadNetworks,
+        '500': (500, <String, dynamic>{'status': 'error', 'message': 'Terjadi kesalahan'}),
+        '503': (503, <String, dynamic>{'status': 'error', 'message': 'Layanan sibuk'}),
+        '429': (429, <String, dynamic>{'status': 'error', 'message': 'Terlalu banyak permintaan'}),
+      };
+
+      for (final MapEntry<String, Object> outage in outages.entries) {
+        when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          NotificationInbox.notificationsKey(7): '[]',
+        });
+        AuthMiddleware.cachedToken = 'access-old';
+        final adapter = _ScriptedAdapter(<Object>[(401, unauthorized), outage.value]);
+        final dio = clientWith(adapter);
+
+        final Object? error = await failureOf(dio).timeout(const Duration(seconds: 2));
+
+        // the request of the caller fails with the answer it got, to be shown like any error
+        expect(
+          error,
+          isA<DioException>().having((e) => e.response?.statusCode, 'status', 401),
+          reason: outage.key,
+        );
+        expect(adapter.requests.map((r) => r.path), <String>[
+          '/api/v1/akademik/kelas',
+          '/api/v1/auth/refresh',
+        ], reason: outage.key);
+        expectSessionKept();
+        expect(AuthMiddleware.cachedToken, 'access-old', reason: outage.key);
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isTrue, reason: outage.key);
+      }
+    });
+
+    test('an answer without a token is not a dead session either', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (401, unauthorized),
+        (200, <String, dynamic>{'status': 'success', 'data': <String, dynamic>{}}),
+      ]);
+      final dio = clientWith(adapter);
+
+      final Object? error = await failureOf(dio).timeout(const Duration(seconds: 2));
+
+      expect(error, isA<DioException>());
+      expectSessionKept();
+    });
+
+    test('the next request can still refresh and succeed', () async {
+      final adapter = _ScriptedAdapter(<Object>[
+        (401, unauthorized), // GET /kelas
+        _timeout, // POST /auth/refresh: the network hiccups
+        (401, unauthorized), // GET /kelas again
+        (200, refreshOk), // POST /auth/refresh
+        (200, <String, dynamic>{'status': 'success', 'data': <dynamic>[]}), // the retry
+      ]);
+      final dio = clientWith(adapter);
+
+      expect(await failureOf(dio), isA<DioException>());
+      final response = await dio.get<dynamic>('/api/v1/akademik/kelas');
+
+      expect(response.statusCode, 200);
+      // this one refreshed (it writes the new token), nobody was logged out or wiped
+      expect(sessionExpiredCalls, 0);
+      verifyNever(storage.deleteAll());
+    });
+
+    test('requests waiting on the same refresh share its outcome: one refresh call, no logout', () async {
+      final adapter = _ScriptedAdapter(<Object>[
+        (401, unauthorized), // GET /kelas
+        (401, unauthorized), // GET /jadwal
+        _timeout, // POST /auth/refresh
+      ]);
+      final dio = clientWith(adapter);
+
+      final List<Object?> results = await Future.wait(<Future<Object?>>[
+        failureOf(dio),
+        dio
+            .get<dynamic>('/api/v1/akademik/jadwal')
+            .then<Object?>((_) => null, onError: (Object e) => e),
+      ]).timeout(const Duration(seconds: 2));
+
+      expect(results, everyElement(isA<DioException>()));
+      expect(adapter.requests.where((r) => r.path.endsWith('/auth/refresh')), hasLength(1));
+      expectSessionKept();
+    });
+
+    test('a 400 or 401 of /auth/refresh (invalid, expired, deactivated) ends the session', () async {
+      for (final int status in <int>[400, 401]) {
+        sessionExpiredCalls = 0;
+        final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+          (401, unauthorized),
+          (status, <String, dynamic>{'status': 'error', 'message': 'Refresh token expired'}),
+        ]);
+        final dio = clientWith(adapter);
+
+        await expectLater(failureOf(dio).timeout(const Duration(seconds: 2)), completion(isA<DioException>()));
+
+        expect(sessionExpiredCalls, 1, reason: '$status');
+      }
+    });
+
+    test('no refresh token in the storage ends the session without asking the server', () async {
+      when(storage.read(key: 'refresh_token')).thenAnswer((_) async => null);
+      final adapter = StubHttpAdapter(401, unauthorized);
+      final dio = clientWith(adapter);
+
+      expect(await failureOf(dio).timeout(const Duration(seconds: 2)), isA<DioException>());
+
+      expect(adapter.requests.map((r) => r.path), <String>['/api/v1/akademik/kelas']);
+      expect(sessionExpiredCalls, 1);
+      verify(storage.deleteAll()).called(1);
     });
   });
 
@@ -439,6 +639,51 @@ void main() {
       await expireSession();
 
       verifyInOrder(<Object?>[storage.read(key: 'id_user'), storage.deleteAll()]);
+    });
+
+    test('the session copy and the inbox are cleared before the storage is wiped', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+      AuthMiddleware.cachedToken = 'access-old';
+      bool? cacheClearedAtWipe;
+      bool? inboxGoneAtWipe;
+      when(storage.deleteAll()).thenAnswer((_) async {
+        cacheClearedAtWipe = AuthMiddleware.cachedToken == null;
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        inboxGoneAtWipe = !prefs.containsKey(NotificationInbox.notificationsKey(7));
+      });
+
+      await expireSession();
+
+      expect(cacheClearedAtWipe, isTrue);
+      expect(inboxGoneAtWipe, isTrue);
+    });
+
+    test('a storage that cannot be wiped does not skip the other steps', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      when(storage.deleteAll()).thenAnswer((_) async => throw Exception('storage rusak'));
+      SharedPreferences.setMockInitialValues(inboxes());
+      AuthMiddleware.cachedToken = 'access-old';
+
+      await expireSession();
+
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isFalse);
+      expect(AuthMiddleware.cachedToken, isNull);
+      expect(sessionExpiredCalls, 1, reason: 'the user still gets to the login page');
+    });
+
+    test('an inbox on screen that breaks does not skip the storage wipe', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+      Get.put<NotificationController>(_BrokenInbox());
+
+      await expireSession();
+
+      verify(storage.deleteAll()).called(1);
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isFalse);
+      expect(sessionExpiredCalls, 1);
     });
 
     test('the list on screen is emptied as well', () async {
