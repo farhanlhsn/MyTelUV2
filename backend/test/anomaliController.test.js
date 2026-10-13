@@ -279,9 +279,14 @@ describe('Anomaly Controller Tests', () => {
 
         /**
          * Re-analysis replaces only OPEN reports. A REVIEWED/RESOLVED report (with the dosen's catatan)
-         * is never changed or deleted, and blocks a new OPEN report with the same (id_user, id_kelas, type).
+         * is never changed or deleted. It blocks a new OPEN report with the same (id_user, id_kelas, type)
+         * while there is no new evidence: reviewed (updatedAt) at/after the end of the student's latest
+         * countable session. `data` holds only the anomalies that are active OPEN reports after saving.
          */
         describe('re-analysis keeps REVIEWED/RESOLVED reports', () => {
+            // after the end of the latest session (2026-09-09T03:00Z) / between the two sessions
+            const AFTER_LATEST_SESSION = new Date('2026-09-10T00:00:00Z');
+            const BEFORE_LATEST_SESSION = new Date('2026-09-05T00:00:00Z');
             const closed = (id, day) => ({
                 id_sesi_absensi: id, status: false,
                 mulai: new Date(`2026-09-${day}T01:00:00Z`), selesai: new Date(`2026-09-${day}T03:00:00Z`)
@@ -308,25 +313,91 @@ describe('Anomaly Controller Tests', () => {
                     createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res
                 );
                 expect(res.status).toHaveBeenCalledWith(200);
-                return { ...fake, res };
+                return { ...fake, res, body: res.json.mock.calls[0][0] };
             };
             const active = (table, id_user, type_anomali) =>
                 table.filter((r) => r.id_user === id_user && r.type_anomali === type_anomali && r.deletedAt === null);
 
-            test('a RESOLVED report detected again keeps its status and catatan, and no OPEN duplicate is added', async () => {
+            test('a RESOLVED report reviewed after the latest session keeps its status and catatan, and no OPEN duplicate is added', async () => {
                 const resolved = {
                     id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED',
-                    catatan_dosen: 'Sudah konfirmasi: sakit, ada surat dokter', deskripsi: 'Kehadiran rendah: 0%', confidence: 1
+                    catatan_dosen: 'Sudah konfirmasi: sakit, ada surat dokter', deskripsi: 'Kehadiran rendah: 0%', confidence: 1,
+                    updatedAt: AFTER_LATEST_SESSION
                 };
                 const { table } = await reanalyze([resolved]);
 
                 expect(active(table, 10, 'TIDAK_HADIR_BERULANG')).toEqual([{ ...resolved, deletedAt: null }]);
             });
 
+            test('a review that a newer countable session outdates does not block: new OPEN report, reviewed one untouched', async () => {
+                const resolved = {
+                    id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED',
+                    catatan_dosen: 'Sudah ditegur', deskripsi: 'Kehadiran rendah: 0%', confidence: 1,
+                    // reviewed after session 1; session 2 (2026-09-09) is new evidence, still absent
+                    updatedAt: BEFORE_LATEST_SESSION
+                };
+                const { table, body } = await reanalyze([resolved]);
+
+                const reports = active(table, 10, 'TIDAK_HADIR_BERULANG');
+                expect(reports).toHaveLength(2);
+                expect(reports).toContainEqual({ ...resolved, deletedAt: null });
+                expect(reports).toContainEqual(expect.objectContaining({ status: 'OPEN', id_kelas: 1, catatan_dosen: null }));
+                expect(body.data.map((a) => a.id_user)).toContain(10);
+            });
+
+            test('the response lists only active OPEN anomalies; ones a review blocks come back in ditinjau', async () => {
+                const { body } = await reanalyze([{
+                    id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED',
+                    catatan_dosen: 'x', updatedAt: AFTER_LATEST_SESSION
+                }]);
+
+                // 10 and 11 are both detected; 10 is covered by the review
+                expect(body.data.map((a) => a.id_user)).toEqual([11]);
+                expect(body.data[0]).not.toHaveProperty('sudah_ditinjau');
+                expect(body.ditinjau).toEqual([expect.objectContaining({
+                    id_user: 10, type_anomali: 'TIDAK_HADIR_BERULANG', sudah_ditinjau: true
+                })]);
+                expect(body.message).toBe('Analisis selesai. Ditemukan 1 potensi anomali.');
+            });
+
+            test('nothing new and everything reviewed: no "normal" message, no active anomalies', async () => {
+                const reviewedAfter = (id_anomali, id_user) => ({
+                    id_anomali, id_user, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'REVIEWED', updatedAt: AFTER_LATEST_SESSION
+                });
+                const { body } = await reanalyze([reviewedAfter(1, 10), reviewedAfter(2, 11)]);
+
+                expect(body.data).toEqual([]);
+                expect(body.ditinjau.map((a) => a.id_user)).toEqual([10, 11]);
+                expect(body.message).toBe('Analisis selesai. Tidak ada anomali baru (2 anomali sudah ditinjau).');
+            });
+
+            test('an OPEN report a dosen reviews while the analysis runs is not overwritten and is reported as ditinjau', async () => {
+                const { table, body } = await (async () => {
+                    prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
+                    prisma.systemSetting.findUnique.mockResolvedValue(null);
+                    mockTransactions([PESERTA, ABSENSI, SESSIONS]);
+                    // the table already has it REVIEWED, the analysis still read it as OPEN
+                    const fake = fakeLaporanTable([{
+                        id_anomali: 3, id_user: 11, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'REVIEWED',
+                        catatan_dosen: 'Baru saja ditinjau', deskripsi: 'lama', updatedAt: AFTER_LATEST_SESSION
+                    }]);
+                    prisma.laporanAnomali.findMany.mockResolvedValueOnce([
+                        { id_anomali: 3, id_user: 11, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN', updatedAt: BEFORE_LATEST_SESSION }
+                    ]);
+                    const res = createMockRes();
+                    await anomaliController.analyzeKelasAttendance(createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res);
+                    return { ...fake, body: res.json.mock.calls[0][0] };
+                })();
+
+                expect(table.find((r) => r.id_anomali === 3)).toMatchObject({ status: 'REVIEWED', deskripsi: 'lama', deletedAt: null });
+                expect(body.data.map((a) => a.id_user)).toEqual([10]);
+                expect(body.ditinjau.map((a) => a.id_user)).toEqual([11]);
+            });
+
             test('a REVIEWED report that is no longer detected is kept', async () => {
                 const reviewed = {
                     id_anomali: 2, id_user: 12, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'REVIEWED',
-                    catatan_dosen: 'Dipantau', deskripsi: 'Kehadiran rendah: 0%', confidence: 1
+                    catatan_dosen: 'Dipantau', deskripsi: 'Kehadiran rendah: 0%', confidence: 1, updatedAt: BEFORE_LATEST_SESSION
                 };
                 const { table } = await reanalyze([reviewed]);
 
@@ -351,7 +422,7 @@ describe('Anomaly Controller Tests', () => {
 
             test('every write runs inside one transaction and only touches OPEN reports', async () => {
                 const { writes } = await reanalyze([
-                    { id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED', catatan_dosen: 'x' },
+                    { id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED', catatan_dosen: 'x', updatedAt: BEFORE_LATEST_SESSION },
                     { id_anomali: 4, id_user: 12, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN' }
                 ]);
 
@@ -407,11 +478,11 @@ describe('Anomaly Controller Tests', () => {
                 else process.env.ANOMALY_API_KEY = ORIGINAL_KEY;
             });
 
-            const analyze = async (absensiList = ABSENSI) => {
+            const analyze = async (absensiList = ABSENSI, existingReports = []) => {
                 prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
                 prisma.systemSetting.findUnique.mockResolvedValue(null);
                 mockTransactions([PESERTA, absensiList, SESSIONS]);
-                const fake = fakeLaporanTable();
+                const fake = fakeLaporanTable(existingReports);
                 const res = createMockRes();
                 await anomaliController.analyzeKelasAttendance(
                     createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res
@@ -497,6 +568,34 @@ describe('Anomaly Controller Tests', () => {
                 } finally {
                     errorSpy.mockRestore();
                 }
+            });
+
+            test('service outage keeps the OPEN POLA_WAKTU_TIDAK_WAJAR reports as they are (the rule was not evaluated)', async () => {
+                const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+                const openPola = {
+                    id_anomali: 7, id_user: 10, id_kelas: 1, type_anomali: 'POLA_WAKTU_TIDAK_WAJAR', status: 'OPEN',
+                    catatan_dosen: 'Cek rekaman CCTV', deskripsi: 'Pola check-in tidak wajar (2/3)', confidence: 0.67
+                };
+                pythonClient.post.mockRejectedValueOnce(Object.assign(new Error('timeout of 10000ms exceeded'), { code: 'ECONNABORTED' }));
+
+                try {
+                    const { body, table } = await analyze(ABSENSI, [openPola]);
+
+                    expect(body.warnings).toEqual([POLA_WAKTU_WARNING]);
+                    expect(table.find((r) => r.id_anomali === 7)).toEqual({ ...openPola, deletedAt: null });
+                } finally {
+                    warnSpy.mockRestore();
+                }
+            });
+
+            test('when the service answers, an OPEN POLA_WAKTU_TIDAK_WAJAR report it no longer finds is replaced', async () => {
+                pythonClient.post.mockResolvedValueOnce({ data: { success: true, count: 0, anomalies: [] } });
+
+                const { table } = await analyze(ABSENSI, [{
+                    id_anomali: 7, id_user: 10, id_kelas: 1, type_anomali: 'POLA_WAKTU_TIDAK_WAJAR', status: 'OPEN'
+                }]);
+
+                expect(table.find((r) => r.id_anomali === 7).deletedAt).toEqual(expect.any(Date));
             });
 
             test('an invalid service response counts as a failure', async () => {
@@ -729,7 +828,7 @@ describe('Anomaly Controller Tests', () => {
                 await anomaliController.analyzeKelasAttendance(req, createMockRes());
                 const job = addJobSpy.mock.calls[0][1];
 
-                await expect(job()).resolves.toEqual({ anomalies: [], warnings: [POLA_WAKTU_WARNING] });
+                await expect(job()).resolves.toEqual({ anomalies: [], ditinjau: [], warnings: [POLA_WAKTU_WARNING] });
             } finally {
                 addJobSpy.mockRestore();
                 warnSpy.mockRestore();

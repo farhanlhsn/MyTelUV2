@@ -111,56 +111,89 @@ const reportKey = (idUser, type) => `${idUser}_${type}`;
 
 /**
  * Saves the result of a (re-)analysis of a class in one transaction. Only OPEN reports are replaced:
- * - a detected anomaly with an active REVIEWED/RESOLVED report of the same (id_user, id_kelas, type)
- *   leaves that report as it is (status, catatan_dosen) and gets no new OPEN report;
+ * - a detected anomaly with an active REVIEWED/RESOLVED report of the same (id_user, id_kelas, type) is
+ *   "sudah ditinjau" while there is no new evidence: the newest such report was reviewed (updatedAt)
+ *   at/after the end (selesai) of the student's latest countable session. It gets no OPEN report;
  * - otherwise the OPEN report with that key is refreshed in place (deskripsi, confidence; its id and
  *   catatan_dosen stay) or a new OPEN report is created;
- * - OPEN reports that are no longer detected are soft-deleted;
+ * - OPEN reports that are no longer detected are soft-deleted, except those of a rule that was skipped
+ *   (`skippedTypes`, e.g. the AI service was down): not evaluated is not "no longer detected";
  * - REVIEWED/RESOLVED reports are never changed, whether detected again or not.
  * The class row is locked first, so two analyses of the same class run one after the other. Every update
- * is guarded by `status: 'OPEN'`, so a report a dosen reviews meanwhile is not overwritten.
+ * is guarded by `status: 'OPEN'`, so a report a dosen reviews meanwhile is not overwritten (that anomaly
+ * then counts as sudah ditinjau).
+ *
+ * @param {number} idKelas
+ * @param {object[]} anomalies - detected anomalies ({id_user, type_anomali, description, confidence, ...})
+ * @param {object} [options]
+ * @param {Map<number, number>} [options.latestSessionEnd] - id_user -> end (ms) of the latest countable session
+ * @param {string[]} [options.skippedTypes] - rule types that were not evaluated in this run
+ * @returns {Promise<{active: object[], ditinjau: object[]}>} active: anomalies that are active OPEN reports
+ *          after saving; ditinjau: anomalies covered by a review, flagged `sudah_ditinjau: true`
  */
-const saveAnalysisResult = (idKelas, anomalies) => prisma.$transaction(async (tx) => {
+const saveAnalysisResult = (idKelas, anomalies, { latestSessionEnd = new Map(), skippedTypes = [] } = {}) => prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id_kelas FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
 
     const existing = await tx.laporanAnomali.findMany({
         where: { id_kelas: idKelas, deletedAt: null },
-        select: { id_anomali: true, id_user: true, type_anomali: true, status: true },
+        select: { id_anomali: true, id_user: true, type_anomali: true, status: true, updatedAt: true },
         orderBy: { createdAt: 'desc' }
     });
 
-    const reviewedKeys = new Set();
+    const reviewedAtByKey = new Map(); // newest review time (ms) of a REVIEWED/RESOLVED report per key
     const openByKey = new Map(); // newest OPEN report per key
     for (const report of existing) {
         const key = reportKey(report.id_user, report.type_anomali);
-        if (report.status !== 'OPEN') reviewedKeys.add(key);
-        else if (!openByKey.has(key)) openByKey.set(key, report);
+        if (report.status !== 'OPEN') {
+            const reviewedAt = new Date(report.updatedAt).getTime();
+            if (!reviewedAtByKey.has(key) || reviewedAt > reviewedAtByKey.get(key)) reviewedAtByKey.set(key, reviewedAt);
+        } else if (!openByKey.has(key)) {
+            openByKey.set(key, report);
+        }
     }
 
+    // A review covers the anomaly until a countable session ends after it (new evidence)
+    const coveredByReview = (item) => {
+        const reviewedAt = reviewedAtByKey.get(reportKey(item.id_user, item.type_anomali));
+        if (reviewedAt === undefined) return false;
+        const latestEnd = latestSessionEnd.get(item.id_user);
+        return latestEnd === undefined || reviewedAt >= latestEnd;
+    };
+
+    const active = [];
+    const ditinjau = [];
     const keptOpenIds = new Set();
     const toCreate = [];
     for (const item of anomalies) {
-        const key = reportKey(item.id_user, item.type_anomali);
-        if (reviewedKeys.has(key)) continue;
+        if (coveredByReview(item)) {
+            ditinjau.push({ ...item, sudah_ditinjau: true });
+            continue;
+        }
 
         const fields = {
             deskripsi: item.description || null,
             confidence: item.confidence !== undefined && item.confidence !== null ? parseFloat(item.confidence) : null
         };
-        const open = openByKey.get(key);
+        const open = openByKey.get(reportKey(item.id_user, item.type_anomali));
         if (open) {
-            await tx.laporanAnomali.updateMany({
+            const { count } = await tx.laporanAnomali.updateMany({
                 where: { id_anomali: open.id_anomali, status: 'OPEN', deletedAt: null },
                 data: fields
             });
             keptOpenIds.add(open.id_anomali);
+            // count 0: a dosen reviewed it after we read it
+            if (count > 0) active.push(item);
+            else ditinjau.push({ ...item, sudah_ditinjau: true });
         } else {
             toCreate.push({ id_user: item.id_user, id_kelas: idKelas, type_anomali: item.type_anomali, ...fields, status: 'OPEN' });
+            active.push(item);
         }
     }
 
     const staleOpenIds = existing
-        .filter(report => report.status === 'OPEN' && !keptOpenIds.has(report.id_anomali))
+        .filter(report => report.status === 'OPEN'
+            && !keptOpenIds.has(report.id_anomali)
+            && !skippedTypes.includes(report.type_anomali))
         .map(report => report.id_anomali);
     if (staleOpenIds.length > 0) {
         await tx.laporanAnomali.updateMany({
@@ -172,6 +205,8 @@ const saveAnalysisResult = (idKelas, anomalies) => prisma.$transaction(async (tx
     if (toCreate.length > 0) {
         await tx.laporanAnomali.createMany({ data: toCreate });
     }
+
+    return { active, ditinjau };
 });
 
 /**
@@ -273,11 +308,18 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
             statusByUserSesi.set(`${a.id_user}_${a.id_sesi_absensi}`, absensiStatus(a));
         });
 
+        // id_user -> end (ms) of the latest countable session: a review older than that has new evidence
+        const latestSessionEnd = new Map();
+
         for (const p of peserta) {
             const uid = p.mahasiswa.id_user;
             const nama = p.mahasiswa.nama;
-            const rekap = summarizeKehadiran(sesiList
-                .filter(s => isCountableSession(s, p.createdAt, now))
+            const countable = sesiList.filter(s => isCountableSession(s, p.createdAt, now));
+            countable.forEach(s => {
+                const end = new Date(s.selesai).getTime();
+                if (!latestSessionEnd.has(uid) || end > latestSessionEnd.get(uid)) latestSessionEnd.set(uid, end);
+            });
+            const rekap = summarizeKehadiran(countable
                 .map(s => statusByUserSesi.get(`${uid}_${s.id_sesi_absensi}`) || null));
             // Nothing to count yet (no closed session since enrollment, or all excused): never an anomaly,
             // whatever the threshold
@@ -302,14 +344,17 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         // Rule 2: POLA_WAKTU_TIDAK_WAJAR from the Python anomaly service. A student already flagged
         // TIDAK_HADIR_BERULANG gets no POLA_WAKTU report (chronic absence first, as in the service).
         const polaWaktu = await detectPolaWaktu({ peserta, absensi, sesiList, now });
+        // A skipped rule was not evaluated: its OPEN reports must stay as they are
+        const skippedTypes = [];
         if (!polaWaktu.available) {
             warnings.push(POLA_WAKTU_UNAVAILABLE_WARNING);
+            skippedTypes.push('POLA_WAKTU_TIDAK_WAJAR');
         }
         const jarangHadir = new Set(anomalies.map(a => a.id_user));
         anomalies.push(...polaWaktu.anomalies.filter(a => !jarangHadir.has(a.id_user)));
 
         // Simpan hasil: only OPEN reports are replaced, REVIEWED/RESOLVED ones are kept
-        await saveAnalysisResult(parseInt(id_kelas), anomalies);
+        const { active, ditinjau } = await saveAnalysisResult(parseInt(id_kelas), anomalies, { latestSessionEnd, skippedTypes });
 
         // Audit Log
         if (typeof logAudit === 'function') {
@@ -317,12 +362,19 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                 action: 'ANOMALY_ANALYSIS',
                 performedBy: userId,
                 targetUserId: null,
-                details: `Analisis kelas ${kelas.nama_kelas} (ID: ${id_kelas}). Ditemukan ${anomalies.length} anomali.`,
+                details: `Analisis kelas ${kelas.nama_kelas} (ID: ${id_kelas}). Ditemukan ${active.length} anomali aktif, ${ditinjau.length} sudah ditinjau.`,
                 ip: req.ip || (req.headers && req.headers['x-forwarded-for']) || '127.0.0.1'
             });
         }
 
-        return { anomalies, warnings };
+        // anomalies: the active OPEN reports of this run; ditinjau: detected but covered by a review
+        return { anomalies: active, ditinjau, warnings };
+    };
+
+    const resultMessage = (active, ditinjau) => {
+        if (active.length > 0) return `Analisis selesai. Ditemukan ${active.length} potensi anomali.`;
+        if (ditinjau.length > 0) return `Analisis selesai. Tidak ada anomali baru (${ditinjau.length} anomali sudah ditinjau).`;
+        return "Analisis selesai. Data kehadiran tampak normal.";
     };
 
     if (isAsync) {
@@ -340,14 +392,15 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
     }
 
     try {
-        const { anomalies, warnings } = await runAnalysisTask();
+        const { anomalies, ditinjau, warnings } = await runAnalysisTask();
 
         res.status(200).json({
             status: "success",
-            message: anomalies.length > 0
-                ? `Analisis selesai. Ditemukan ${anomalies.length} potensi anomali.`
-                : "Analisis selesai. Data kehadiran tampak normal.",
+            message: resultMessage(anomalies, ditinjau),
+            // only the anomalies that are active OPEN reports after this analysis
             data: anomalies,
+            // detected again but covered by a REVIEWED/RESOLVED report (each has sudah_ditinjau: true)
+            ...(ditinjau.length > 0 ? { ditinjau } : {}),
             // e.g. the POLA_WAKTU_TIDAK_WAJAR rule was skipped because the AI service is unavailable
             ...(warnings.length > 0 ? { warnings } : {})
         });
