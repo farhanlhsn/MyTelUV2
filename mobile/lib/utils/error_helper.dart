@@ -4,6 +4,13 @@ import 'package:dio/dio.dart';
 
 /// Utility class untuk menangani error secara konsisten di seluruh aplikasi
 class ErrorHelper {
+  /// Key of the app's ScaffoldMessenger (given to the GetMaterialApp in app.dart). The toasts are
+  /// shown through it, not through `Get.snackbar`: GetX 4.7.2 looks its overlay up in a way current
+  /// Flutter rejects ("No Overlay widget found"), and the failed snackbar then stays "open" in
+  /// GetX's queue, so every later `Get.back()` only tries to close it and never leaves the page.
+  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   /// Menampilkan error dengan dialog yang jelas dan visible
   static void showError(dynamic error, {String title = 'Terjadi Kesalahan'}) {
     String message = parseError(error);
@@ -262,39 +269,87 @@ class ErrorHelper {
     }
   }
 
-  /// Menampilkan success dengan snackbar yang lebih visible
+  /// Shows a floating toast: [title] in bold with [message] below it. A toast already on screen is
+  /// replaced; a tap runs [onTap] and closes it. Without an app shell to show it in (the app is not
+  /// built yet) the toast is skipped, never thrown.
+  static void showToast(
+    String title,
+    String message, {
+    Color? backgroundColor,
+    Color textColor = Colors.white,
+    Widget? icon,
+    Duration duration = const Duration(seconds: 3),
+    VoidCallback? onTap,
+  }) {
+    final ScaffoldMessengerState? messenger = scaffoldMessengerKey.currentState;
+    if (messenger == null) {
+      debugPrint('Toast (no messenger): $title - $message');
+      return;
+    }
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor ?? Colors.grey.shade800,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: duration,
+          content: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              messenger.hideCurrentSnackBar();
+              onTap?.call();
+            },
+            child: Row(
+              children: [
+                if (icon != null) ...[icon, const SizedBox(width: 12)],
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (message.isNotEmpty)
+                        Text(
+                          message,
+                          style: TextStyle(color: textColor, fontSize: 14),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+  }
+
+  /// Menampilkan success dengan toast hijau
   static void showSuccess(String message, {String title = 'Berhasil'}) {
-    Get.snackbar(
+    showToast(
       title,
       message,
       backgroundColor: Colors.green.shade600,
-      colorText: Colors.white,
-      icon: const Padding(
-        padding: EdgeInsets.only(left: 8),
-        child: Icon(Icons.check_circle, color: Colors.white, size: 28),
-      ),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: const Duration(seconds: 3),
-      snackPosition: SnackPosition.TOP,
+      icon: const Icon(Icons.check_circle, color: Colors.white, size: 28),
     );
   }
 
-  /// Menampilkan info dengan snackbar biru
+  /// Menampilkan info dengan toast biru
   static void showInfo(String message, {String title = 'Info'}) {
-    Get.snackbar(
+    showToast(
       title,
       message,
       backgroundColor: Colors.blue.shade600,
-      colorText: Colors.white,
-      icon: const Padding(
-        padding: EdgeInsets.only(left: 8),
-        child: Icon(Icons.info_outline, color: Colors.white, size: 28),
-      ),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: const Duration(seconds: 3),
-      snackPosition: SnackPosition.TOP,
+      icon: const Icon(Icons.info_outline, color: Colors.white, size: 28),
     );
   }
 

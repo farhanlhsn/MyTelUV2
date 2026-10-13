@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../models/anomali_model.dart';
 import '../services/api_client.dart';
 import '../utils/anomali_helper.dart';
+import '../utils/error_helper.dart';
 import 'package:mobile/utils/logger.dart';
 
 class AnomaliController extends GetxController {
@@ -33,7 +34,7 @@ class AnomaliController extends GetxController {
       }
     } on DioException catch (e) {
       debugLog('Error getAnomalySettings: $e');
-      Get.snackbar("Error", "Gagal mengambil konfigurasi threshold");
+      ErrorHelper.showToast("Error", "Gagal mengambil konfigurasi threshold");
     } finally {
       isLoading.value = false;
     }
@@ -60,7 +61,7 @@ class AnomaliController extends GetxController {
       debugLog('Error updateAnomalySettings: $e');
       final responseData = e.response?.data;
       final serverMsg = responseData is Map<String, dynamic> ? responseData['message']?.toString() : null;
-      Get.snackbar("Error", serverMsg ?? "Gagal menyimpan konfigurasi threshold");
+      ErrorHelper.showToast("Error", serverMsg ?? "Gagal menyimpan konfigurasi threshold");
       return false;
     } finally {
       isLoading.value = false;
@@ -93,7 +94,7 @@ class AnomaliController extends GetxController {
 
         warnings.assignAll(parseAnomaliWarnings(body));
         if (!silent && warnings.isNotEmpty) {
-          Get.snackbar(
+          ErrorHelper.showToast(
             'Peringatan',
             joinWarnings(warnings),
             duration: const Duration(seconds: 5),
@@ -103,7 +104,7 @@ class AnomaliController extends GetxController {
       } else {
         message.value = 'Gagal memuat data';
         lastScanFailed.value = true;
-        if (!silent) Get.snackbar("Info", message.value);
+        if (!silent) ErrorHelper.showToast("Info", message.value);
         return false;
       }
     } on DioException catch (e) {
@@ -116,13 +117,13 @@ class AnomaliController extends GetxController {
         'Error Anomali: status=${e.response?.statusCode ?? '-'} type=${e.type}',
       );
       lastScanFailed.value = true;
-      if (!silent) Get.snackbar("Error", message.value);
+      if (!silent) ErrorHelper.showToast("Error", message.value);
       return false;
     } catch (e) {
       debugLog("Error Anomali: $e");
       message.value = 'Gagal memproses hasil analisis';
       lastScanFailed.value = true;
-      if (!silent) Get.snackbar("Error", message.value);
+      if (!silent) ErrorHelper.showToast("Error", message.value);
       return false;
     } finally {
       isLoading.value = false;

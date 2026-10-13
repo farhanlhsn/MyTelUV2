@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile/controllers/notification_controller.dart';
+import '../utils/error_helper.dart';
 import '../utils/logger.dart';
 import '../utils/notification_inbox.dart';
 import '../utils/notification_router.dart';
@@ -76,26 +77,22 @@ class NotificationService {
       // Save notification locally
       saveNotification(message);
 
-      // Show snackbar
+      // Show the banner (a tap opens the page of the notification)
       if (message.notification != null) {
-        Get.snackbar(
+        ErrorHelper.showToast(
           message.notification!.title ?? 'Notifikasi',
           message.notification!.body ?? '',
-          icon: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: Image.asset(
-                'assets/images/telyu.png',
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-              ),
+          icon: ClipRRect(
+            borderRadius: BorderRadius.circular(8.0),
+            child: Image.asset(
+              'assets/images/telyu.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.cover,
             ),
           ),
-          snackPosition: SnackPosition.TOP,
           duration: const Duration(seconds: 4),
-          onTap: (_) => openNotification(message.data),
+          onTap: () => openNotification(message.data),
         );
       }
 

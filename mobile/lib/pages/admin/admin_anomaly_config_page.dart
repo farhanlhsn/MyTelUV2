@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/anomali_controller.dart';
+import '../../utils/error_helper.dart';
 
 class AdminAnomalyConfigPage extends StatefulWidget {
   const AdminAnomalyConfigPage({super.key});
@@ -40,14 +41,10 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
     );
     if (success) {
       Get.back();
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Sukses",
         "threshold berhasil diubah",
         backgroundColor: Colors.green.shade600,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
-        margin: const EdgeInsets.all(15),
-        borderRadius: 8,
         icon: const Icon(Icons.check_circle_outline, color: Colors.white),
       );
     }

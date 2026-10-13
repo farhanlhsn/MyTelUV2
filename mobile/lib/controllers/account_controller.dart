@@ -71,12 +71,11 @@ class AccountController extends GetxController {
   // Fungsi Simpan Profil - Now using real API
   Future<void> saveProfile() async {
     if (nameController.text.trim().isEmpty) {
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Gagal",
         "Nama tidak boleh kosong",
         backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
+        textColor: Colors.red,
       );
       return;
     }
@@ -92,23 +91,21 @@ class AccountController extends GetxController {
         // Update local storage
         await _secureStorage.write(key: 'nama', value: nameController.text.trim());
         
-        Get.snackbar(
+        ErrorHelper.showToast(
           "Berhasil",
           "Profil berhasil diperbarui",
           backgroundColor: Colors.green.shade100,
-          colorText: Colors.green.shade900,
-          snackPosition: SnackPosition.BOTTOM,
+          textColor: Colors.green.shade900,
         );
       } else {
         throw Exception(result['message'] ?? 'Gagal update profil');
       }
     } catch (e) {
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Gagal",
         e.toString().replaceAll('Exception: ', ''),
         backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
+        textColor: Colors.red,
       );
     } finally {
       isLoading.value = false;
@@ -120,20 +117,18 @@ class AccountController extends GetxController {
     final AuthResult result = await submitPasswordChange();
 
     if (result.success) {
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Berhasil",
         result.message,
         backgroundColor: Colors.green.shade100,
-        colorText: Colors.green.shade900,
-        snackPosition: SnackPosition.BOTTOM,
+        textColor: Colors.green.shade900,
       );
     } else {
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Gagal",
         result.message,
         backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
+        textColor: Colors.red,
       );
     }
   }

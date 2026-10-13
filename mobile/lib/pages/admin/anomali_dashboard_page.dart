@@ -67,7 +67,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingKelas = false);
-      Get.snackbar('Error', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
+      ErrorHelper.showToast('Error', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
     }
   }
 
@@ -91,7 +91,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
 
   Future<void> _scanAllKelas() async {
     if (_kelasList.isEmpty) {
-      Get.snackbar('Info', 'Tidak ada kelas untuk dipindai');
+      ErrorHelper.showToast('Info', 'Tidak ada kelas untuk dipindai');
       return;
     }
 
@@ -141,7 +141,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     setState(() => _isScanning = false);
 
     final String peringatanText = joinWarnings(peringatan);
-    Get.snackbar(
+    ErrorHelper.showToast(
       gagal == 0 ? 'Sukses' : 'Sebagian Gagal',
       peringatanText.isEmpty ? ringkasan : '$ringkasan\n$peringatanText',
       duration: const Duration(seconds: 5),
