@@ -26,11 +26,36 @@ The gate fails closed: it opens only for an explicit "OPEN". A DENY, a missing
 or unknown value, a malformed body or an error dict all resolve to "DENY". A
 response whose "status" is present but not "success" is DENY even if it claims
 "OPEN" (a contradictory body must never open the gate).
+
+A transport failure (no server decision was received) is DENY too, but it is
+marked with TRANSPORT_ERROR_KEY so the caller can retry on the very next frame
+instead of starting the duplicate cool-down (see should_start_cooldown).
 """
 
 GATE_OPEN = 'OPEN'
 GATE_DENY = 'DENY'
 STATUS_SUCCESS = 'success'
+TRANSPORT_ERROR_KEY = '_transport_error'
+
+
+def transport_error_result(error):
+    """The DENY dict the edge client builds when no server decision was received"""
+    return {'gate_action': GATE_DENY, 'error': str(error), TRANSPORT_ERROR_KEY: True}
+
+
+def should_start_cooldown(result):
+    """
+    True only for an actual server answer: a dict that came from the server's JSON
+    body and carries a status. A transport error (network failure, timeout, body that
+    is not JSON), a non-dict body or an empty body is not a decision, so it must not
+    start the duplicate cool-down; the next frame retries immediately (the gate stays
+    closed meanwhile because parse_server_result resolves all of those to DENY).
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get(TRANSPORT_ERROR_KEY):
+        return False
+    return result.get('status') is not None
 
 
 def _pick(data, result, key, default=None):

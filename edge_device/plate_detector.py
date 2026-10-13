@@ -21,7 +21,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-from server_result import parse_server_result
+from server_result import parse_server_result, should_start_cooldown, transport_error_result
 
 try:
     import onnxruntime as ort
@@ -506,7 +506,7 @@ class PlateDetector:
                 
         except Exception as e:
             self.logger.error(f"Error sending to server: {e}")
-            return {'gate_action': 'DENY', 'error': str(e)}
+            return transport_error_result(e)
     
     def process_frame(self, frame, save_dir=None):
         """Process a single frame and control gate"""
@@ -582,13 +582,16 @@ class PlateDetector:
             gate_action = parsed['gate_action']
             message = parsed['message']
 
-            # Remember this detection (OPEN and DENY alike) so a repeat is not re-sent within its cool-down
-            self.last_detection = {
-                'bbox': bbox,
-                'time': current_time,
-                'plate_text': plate_text,
-                'gate_action': gate_action
-            }
+            # Remember this detection (OPEN and DENY alike) so a repeat is not re-sent within its cool-down.
+            # A transport error is not a server decision: do not cool down, retry on the next frame
+            # (the gate stays closed meanwhile).
+            if should_start_cooldown(server_result):
+                self.last_detection = {
+                    'bbox': bbox,
+                    'time': current_time,
+                    'plate_text': plate_text,
+                    'gate_action': gate_action
+                }
 
             self.logger.info(
                 f"Detected plate: {plate_text} "

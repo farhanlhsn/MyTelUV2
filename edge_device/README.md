@@ -86,7 +86,9 @@ as `DENY` even if it claims `OPEN`.
 
 A repeat detection of the same plate position (bbox IoU > 0.5) is not sent to the server
 again for 5 seconds after an `OPEN` and for 10 seconds after a `DENY`
-(`OPEN_COOLDOWN_SECONDS` / `DENY_COOLDOWN_SECONDS` in `plate_detector.py`).
+(`OPEN_COOLDOWN_SECONDS` / `DENY_COOLDOWN_SECONDS` in `plate_detector.py`). Only a real
+server answer starts a cool-down: after a network error, timeout or non-JSON response the
+gate stays closed but the next frame retries immediately.
 
 If the camera cannot be read, the detector waits 0.5s between attempts and re-opens the
 capture device after 20 consecutive failures.

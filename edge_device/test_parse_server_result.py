@@ -20,7 +20,11 @@ import unittest
 # Make `server_result` importable no matter where the tests are started from
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from server_result import parse_server_result  # noqa: E402
+from server_result import (  # noqa: E402
+    parse_server_result,
+    should_start_cooldown,
+    transport_error_result,
+)
 
 
 def nested(status, message, **data):
@@ -233,6 +237,49 @@ class ParseServerResultTest(unittest.TestCase):
         parse_server_result(result)
 
         self.assertEqual(result, snapshot)
+
+
+class ShouldStartCooldownTest(unittest.TestCase):
+    """Only a real server answer starts the duplicate cool-down; a transport error retries at once"""
+
+    def test_server_open_starts_cooldown(self):
+        self.assertTrue(should_start_cooldown(nested('success', 'ok', gate_action='OPEN')))
+
+    def test_server_deny_starts_cooldown(self):
+        # Every deny path of the backend carries status "error"
+        self.assertTrue(should_start_cooldown(nested('error', 'Parkiran Utama penuh', gate_action='DENY')))
+        self.assertTrue(should_start_cooldown({'status': 'error', 'message': 'Unauthorized edge device'}))
+
+    def test_transport_error_does_not_start_cooldown(self):
+        result = transport_error_result(Exception('network down'))
+
+        self.assertFalse(should_start_cooldown(result))
+
+    def test_legacy_exception_dict_without_marker_does_not_start_cooldown(self):
+        # No status key: not a server answer
+        self.assertFalse(should_start_cooldown({'gate_action': 'DENY', 'error': 'x'}))
+
+    def test_marker_wins_even_if_a_status_is_present(self):
+        self.assertFalse(should_start_cooldown({'status': 'error', '_transport_error': True}))
+
+    def test_empty_null_and_non_dict_bodies_do_not_start_cooldown(self):
+        for body in ({}, {'status': None}, None, [], ['x'], 'html', 42, True):
+            with self.subTest(body=body):
+                self.assertFalse(should_start_cooldown(body))
+
+
+class TransportErrorResultTest(unittest.TestCase):
+    def test_shape_and_gate_stays_closed(self):
+        result = transport_error_result(ValueError('no json'))
+
+        self.assertEqual(result['gate_action'], 'DENY')
+        self.assertEqual(result['error'], 'no json')
+        self.assertIs(result['_transport_error'], True)
+
+        parsed = parse_server_result(result)
+        self.assertEqual(parsed['gate_action'], 'DENY')
+        self.assertFalse(parsed['success'])
+        self.assertEqual(parsed['message'], 'no json')
 
 
 if __name__ == '__main__':
