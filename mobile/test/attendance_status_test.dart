@@ -175,6 +175,97 @@ void main() {
     });
   });
 
+  group('overallAttendancePercentage', () {
+    Map<String, dynamic> kelas({
+      required int totalSesi,
+      required int hadir,
+      int izin = 0,
+      int sakit = 0,
+    }) => <String, dynamic>{
+      'kelas': <String, dynamic>{'id_kelas': 1},
+      'sessions': <dynamic>[],
+      'stats': <String, dynamic>{
+        'total_sesi': totalSesi,
+        'total_hadir': hadir,
+        'total_izin': izin,
+        'total_sakit': sakit,
+        'total_tidak_hadir': totalSesi - hadir - izin - sakit,
+        'persentase': '0',
+      },
+    };
+
+    test('is the present sessions over the countable sessions of all classes together', () {
+      // class 1: 3 present of 3 countable (4 - 1 excused), class 2: 1 present of 2
+      final double overall = overallAttendancePercentage(<Map<String, dynamic>>[
+        kelas(totalSesi: 4, hadir: 3, izin: 1),
+        kelas(totalSesi: 2, hadir: 1),
+      ]);
+
+      expect(overall, 4 / 5 * 100);
+    });
+
+    test('a session without any record counts as absent (the server lists it as tidak hadir)', () {
+      // 5 closed sessions, the student checked in at 2: 40%, not the 100% of "no rows, no misses"
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[kelas(totalSesi: 5, hadir: 2)]),
+        40.0,
+      );
+    });
+
+    test('izin and sakit leave the denominator', () {
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[
+          kelas(totalSesi: 4, hadir: 1, izin: 1, sakit: 1),
+        ]),
+        50.0,
+      );
+    });
+
+    test('nothing countable is 0, not 100', () {
+      expect(overallAttendancePercentage(<Map<String, dynamic>>[]), 0);
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[kelas(totalSesi: 0, hadir: 0)]),
+        0,
+      );
+      // every session excused
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[
+          kelas(totalSesi: 2, hadir: 0, izin: 1, sakit: 1),
+        ]),
+        0,
+      );
+    });
+
+    test('a class without stats adds nothing', () {
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[
+          <String, dynamic>{'kelas': <String, dynamic>{'id_kelas': 9}},
+          kelas(totalSesi: 2, hadir: 1),
+        ]),
+        50.0,
+      );
+    });
+
+    test('everyone present is 100', () {
+      expect(
+        overallAttendancePercentage(<Map<String, dynamic>>[kelas(totalSesi: 3, hadir: 3)]),
+        100.0,
+      );
+    });
+
+    test('is the same number the class cards of the history add up to', () {
+      final List<Map<String, dynamic>> history = <Map<String, dynamic>>[
+        kelas(totalSesi: 6, hadir: 3, izin: 1, sakit: 1),
+        kelas(totalSesi: 3, hadir: 2),
+      ];
+
+      // sesiHadirText of the cards: "3/4 sesi hadir" and "2/3 sesi hadir" -> 5 of 7
+      expect(sesiHadirText(history[0]['stats'] as Map<String, dynamic>), startsWith('3/4'));
+      expect(sesiHadirText(history[1]['stats'] as Map<String, dynamic>), startsWith('2/3'));
+      expect(overallAttendancePercentage(history), 5 / 7 * 100);
+    });
+  });
+
   group('sesiHadirText', () {
     test('present over the sessions that count', () {
       expect(

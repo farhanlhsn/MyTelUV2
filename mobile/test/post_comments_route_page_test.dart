@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:mobile/models/post_model.dart';
 import 'package:mobile/pages/home/post_comments_route_page.dart';
+import 'package:mobile/services/post_service.dart';
+
+import 'support/stub_http_adapter.dart';
 
 /// The page behind a social notification: only the post id is known, so the post is fetched first.
 /// (The success path hands the post to the existing CommentsPage, which has its own tests' worth of
@@ -52,7 +55,7 @@ void main() {
     expect(asked, <int>[42]);
   });
 
-  testWidgets('a post that does not exist (deleted) says so, and Coba Lagi asks again', (tester) async {
+  testWidgets('a post that does not exist (deleted) says so, and there is nothing to retry', (tester) async {
     var calls = 0;
     await pumpPage(
       tester,
@@ -66,12 +69,47 @@ void main() {
 
     expect(find.text('Postingan tidak ditemukan atau sudah dihapus.'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Coba Lagi'), findsNothing);
+    expect(find.textContaining('Periksa koneksi'), findsNothing);
+    expect(calls, 1);
+  });
 
-    await tester.tap(find.text('Coba Lagi'));
-    await tester.pump();
-    await tester.pump();
+  testWidgets('a 404 of the server (deleted post) is the same "not found" page, not a connection error',
+      (tester) async {
+    final adapter = StubHttpAdapter(404, <String, dynamic>{
+      'status': 'error',
+      'message': 'Post tidak ditemukan',
+    });
+    await pumpPage(
+      tester,
+      idPost: 42,
+      loadPost: PostService(dio: adapter.dio()).getPostById,
+    );
+    await tester.pumpAndSettle();
 
-    expect(calls, 2);
+    expect(adapter.requests.map((r) => r.path), <String>['/api/v1/posts/42']);
+    expect(find.text('Postingan tidak ditemukan atau sudah dihapus.'), findsOneWidget);
+    expect(find.text('Coba Lagi'), findsNothing);
+    expect(find.textContaining('Periksa koneksi'), findsNothing);
+  });
+
+  testWidgets('a server error of the real service is a failure that can be retried', (tester) async {
+    final adapter = StubHttpAdapter(500, <String, dynamic>{
+      'status': 'error',
+      'message': 'Terjadi kesalahan',
+    });
+    await pumpPage(
+      tester,
+      idPost: 42,
+      loadPost: PostService(dio: adapter.dio()).getPostById,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Tidak dapat memuat postingan. Periksa koneksi Anda lalu coba lagi.'),
+      findsOneWidget,
+    );
+    expect(find.text('Coba Lagi'), findsOneWidget);
   });
 
   testWidgets('a network failure shows an Indonesian message and can be retried', (tester) async {
@@ -112,6 +150,8 @@ void main() {
 
     expect(calls, 0);
     expect(find.text('Postingan tidak ditemukan atau sudah dihapus.'), findsOneWidget);
+    // asking again cannot find a post that has no id
+    expect(find.text('Coba Lagi'), findsNothing);
   });
 
   testWidgets('reads the post id from the route arguments', (tester) async {

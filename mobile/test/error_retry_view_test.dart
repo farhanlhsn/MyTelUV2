@@ -24,4 +24,22 @@ void main() {
     await tester.tap(find.text('Coba Lagi'));
     expect(retries, 1);
   });
+
+  testWidgets('without onRetry there is no Coba Lagi button', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ErrorRetryView(
+            title: 'Postingan tidak tersedia',
+            message: 'Postingan tidak ditemukan atau sudah dihapus.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Postingan tidak tersedia'), findsOneWidget);
+    expect(find.text('Postingan tidak ditemukan atau sudah dihapus.'), findsOneWidget);
+    expect(find.text('Coba Lagi'), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
+  });
 }

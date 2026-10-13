@@ -149,6 +149,27 @@ AttendanceSummary summarizeAttendance(Iterable<String?> statuses) {
   );
 }
 
+/// The attendance percentage of a student over all their classes together, from the student
+/// history (`GET /akademik/absensi/ku/history`). Every class carries the server's own `stats`, which
+/// count each closed session of the class since the enrollment (one without a record is absent, so
+/// a missed session shows even though it left no row) and leave izin/sakit out of the denominator.
+/// Present sessions over countable sessions; nothing countable is 0, not 100.
+double overallAttendancePercentage(Iterable<Map<String, dynamic>> history) {
+  int hadir = 0;
+  int dihitung = 0;
+
+  for (final Map<String, dynamic> kelas in history) {
+    final Object? stats = kelas['stats'];
+    if (stats is! Map) continue;
+    int count(String key) => (stats[key] as num?)?.toInt() ?? 0;
+
+    hadir += count('total_hadir');
+    dihitung += count('total_sesi') - count('total_izin') - count('total_sakit');
+  }
+
+  return dihitung > 0 ? hadir / dihitung * 100 : 0;
+}
+
 /// "3/4 sesi hadir" for the class card of the student history. Izin and sakit are not part of the
 /// denominator (same as the percentage), they are named separately: "3/4 sesi hadir • 2 izin/sakit".
 String sesiHadirText(Map<String, dynamic>? stats) {

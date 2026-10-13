@@ -26,6 +26,11 @@ class _PostCommentsRoutePageState extends State<PostCommentsRoutePage> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  /// The post is gone (deleted, or the id is no good): asking again would not change the answer.
+  bool _notFound = false;
+
+  static const String _notFoundMessage = 'Postingan tidak ditemukan atau sudah dihapus.';
+
   int? get _idPost {
     if (widget.idPost != null) return widget.idPost;
     final Object? arguments = Get.arguments;
@@ -44,13 +49,15 @@ class _PostCommentsRoutePageState extends State<PostCommentsRoutePage> {
     if (idPost == null) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Postingan tidak ditemukan atau sudah dihapus.';
+        _notFound = true;
+        _errorMessage = _notFoundMessage;
       });
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _notFound = false;
       _errorMessage = null;
     });
 
@@ -62,9 +69,8 @@ class _PostCommentsRoutePageState extends State<PostCommentsRoutePage> {
       setState(() {
         _post = post;
         _isLoading = false;
-        _errorMessage = post == null
-            ? 'Postingan tidak ditemukan atau sudah dihapus.'
-            : null;
+        _notFound = post == null;
+        _errorMessage = post == null ? _notFoundMessage : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -95,9 +101,10 @@ class _PostCommentsRoutePageState extends State<PostCommentsRoutePage> {
               child: CircularProgressIndicator(color: Color(0xFFE63946)),
             )
           : ErrorRetryView(
-              title: 'Gagal membuka postingan',
-              message: _errorMessage ?? 'Postingan tidak ditemukan atau sudah dihapus.',
-              onRetry: _load,
+              title: _notFound ? 'Postingan tidak tersedia' : 'Gagal membuka postingan',
+              message: _errorMessage ?? _notFoundMessage,
+              // Nothing to retry for a post that is gone
+              onRetry: _notFound ? null : _load,
             ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile/utils/attendance_helper.dart';
+import 'package:mobile/utils/attendance_status.dart';
 
 void main() {
   group('attendanceBadgeLabel', () {
@@ -320,8 +321,15 @@ void main() {
   group('kehadiranStatusLabel', () {
     test('translates the backend status', () {
       expect(kehadiranStatusLabel('HADIR'), 'Hadir');
-      expect(kehadiranStatusLabel('TELAT'), 'Terlambat');
-      expect(kehadiranStatusLabel('telat'), 'Terlambat');
+      expect(kehadiranStatusLabel('TELAT'), 'Telat');
+      expect(kehadiranStatusLabel('telat'), 'Telat');
+    });
+
+    test('says the same as the status label of the history and the dosen list', () {
+      for (final String status in attendanceStatuses) {
+        expect(kehadiranStatusLabel(status), attendanceStatusLabel(status), reason: status);
+      }
+      expect(kehadiranStatusLabel('TELAT'), isNot('Terlambat'));
     });
 
     test('returns a dash for a missing or unknown status', () {

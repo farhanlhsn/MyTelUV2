@@ -191,6 +191,9 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         child: Obx(() {
           final userName = _homeController.currentUser.value?.nama ?? 'User';
+          // Only a student has an attendance percentage (the others have no classes to attend)
+          final bool showKehadiran =
+              _homeController.currentUser.value?.role == 'MAHASISWA';
           final totalKehadiran = _homeController.totalKehadiranPercentage;
 
           return Row(
@@ -240,14 +243,15 @@ class _HomePageState extends State<HomePage> {
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              "Kehadiran: ${totalKehadiran.toStringAsFixed(1)}%",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 10,
+                            if (showKehadiran)
+                              Text(
+                                "Kehadiran: ${totalKehadiran.toStringAsFixed(1)}%",
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 10,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ],
                         ),
                       ),

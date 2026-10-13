@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:geolocator/geolocator.dart';
 
+import 'attendance_status.dart';
 import 'error_helper.dart';
 
 /// Pure helpers for the attendance flow (home card, absen page). No widgets, no platform calls,
@@ -177,16 +178,11 @@ String locationErrorMessage(Object error) {
 // GPS-only attendance response
 // ---------------------------------------------------------------------------
 
-/// "Hadir" / "Terlambat" for the status the backend returns with a check-in.
+/// The label of the status the backend returns with a check-in ("Hadir" / "Telat"), or "-" when it
+/// has none. The wording is [attendanceStatusLabel]'s: one source for the whole app.
 String kehadiranStatusLabel(String? status) {
-  switch (status?.toUpperCase()) {
-    case 'HADIR':
-      return 'Hadir';
-    case 'TELAT':
-      return 'Terlambat';
-    default:
-      return '-';
-  }
+  final String? known = normalizeAttendanceStatus(status);
+  return known == null ? '-' : attendanceStatusLabel(known);
 }
 
 /// The backend `message` of an error body. A geofence rejection also carries `distance` and

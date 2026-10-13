@@ -30,7 +30,8 @@ class PostService {
     }
   }
 
-  // Get single post by ID
+  // Get single post by ID. A post that was deleted (or never existed) is not a failure: the server
+  // answers 404, and the result is null.
   Future<PostModel?> getPostById(int id) async {
     try {
       final Response<dynamic> response = await _dio.get<dynamic>(
@@ -45,6 +46,7 @@ class PostService {
       }
       return null;
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
       throw Exception('Failed to get post: ${e.message}');
     }
   }

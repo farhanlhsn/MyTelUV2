@@ -2,14 +2,18 @@ import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/kelas.dart';
 import '../models/kelas_hari_ini.dart';
-import '../models/absensi.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
+import '../utils/attendance_status.dart';
 import '../utils/logger.dart';
 
 class HomeController extends GetxController {
-  final AkademikService _akademikService = AkademikService();
+  final AkademikService _akademikService;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  /// [akademikService] is for tests; the app uses the default one.
+  HomeController({AkademikService? akademikService})
+    : _akademikService = akademikService ?? AkademikService();
 
   // Observable states
   final RxBool isLoading = false.obs;
@@ -19,9 +23,9 @@ class HomeController extends GetxController {
 
   final RxList<PesertaKelasModel> kelasList = <PesertaKelasModel>[].obs;
   final RxList<KelasHariIniModel> kelasHariIniList = <KelasHariIniModel>[].obs;
-  final RxList<AbsensiModel> absensiList = <AbsensiModel>[].obs;
-  final RxMap<int, AbsensiStatsModel> absensiStats =
-      <int, AbsensiStatsModel>{}.obs;
+
+  /// Attendance of the student over all their classes, in percent (see [loadAbsensi]).
+  final RxDouble kehadiranPercentage = 0.0.obs;
   final RxBool isKelasHariIniFromCache = false.obs;
 
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
@@ -119,40 +123,21 @@ class HomeController extends GetxController {
     }
   }
 
-  // Load absensi mahasiswa
+  // Load the attendance percentage of the student. It comes from the same history the absensi page
+  // shows (the server's own counts: every closed session counts, also one the student missed without
+  // leaving a record; izin/sakit are left out), so Home and History say the same.
   Future<void> loadAbsensi() async {
     isLoadingAbsensi.value = true;
     try {
-      final List<AbsensiModel> absensi = await _akademikService.getAbsensiKu();
-      absensiList.value = absensi;
-      absensiStats.value = _buildAbsensiStats(absensi);
+      final List<Map<String, dynamic>> history =
+          await _akademikService.getAbsensiKuHistory();
+      kehadiranPercentage.value = overallAttendancePercentage(history);
     } catch (e) {
+      // The last percentage stays on screen
       errorMessage.value = 'Failed to load absensi: ${e.toString()}';
-      absensiList.value = [];
-      absensiStats.value = {};
     } finally {
       isLoadingAbsensi.value = false;
     }
-  }
-
-  Map<int, AbsensiStatsModel> _buildAbsensiStats(
-    List<AbsensiModel> absensiList,
-  ) {
-    final Map<int, Map<String, int>> countsByKelas = {};
-
-    for (final AbsensiModel absensi in absensiList) {
-      final counts = countsByKelas.putIfAbsent(
-        absensi.idKelas,
-        () => {'HADIR': 0, 'TELAT': 0, 'IZIN': 0, 'SAKIT': 0, 'ALPHA': 0},
-      );
-      // Counted by attendance status (typeAbsensi only says how it was recorded)
-      counts[absensi.status] = (counts[absensi.status] ?? 0) + 1;
-    }
-
-    return countsByKelas.map(
-      (int idKelas, Map<String, int> counts) =>
-          MapEntry(idKelas, AbsensiStatsModel.fromJson(counts)),
-    );
   }
 
   // Get next class (kelas terdekat berdasarkan jadwal)
@@ -164,28 +149,8 @@ class HomeController extends GetxController {
     return kelasList.first;
   }
 
-  // Get absensi stats for a specific class
-  AbsensiStatsModel? getAbsensiStatsForKelas(int idKelas) {
-    return absensiStats[idKelas];
-  }
-
-  // Get total kehadiran percentage across all classes
-  double get totalKehadiranPercentage {
-    if (absensiStats.isEmpty) return 100.0;
-
-    int totalHadir = 0;
-    int totalAbsensi = 0;
-
-    // Late counts as present, excused (izin/sakit) leaves the denominator
-    for (final AbsensiStatsModel stats in absensiStats.values) {
-      totalHadir += stats.totalHadir + stats.totalTelat;
-      totalAbsensi += stats.totalDihitung;
-    }
-
-    if (totalAbsensi == 0) return 100.0;
-
-    return (totalHadir / totalAbsensi * 100);
-  }
+  // Attendance percentage over all classes (0 until it is loaded, or when nothing is countable yet)
+  double get totalKehadiranPercentage => kehadiranPercentage.value;
 
   // Refresh all data
   Future<void> refreshData() async {
