@@ -1,8 +1,12 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { Prisma } = require('../generated/prisma');
-const { parsePagination, buildPaginationResponse, isDosenAuthorizedForKelas, haversineDistance } = require('../utils/akademikHelpers');
+const { parsePagination, buildPaginationResponse, isDosenAuthorizedForKelas, haversineDistance, isCountableSession, isUniqueViolation } = require('../utils/akademikHelpers');
+const { parsePagination: clampPagination } = require('../utils/paginationHelper');
+const { jakartaWeekday, jakartaDayRange, jakartaWeekRange, jakartaDateString, jakartaTimeString } = require('../utils/timezone');
 const { sendAbsensiNotification } = require('../utils/firebase');
+
+const ABSENSI_DUPLIKAT_MESSAGE = "Anda sudah melakukan absensi untuk sesi ini";
 
 // ==================== MATAKULIAH CONTROLLERS ====================
 exports.createMatakuliah = asyncHandler(async (req, res) => {
@@ -209,6 +213,46 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
 
 // ==================== KELAS CONTROLLERS ====================
 
+const KELAS_TIME_REGEX = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+const JAM_TIDAK_URUT_MESSAGE = "Jam berakhir harus setelah jam mulai";
+const HARI_TIDAK_VALID_MESSAGE = "Hari harus bernilai 1 (Senin) sampai 7 (Minggu)";
+
+// "8:05:00" -> seconds since midnight, so "9:00:00" and "10:00:00" compare correctly
+const timeToSeconds = (time) => {
+    const [hours, minutes, seconds] = String(time).split(':').map(Number);
+    return hours * 3600 + minutes * 60 + seconds;
+};
+
+// Kelas.hari is optional; when given it must be 1 (Senin) .. 7 (Minggu). Returns null when absent, NaN when invalid.
+const parseHari = (hari) => {
+    if (hari === undefined || hari === null || hari === '') return null;
+    const parsed = Number(hari);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 7 ? parsed : NaN;
+};
+
+// Classes of the same semester on the same hari whose time overlaps and that share the dosen or the room.
+// A class without hari is not on the weekly schedule, so it cannot clash.
+const findJadwalBentrok = async (db, { hari, jamMulai, jamBerakhir, idDosen, ruangan, idSemester, excludeIdKelas = 0 }) => {
+    if (hari === null || hari === undefined) return [];
+    return db.$queryRaw`
+        SELECT id_kelas, nama_kelas, id_dosen, ruangan
+        FROM kelas
+        WHERE "deletedAt" IS NULL
+        AND hari = ${hari}
+        AND id_semester IS NOT DISTINCT FROM ${idSemester}::int
+        AND id_kelas <> ${excludeIdKelas}
+        AND (id_dosen = ${idDosen} OR LOWER(TRIM(ruangan)) = LOWER(${ruangan}))
+        AND jam_mulai < ${jamBerakhir}::time
+        AND jam_berakhir > ${jamMulai}::time
+    `;
+};
+
+const jadwalBentrokMessage = (bentrok, idDosen, ruangan) => (
+    bentrok.id_dosen === idDosen
+        ? `Jadwal bentrok: dosen sudah mengajar kelas ${bentrok.nama_kelas} pada waktu tersebut`
+        : `Jadwal bentrok: Ruangan ${ruangan} sudah dipakai kelas ${bentrok.nama_kelas} pada waktu tersebut`
+);
+
 exports.createKelas = asyncHandler(async (req, res) => {
     const { id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan } = req.body;
 
@@ -252,31 +296,25 @@ exports.createKelas = asyncHandler(async (req, res) => {
     }
 
     // Validate time format (HH:MM:SS)
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    if (!timeRegex.test(jam_mulai) || !timeRegex.test(jam_berakhir)) {
+    if (!KELAS_TIME_REGEX.test(jam_mulai) || !KELAS_TIME_REGEX.test(jam_berakhir)) {
         return res.status(400).json({
             status: "error",
             message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
         });
     }
 
-    // Check for schedule conflicts (same dosen, same time, same day)
-    const conflictingKelas = await prisma.$queryRaw`
-        SELECT * FROM kelas 
-        WHERE id_dosen = ${parseInt(id_dosen)}
-        AND "deletedAt" IS NULL
-        AND hari = ${req.body.hari ? parseInt(req.body.hari) : 0}
-        AND (
-            (jam_mulai <= ${jam_mulai}::time AND jam_berakhir > ${jam_mulai}::time)
-            OR (jam_mulai < ${jam_berakhir}::time AND jam_berakhir >= ${jam_berakhir}::time)
-            OR (jam_mulai >= ${jam_mulai}::time AND jam_berakhir <= ${jam_berakhir}::time)
-        )
-    `;
-
-    if (conflictingKelas.length > 0) {
-        return res.status(409).json({
+    if (timeToSeconds(jam_berakhir) <= timeToSeconds(jam_mulai)) {
+        return res.status(400).json({
             status: "error",
-            message: "Schedule conflict detected. Dosen already has a class at this time."
+            message: JAM_TIDAK_URUT_MESSAGE
+        });
+    }
+
+    const hari = parseHari(req.body.hari);
+    if (Number.isNaN(hari)) {
+        return res.status(400).json({
+            status: "error",
+            message: HARI_TIDAK_VALID_MESSAGE
         });
     }
 
@@ -286,27 +324,55 @@ exports.createKelas = asyncHandler(async (req, res) => {
     });
     const activeSemesterId = activeSemester ? activeSemester.id_semester : null;
     const targetKapasitas = req.body.kapasitas ? parseInt(req.body.kapasitas) : 50;
+    const idDosen = parseInt(id_dosen);
+    const targetRuangan = ruangan.trim();
 
-    const insertResult = await prisma.$executeRaw`
-        INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, kapasitas, id_semester, "createdAt", "updatedAt")
-        VALUES (
-            ${parseInt(id_matakuliah)}, 
-            ${parseInt(id_dosen)}, 
-            ${jam_mulai}::time, 
-            ${jam_berakhir}::time, 
-            ${nama_kelas.trim()}, 
-            ${ruangan.trim()},
-            ${req.body.hari ? parseInt(req.body.hari) : null},
-            ${targetKapasitas},
-            ${activeSemesterId},
-            NOW(),
-            NOW()
-        )
-    `;
+    // Conflict check and insert together; RETURNING gives the id of this row (not "the latest row")
+    const result = await prisma.$transaction(async (tx) => {
+        const bentrok = await findJadwalBentrok(tx, {
+            hari,
+            jamMulai: jam_mulai,
+            jamBerakhir: jam_berakhir,
+            idDosen,
+            ruangan: targetRuangan,
+            idSemester: activeSemesterId
+        });
+
+        if (bentrok.length > 0) {
+            return { bentrok: bentrok[0] };
+        }
+
+        const inserted = await tx.$queryRaw`
+            INSERT INTO kelas (id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, kapasitas, id_semester, "createdAt", "updatedAt")
+            VALUES (
+                ${parseInt(id_matakuliah)},
+                ${idDosen},
+                ${jam_mulai}::time,
+                ${jam_berakhir}::time,
+                ${nama_kelas.trim()},
+                ${targetRuangan},
+                ${hari},
+                ${targetKapasitas},
+                ${activeSemesterId},
+                NOW(),
+                NOW()
+            )
+            RETURNING id_kelas
+        `;
+
+        return { idKelas: inserted[0].id_kelas };
+    });
+
+    if (result.bentrok) {
+        return res.status(409).json({
+            status: "error",
+            message: jadwalBentrokMessage(result.bentrok, idDosen, targetRuangan)
+        });
+    }
 
     // Fetch the created kelas with relations
     const createdKelas = await prisma.kelas.findFirst({
-        orderBy: { createdAt: 'desc' },
+        where: { id_kelas: result.idKelas },
         include: {
             matakuliah: true,
             dosen: {
@@ -375,16 +441,15 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
     const userRole = req.user.role;
 
-    // Get current day (1=Monday/Senin, 7=Sunday/Minggu)
+    // Get current day in Jakarta (1=Monday/Senin, 7=Sunday/Minggu), whatever the server time zone is
     const now = new Date();
-    const currentDay = now.getDay() === 0 ? 7 : now.getDay(); // Convert Sunday from 0 to 7
-    const currentTime = now.toTimeString().slice(0, 8);
+    const currentDay = jakartaWeekday(now);
+    const currentTime = jakartaTimeString(now);
 
-    // 1. Find overrides moving TO today
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+    // 1. Find overrides moving TO today (the Jakarta calendar day)
+    const { start: startOfDay, end: endOfDay } = jakartaDayRange(now);
+    const todayKey = jakartaDateString(now);
+    const isToday = (date) => !!date && jakartaDateString(date) === todayKey;
 
     const overridesToToday = await prisma.jadwalPengganti.findMany({
         where: {
@@ -530,8 +595,8 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
             // 2. If override.tanggal_ganti is TODAY -> Class is moved HERE.
 
             for (const o of k.jadwalPengganti) {
-                const asliIsToday = new Date(o.tanggal_asli).getDate() === now.getDate();
-                const gantiIsToday = o.tanggal_ganti ? new Date(o.tanggal_ganti).getDate() === now.getDate() : false;
+                const asliIsToday = isToday(o.tanggal_asli);
+                const gantiIsToday = isToday(o.tanggal_ganti);
 
                 if (asliIsToday || gantiIsToday) {
                     override = o;
@@ -552,7 +617,7 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
 
         // Apply override details if moved TO today
         if (hasOverride && override.status === 'GANTI_JADWAL' && override.tanggal_ganti) {
-            const gantiIsToday = new Date(override.tanggal_ganti).getDate() === now.getDate();
+            const gantiIsToday = isToday(override.tanggal_ganti);
             if (gantiIsToday) {
                 // It is TODAY because of this override
                 if (override.jam_mulai_ganti) displayJamMulai = override.jam_mulai_ganti;
@@ -597,6 +662,8 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
             override: override ? {
                 status: override.status,
                 alasan: override.alasan,
+                // Needed by the filter below to tell "cancelled/moved away today" from "moved here today"
+                tanggal_asli: override.tanggal_asli,
                 tanggal_ganti: override.tanggal_ganti,
                 ruangan_ganti: override.ruangan_ganti
             } : null
@@ -617,8 +684,8 @@ exports.getKelasHariIni = asyncHandler(async (req, res) => {
         }
 
         const o = k.override;
-        const asliIsToday = new Date(o.tanggal_asli).getDate() === now.getDate();
-        const gantiIsToday = o.tanggal_ganti ? new Date(o.tanggal_ganti).getDate() === now.getDate() : false;
+        const asliIsToday = isToday(o.tanggal_asli);
+        const gantiIsToday = isToday(o.tanggal_ganti);
 
         if (k.hari === currentDay) {
             // Normally today.
@@ -742,7 +809,7 @@ exports.getKelasById = asyncHandler(async (req, res) => {
 
 exports.updateKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari } = req.body;
+    const { id_matakuliah, id_dosen, jam_mulai, jam_berakhir, nama_kelas, ruangan, hari, kapasitas } = req.body;
 
     const kelas = await prisma.kelas.findFirst({
         where: {
@@ -802,80 +869,125 @@ exports.updateKelas = asyncHandler(async (req, res) => {
     }
 
     // Validate time format if provided
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
-    if ((jam_mulai && !timeRegex.test(jam_mulai)) || (jam_berakhir && !timeRegex.test(jam_berakhir))) {
+    if ((jam_mulai && !KELAS_TIME_REGEX.test(jam_mulai)) || (jam_berakhir && !KELAS_TIME_REGEX.test(jam_berakhir))) {
         return res.status(400).json({
             status: "error",
             message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
         });
     }
 
-    // Build update data
-    const updateData = {};
-    if (id_matakuliah) updateData.id_matakuliah = parseInt(id_matakuliah);
-    if (id_dosen) updateData.id_dosen = parseInt(id_dosen);
-    if (nama_kelas) updateData.nama_kelas = nama_kelas.trim();
-    if (ruangan) updateData.ruangan = ruangan.trim();
-    if (hari) updateData.hari = parseInt(hari);
+    const newHari = parseHari(hari);
+    if (Number.isNaN(newHari)) {
+        return res.status(400).json({
+            status: "error",
+            message: HARI_TIDAK_VALID_MESSAGE
+        });
+    }
 
-    // Check for schedule conflicts if updating time
-    if (jam_mulai || jam_berakhir) {
-        const newJamMulai = jam_mulai || null;
-        const newJamBerakhir = jam_berakhir || null;
-        const targetDosenId = id_dosen ? parseInt(id_dosen) : kelas.id_dosen;
-
-        // Check for schedule conflicts (same dosen, overlapping time, excluding current kelas)
-        const conflictingKelas = await prisma.$queryRaw`
-            SELECT * FROM kelas 
-            WHERE id_dosen = ${targetDosenId}
-            AND id_kelas != ${parseInt(id)}
-            AND "deletedAt" IS NULL
-            AND hari = ${hari ? parseInt(hari) : kelas.hari}
-            AND (
-                (jam_mulai <= COALESCE(${newJamMulai}::time, jam_mulai) AND jam_berakhir > COALESCE(${newJamMulai}::time, jam_mulai))
-                OR (jam_mulai < COALESCE(${newJamBerakhir}::time, jam_berakhir) AND jam_berakhir >= COALESCE(${newJamBerakhir}::time, jam_berakhir))
-                OR (jam_mulai >= COALESCE(${newJamMulai}::time, jam_mulai) AND jam_berakhir <= COALESCE(${newJamBerakhir}::time, jam_berakhir))
-            )
-        `;
-
-        if (conflictingKelas.length > 0) {
-            return res.status(409).json({
+    let newKapasitas;
+    if (kapasitas !== undefined && kapasitas !== null && kapasitas !== '') {
+        newKapasitas = Number(kapasitas);
+        if (!Number.isInteger(newKapasitas) || newKapasitas < 1) {
+            return res.status(400).json({
                 status: "error",
-                message: "Schedule conflict detected. Dosen already has a class at this time."
+                message: "Kapasitas harus bilangan bulat minimal 1"
             });
         }
     }
 
-    // Handle time fields with safe parameterized query
-    if (jam_mulai && jam_berakhir) {
-        await prisma.$executeRaw`
-            UPDATE kelas 
-            SET jam_mulai = ${jam_mulai}::time,
-                jam_berakhir = ${jam_berakhir}::time,
-                "updatedAt" = NOW()
-            WHERE id_kelas = ${parseInt(id)}
+    const idKelas = parseInt(id);
+    const targetDosenId = id_dosen ? parseInt(id_dosen) : kelas.id_dosen;
+    const targetRuangan = ruangan ? ruangan.trim() : kelas.ruangan;
+    const targetHari = newHari !== null ? newHari : kelas.hari;
+
+    // Any change to when, where or by whom the class is taught must be checked for clashes
+    const scheduleChanged = Boolean(jam_mulai || jam_berakhir || ruangan || id_dosen || newHari !== null);
+
+    // jam_* are Unsupported("time") columns: read the stored values to validate a one-sided change
+    let targetJamMulai = jam_mulai;
+    let targetJamBerakhir = jam_berakhir;
+    if (scheduleChanged && (!jam_mulai || !jam_berakhir)) {
+        const storedTimes = await prisma.$queryRaw`
+            SELECT jam_mulai::text AS jam_mulai, jam_berakhir::text AS jam_berakhir
+            FROM kelas
+            WHERE id_kelas = ${idKelas}
         `;
-    } else if (jam_mulai) {
-        await prisma.$executeRaw`
-            UPDATE kelas 
-            SET jam_mulai = ${jam_mulai}::time,
-                "updatedAt" = NOW()
-            WHERE id_kelas = ${parseInt(id)}
-        `;
-    } else if (jam_berakhir) {
-        await prisma.$executeRaw`
-            UPDATE kelas 
-            SET jam_berakhir = ${jam_berakhir}::time,
-                "updatedAt" = NOW()
-            WHERE id_kelas = ${parseInt(id)}
-        `;
+        targetJamMulai = jam_mulai || storedTimes[0]?.jam_mulai;
+        targetJamBerakhir = jam_berakhir || storedTimes[0]?.jam_berakhir;
     }
 
-    // Update other fields
-    if (Object.keys(updateData).length > 0) {
-        await prisma.kelas.update({
-            where: { id_kelas: parseInt(id) },
-            data: updateData
+    if (targetJamMulai && targetJamBerakhir && timeToSeconds(targetJamBerakhir) <= timeToSeconds(targetJamMulai)) {
+        return res.status(400).json({
+            status: "error",
+            message: JAM_TIDAK_URUT_MESSAGE
+        });
+    }
+
+    // Build update data
+    const updateData = {};
+    if (id_matakuliah) updateData.id_matakuliah = parseInt(id_matakuliah);
+    if (id_dosen) updateData.id_dosen = targetDosenId;
+    if (nama_kelas) updateData.nama_kelas = nama_kelas.trim();
+    if (ruangan) updateData.ruangan = targetRuangan;
+    if (newHari !== null) updateData.hari = newHari;
+    if (newKapasitas !== undefined) updateData.kapasitas = newKapasitas;
+
+    // Checks and the multi-step update succeed or fail together; the row lock serialises
+    // this update with enrollments and other updates of the same class
+    const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
+
+        if (newKapasitas !== undefined) {
+            const enrolledCount = await tx.pesertaKelas.count({
+                where: { id_kelas: idKelas, deletedAt: null }
+            });
+            if (enrolledCount > newKapasitas) {
+                return {
+                    error: 400,
+                    message: `Kapasitas tidak boleh kurang dari jumlah peserta saat ini (${enrolledCount})`
+                };
+            }
+        }
+
+        if (scheduleChanged) {
+            const bentrok = await findJadwalBentrok(tx, {
+                hari: targetHari,
+                jamMulai: targetJamMulai,
+                jamBerakhir: targetJamBerakhir,
+                idDosen: targetDosenId,
+                ruangan: targetRuangan,
+                idSemester: kelas.id_semester,
+                excludeIdKelas: idKelas
+            });
+            if (bentrok.length > 0) {
+                return { error: 409, message: jadwalBentrokMessage(bentrok[0], targetDosenId, targetRuangan) };
+            }
+        }
+
+        if (jam_mulai || jam_berakhir) {
+            await tx.$executeRaw`
+                UPDATE kelas
+                SET jam_mulai = ${targetJamMulai}::time,
+                    jam_berakhir = ${targetJamBerakhir}::time,
+                    "updatedAt" = NOW()
+                WHERE id_kelas = ${idKelas}
+            `;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await tx.kelas.update({
+                where: { id_kelas: idKelas },
+                data: updateData
+            });
+        }
+
+        return {};
+    });
+
+    if (result.error) {
+        return res.status(result.error).json({
+            status: "error",
+            message: result.message
         });
     }
 
@@ -996,94 +1108,145 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
         });
     }
 
-    // 1. Class Capacity Check (BF20)
-    const currentEnrolledCount = await prisma.pesertaKelas.count({
-        where: {
-            id_kelas: parseInt(id_kelas),
-            deletedAt: null
-        }
-    });
+    const idKelas = parseInt(id_kelas);
 
-    if (currentEnrolledCount >= kelas.kapasitas) {
-        return res.status(400).json({
-            status: "error",
-            message: "Kelas sudah penuh. Kapasitas maksimum tercapai."
+    // Capacity check and insert run in one transaction. The class row lock makes concurrent
+    // enrollments (here and in adminAddPeserta) wait, so the count cannot go stale before the insert.
+    const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
+
+        // 1. Class Capacity Check (BF20)
+        const currentEnrolledCount = await tx.pesertaKelas.count({
+            where: {
+                id_kelas: idKelas,
+                deletedAt: null
+            }
         });
-    }
 
-    // 2. Schedule Conflict Check (BF18)
-    if (kelas.hari) {
-        // Fetch target class times
-        const targetTimeData = await prisma.$queryRaw`
-            SELECT jam_mulai::text, jam_berakhir::text 
-            FROM kelas 
-            WHERE id_kelas = ${parseInt(id_kelas)}
-        `;
-        const targetJamMulai = targetTimeData[0]?.jam_mulai;
-        const targetJamBerakhir = targetTimeData[0]?.jam_berakhir;
-
-        if (targetJamMulai && targetJamBerakhir) {
-            const conflictingClasses = await prisma.$queryRaw`
-                SELECT k.id_kelas, k.nama_kelas 
-                FROM kelas k
-                INNER JOIN peserta_kelas pk ON k.id_kelas = pk.id_kelas
-                WHERE pk.id_mahasiswa = ${id_mahasiswa}
-                AND pk."deletedAt" IS NULL
-                AND k."deletedAt" IS NULL
-                AND k.hari = ${kelas.hari}
-                AND k.id_kelas != ${parseInt(id_kelas)}
-                AND (
-                    (k.jam_mulai <= ${targetJamMulai}::time AND k.jam_berakhir > ${targetJamMulai}::time)
-                    OR (k.jam_mulai < ${targetJamBerakhir}::time AND k.jam_berakhir >= ${targetJamBerakhir}::time)
-                    OR (k.jam_mulai >= ${targetJamMulai}::time AND k.jam_berakhir <= ${targetJamBerakhir}::time)
-                )
-            `;
-
-            if (conflictingClasses.length > 0) {
-                return res.status(409).json({
+        if (currentEnrolledCount >= kelas.kapasitas) {
+            return {
+                code: 400,
+                body: {
                     status: "error",
-                    message: `Jadwal bentrok dengan kelas yang sudah Anda ambil: ${conflictingClasses[0].nama_kelas}`
-                });
+                    message: "Kelas sudah penuh. Kapasitas maksimum tercapai."
+                }
+            };
+        }
+
+        // 2. Schedule Conflict Check (BF18)
+        if (kelas.hari) {
+            // Fetch target class times
+            const targetTimeData = await tx.$queryRaw`
+                SELECT jam_mulai::text, jam_berakhir::text 
+                FROM kelas 
+                WHERE id_kelas = ${idKelas}
+            `;
+            const targetJamMulai = targetTimeData[0]?.jam_mulai;
+            const targetJamBerakhir = targetTimeData[0]?.jam_berakhir;
+
+            if (targetJamMulai && targetJamBerakhir) {
+                const conflictingClasses = await tx.$queryRaw`
+                    SELECT k.id_kelas, k.nama_kelas 
+                    FROM kelas k
+                    INNER JOIN peserta_kelas pk ON k.id_kelas = pk.id_kelas
+                    WHERE pk.id_mahasiswa = ${id_mahasiswa}
+                    AND pk."deletedAt" IS NULL
+                    AND k."deletedAt" IS NULL
+                    AND k.hari = ${kelas.hari}
+                    AND k.id_kelas != ${idKelas}
+                    AND (
+                        (k.jam_mulai <= ${targetJamMulai}::time AND k.jam_berakhir > ${targetJamMulai}::time)
+                        OR (k.jam_mulai < ${targetJamBerakhir}::time AND k.jam_berakhir >= ${targetJamBerakhir}::time)
+                        OR (k.jam_mulai >= ${targetJamMulai}::time AND k.jam_berakhir <= ${targetJamBerakhir}::time)
+                    )
+                `;
+
+                if (conflictingClasses.length > 0) {
+                    return {
+                        code: 409,
+                        body: {
+                            status: "error",
+                            message: `Jadwal bentrok dengan kelas yang sudah Anda ambil: ${conflictingClasses[0].nama_kelas}`
+                        }
+                    };
+                }
             }
         }
-    }
 
-    // Check if already enrolled
-    const existingPeserta = await prisma.pesertaKelas.findUnique({
-        where: {
-            id_mahasiswa_id_kelas: {
-                id_mahasiswa,
-                id_kelas: parseInt(id_kelas)
-            }
-        }
-    });
-
-    // If already enrolled and not deleted
-    if (existingPeserta && !existingPeserta.deletedAt) {
-        return res.status(409).json({
-            status: "error",
-            message: "Already enrolled in this class"
-        });
-    }
-
-    // If previously dropped, restore
-    if (existingPeserta && existingPeserta.deletedAt) {
-        const restored = await prisma.pesertaKelas.update({
+        // Check if already enrolled
+        const existingPeserta = await tx.pesertaKelas.findUnique({
             where: {
                 id_mahasiswa_id_kelas: {
                     id_mahasiswa,
-                    id_kelas: parseInt(id_kelas)
+                    id_kelas: idKelas
                 }
-            },
-            data: { deletedAt: null },
+            }
         });
 
+        // If already enrolled and not deleted
+        if (existingPeserta && !existingPeserta.deletedAt) {
+            return {
+                code: 409,
+                body: {
+                    status: "error",
+                    message: "Already enrolled in this class"
+                }
+            };
+        }
+
+        // If previously dropped, restore
+        if (existingPeserta && existingPeserta.deletedAt) {
+            await tx.pesertaKelas.update({
+                where: {
+                    id_mahasiswa_id_kelas: {
+                        id_mahasiswa,
+                        id_kelas: idKelas
+                    }
+                },
+                data: { deletedAt: null },
+            });
+
+            return { restored: true };
+        }
+
+        // Create new enrollment
+        const peserta = await tx.pesertaKelas.create({
+            data: {
+                id_mahasiswa,
+                id_kelas: idKelas
+            },
+            include: {
+                kelas: {
+                    include: {
+                        matakuliah: true,
+                        dosen: {
+                            select: {
+                                id_user: true,
+                                nama: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return {
+            code: 201,
+            body: {
+                status: "success",
+                message: "Enrolled in class successfully",
+                data: peserta
+            }
+        };
+    });
+
+    if (result.restored) {
         // Fetch with relations
         const pesertaWithRelations = await prisma.pesertaKelas.findUnique({
             where: {
                 id_mahasiswa_id_kelas: {
                     id_mahasiswa,
-                    id_kelas: parseInt(id_kelas)
+                    id_kelas: idKelas
                 }
             },
             include: {
@@ -1108,32 +1271,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
         });
     }
 
-    // Create new enrollment
-    const peserta = await prisma.pesertaKelas.create({
-        data: {
-            id_mahasiswa,
-            id_kelas: parseInt(id_kelas)
-        },
-        include: {
-            kelas: {
-                include: {
-                    matakuliah: true,
-                    dosen: {
-                        select: {
-                            id_user: true,
-                            nama: true
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    res.status(201).json({
-        status: "success",
-        message: "Enrolled in class successfully",
-        data: peserta
-    });
+    res.status(result.code).json(result.body);
 });
 
 exports.dropKelas = asyncHandler(async (req, res) => {
@@ -1310,10 +1448,10 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
         });
     }
 
-    // Convert id_mahasiswa to array if it's a single value
-    const mahasiswaIds = Array.isArray(id_mahasiswa)
+    // Convert id_mahasiswa to array if it's a single value (duplicates would be counted twice against kapasitas)
+    const mahasiswaIds = [...new Set(Array.isArray(id_mahasiswa)
         ? id_mahasiswa.map(id => parseInt(id))
-        : [parseInt(id_mahasiswa)];
+        : [parseInt(id_mahasiswa)])];
 
     if (mahasiswaIds.length === 0) {
         return res.status(400).json({
@@ -1337,34 +1475,6 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check existing enrollments (both active and soft-deleted)
-    const existingEnrollments = await prisma.pesertaKelas.findMany({
-        where: {
-            id_kelas: parseInt(id_kelas),
-            id_mahasiswa: { in: mahasiswaIds }
-        }
-    });
-
-    const existingMap = new Map();
-    existingEnrollments.forEach(e => existingMap.set(e.id_mahasiswa, e));
-
-    const toCreate = [];
-    const toRestore = [];
-    const alreadyEnrolled = [];
-
-    for (const id of mahasiswaIds) {
-        const enrollment = existingMap.get(id);
-        if (enrollment) {
-            if (enrollment.deletedAt) {
-                toRestore.push(id);
-            } else {
-                alreadyEnrolled.push(id);
-            }
-        } else {
-            toCreate.push(id);
-        }
-    }
-
     // Perform validation for existence of students (optional, but good for data integrity)
     // For bulk speed, we might skip individual user existence check if we trust the IDs,
     // OR we can fetch all users with these IDs to verify.
@@ -1378,30 +1488,92 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
     });
 
     const validStudentIds = new Set(validStudents.map(u => u.id_user));
+    const idKelas = parseInt(id_kelas);
 
-    // Filter execution lists to only include valid students
-    const validToCreate = toCreate.filter(id => validStudentIds.has(id));
-    const validToRestore = toRestore.filter(id => validStudentIds.has(id));
+    // Capacity check and inserts run in one transaction under the class row lock (see daftarKelas)
+    const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
 
-    // Execute Bulk Restore
-    if (validToRestore.length > 0) {
-        await prisma.pesertaKelas.updateMany({
+        // Check existing enrollments (both active and soft-deleted)
+        const existingEnrollments = await tx.pesertaKelas.findMany({
             where: {
-                id_kelas: parseInt(id_kelas),
-                id_mahasiswa: { in: validToRestore }
-            },
-            data: { deletedAt: null }
+                id_kelas: idKelas,
+                id_mahasiswa: { in: mahasiswaIds }
+            }
         });
-    }
 
-    // Execute Bulk Create
-    if (validToCreate.length > 0) {
-        await prisma.pesertaKelas.createMany({
-            data: validToCreate.map(id => ({
-                id_kelas: parseInt(id_kelas),
-                id_mahasiswa: id
-            })),
-            skipDuplicates: true
+        const existingMap = new Map();
+        existingEnrollments.forEach(e => existingMap.set(e.id_mahasiswa, e));
+
+        const toCreate = [];
+        const toRestore = [];
+        const alreadyEnrolled = [];
+
+        for (const id of mahasiswaIds) {
+            const enrollment = existingMap.get(id);
+            if (enrollment) {
+                if (enrollment.deletedAt) {
+                    toRestore.push(id);
+                } else {
+                    alreadyEnrolled.push(id);
+                }
+            } else {
+                toCreate.push(id);
+            }
+        }
+
+        // Filter execution lists to only include valid students
+        const validToCreate = toCreate.filter(id => validStudentIds.has(id));
+        const validToRestore = toRestore.filter(id => validStudentIds.has(id));
+
+        // Class Capacity Check (BF20) for the whole batch
+        const currentEnrolledCount = await tx.pesertaKelas.count({
+            where: {
+                id_kelas: idKelas,
+                deletedAt: null
+            }
+        });
+        const requested = validToCreate.length + validToRestore.length;
+
+        if (currentEnrolledCount + requested > kelas.kapasitas) {
+            return {
+                error: `Kapasitas kelas tidak mencukupi. Sisa kuota: ${Math.max(0, kelas.kapasitas - currentEnrolledCount)}, diminta: ${requested}`
+            };
+        }
+
+        // Execute Bulk Restore
+        if (validToRestore.length > 0) {
+            await tx.pesertaKelas.updateMany({
+                where: {
+                    id_kelas: idKelas,
+                    id_mahasiswa: { in: validToRestore }
+                },
+                data: { deletedAt: null }
+            });
+        }
+
+        // Execute Bulk Create
+        if (validToCreate.length > 0) {
+            await tx.pesertaKelas.createMany({
+                data: validToCreate.map(id => ({
+                    id_kelas: idKelas,
+                    id_mahasiswa: id
+                })),
+                skipDuplicates: true
+            });
+        }
+
+        return {
+            added: validToCreate.length,
+            restored: validToRestore.length,
+            skipped_already_enrolled: alreadyEnrolled.length
+        };
+    });
+
+    if (result.error) {
+        return res.status(400).json({
+            status: "error",
+            message: result.error
         });
     }
 
@@ -1409,9 +1581,9 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
         status: "success",
         message: "Process completed",
         data: {
-            added: validToCreate.length,
-            restored: validToRestore.length,
-            skipped_already_enrolled: alreadyEnrolled.length,
+            added: result.added,
+            restored: result.restored,
+            skipped_already_enrolled: result.skipped_already_enrolled,
             invalid_ids: mahasiswaIds.length - validStudentIds.size
         }
     });
@@ -1482,31 +1654,71 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     const mulaiTime = new Date(mulai);
     const selesaiTime = new Date(selesai);
 
-    if (isNaN(mulaiTime.getTime()) || isNaN(selesaiTime.getTime()) || mulaiTime >= selesaiTime) {
+    if (isNaN(mulaiTime.getTime()) || isNaN(selesaiTime.getTime())) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid mulai or selesai time"
+            message: "Format waktu mulai atau selesai tidak valid"
+        });
+    }
+
+    if (selesaiTime <= mulaiTime) {
+        return res.status(400).json({
+            status: "error",
+            message: "Waktu selesai harus setelah waktu mulai"
         });
     }
 
     // Determine type_absensi for backward compatibility
     const type_absensi = require_face === true ? 'LOKAL_ABSENSI' : 'REMOTE_ABSENSI';
+    const idKelas = parseInt(id_kelas);
 
-    // Create absensi session
-    const sesi = await prisma.sesiAbsensi.create({
-        data: {
-            id_kelas: parseInt(id_kelas),
-            type_absensi,
-            latitude: isNaN(lat) ? null : lat,
-            longitude: isNaN(lng) ? null : lng,
-            radius_meter: radius,
-            require_face: require_face === true,
-            mulai: mulaiTime,
-            selesai: selesaiTime,
-            status: true,
-            createdBy: id_user
+    // Overlap check and insert in one transaction; the class row lock stops two parallel
+    // requests from both passing the check
+    const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT 1 FROM kelas WHERE id_kelas = ${idKelas} FOR UPDATE`;
+
+        const overlappingSesi = await tx.sesiAbsensi.findFirst({
+            where: {
+                id_kelas: idKelas,
+                deletedAt: null,
+                status: true,
+                mulai: { lt: selesaiTime },
+                selesai: { gt: mulaiTime }
+            },
+            select: { id_sesi_absensi: true }
+        });
+
+        if (overlappingSesi) {
+            return { overlappingSesi };
         }
+
+        // Create absensi session
+        const sesi = await tx.sesiAbsensi.create({
+            data: {
+                id_kelas: idKelas,
+                type_absensi,
+                latitude: isNaN(lat) ? null : lat,
+                longitude: isNaN(lng) ? null : lng,
+                radius_meter: radius,
+                require_face: require_face === true,
+                mulai: mulaiTime,
+                selesai: selesaiTime,
+                status: true,
+                createdBy: id_user
+            }
+        });
+
+        return { sesi };
     });
+
+    if (result.overlappingSesi) {
+        return res.status(409).json({
+            status: "error",
+            message: "Kelas ini sudah memiliki sesi absensi terbuka pada rentang waktu tersebut. Tutup sesi tersebut terlebih dahulu."
+        });
+    }
+
+    const { sesi } = result;
 
     // Send push notification to all students in the class
     sendAbsensiNotification(
@@ -1610,7 +1822,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
     if (existingAbsensi) {
         return res.status(409).json({
             status: "error",
-            message: "Sudah melakukan absensi pada sesi ini"
+            message: ABSENSI_DUPLIKAT_MESSAGE
         });
     }
 
@@ -1699,18 +1911,29 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         });
     }
 
-    await prisma.$executeRaw`
-        INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
-        VALUES (
-          ${id_user},
-          ${parseInt(id_kelas)},
-          ${sesi.id_sesi_absensi},
-          ${sesi.type_absensi}::"TypeAbsensi",
-          POINT(${lng}, ${lat}),
-          ${isMock},
-          NOW()
-        )
-    `;
+    try {
+        await prisma.$executeRaw`
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, "updatedAt")
+            VALUES (
+              ${id_user},
+              ${parseInt(id_kelas)},
+              ${sesi.id_sesi_absensi},
+              ${sesi.type_absensi}::"TypeAbsensi",
+              POINT(${lng}, ${lat}),
+              ${isMock},
+              NOW()
+            )
+        `;
+    } catch (error) {
+        // A parallel request for the same session won the unique index (uq_absensi_user_sesi)
+        if (isUniqueViolation(error)) {
+            return res.status(409).json({
+                status: "error",
+                message: ABSENSI_DUPLIKAT_MESSAGE
+            });
+        }
+        throw error;
+    }
 
     const absensi = await prisma.absensi.findFirst({
         where: {
@@ -1781,8 +2004,8 @@ exports.getAbsensiKu = asyncHandler(async (req, res) => {
 
 exports.getAbsensiKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { type_absensi, date, page = 1, limit = 50 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { type_absensi, date } = req.query;
+    const { page, limit, skip } = clampPagination({ page: req.query.page, limit: req.query.limit ?? 50 });
 
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
@@ -1814,16 +2037,20 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
 
     if (type_absensi) where.type_absensi = type_absensi;
 
-    // Filter by date if provided
+    // Filter by date if provided: the whole Jakarta calendar day ("2026-10-14" = 00:00-23:59:59.999 WIB)
     if (date) {
         const targetDate = new Date(date);
-        targetDate.setHours(0, 0, 0, 0);
-        const nextDate = new Date(targetDate);
-        nextDate.setDate(nextDate.getDate() + 1);
+        if (isNaN(targetDate.getTime())) {
+            return res.status(400).json({
+                status: "error",
+                message: "Format tanggal tidak valid"
+            });
+        }
 
+        const { start, end } = jakartaDayRange(targetDate);
         where.createdAt = {
-            gte: targetDate,
-            lt: nextDate
+            gte: start,
+            lte: end
         };
     }
 
@@ -1831,7 +2058,7 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
         prisma.absensi.findMany({
             where,
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -1852,9 +2079,9 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
         data: absensi,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });
@@ -1885,61 +2112,63 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
         });
     }
 
-    // Get total peserta
-    const totalPeserta = await prisma.pesertaKelas.count({
-        where: {
-            id_kelas: parseInt(id),
-            deletedAt: null
-        }
-    });
+    const idKelas = parseInt(id);
 
-    // Get total absensi
-    const totalAbsensi = await prisma.absensi.count({
-        where: {
-            id_kelas: parseInt(id),
-            deletedAt: null
-        }
-    });
-
-    // Get absensi by type
-    const absensiByType = await prisma.absensi.groupBy({
-        by: ['type_absensi'],
-        where: {
-            id_kelas: parseInt(id),
-            deletedAt: null
-        },
-        _count: {
-            id_absensi: true
-        }
-    });
-
-    // Get absensi by mahasiswa
-    const absensiPerMahasiswa = await prisma.absensi.groupBy({
-        by: ['id_user'],
-        where: {
-            id_kelas: parseInt(id),
-            deletedAt: null,
-            user: {
-                role: 'MAHASISWA'
+    // Sessions, enrollments (with their dates) and attendance of the class
+    const [sesiList, pesertaList, absensiList] = await Promise.all([
+        prisma.sesiAbsensi.findMany({
+            where: { id_kelas: idKelas, deletedAt: null },
+            select: { id_sesi_absensi: true, mulai: true, selesai: true, status: true }
+        }),
+        prisma.pesertaKelas.findMany({
+            where: { id_kelas: idKelas },
+            select: { id_mahasiswa: true, createdAt: true, deletedAt: true }
+        }),
+        prisma.absensi.findMany({
+            where: { id_kelas: idKelas, deletedAt: null },
+            select: {
+                id_user: true,
+                id_sesi_absensi: true,
+                type_absensi: true,
+                user: { select: { role: true } }
             }
-        },
-        _count: {
-            id_absensi: true
-        }
+        })
+    ]);
+
+    // Only attendance in closed sessions that started on/after the student's enrollment counts
+    const now = new Date();
+    const sesiById = new Map(sesiList.map(s => [s.id_sesi_absensi, s]));
+    const enrolledAtByUser = new Map(pesertaList.map(p => [p.id_mahasiswa, p.createdAt]));
+    const countedAbsensi = absensiList.filter(a => {
+        const sesi = sesiById.get(a.id_sesi_absensi);
+        return !!sesi && isCountableSession(sesi, enrolledAtByUser.get(a.id_user), now);
     });
+
+    const totalPeserta = pesertaList.filter(p => !p.deletedAt).length;
+    const totalSesi = sesiList.filter(s => isCountableSession(s, null, now)).length;
+
+    const absensiByType = countedAbsensi.reduce((acc, item) => {
+        acc[item.type_absensi] = (acc[item.type_absensi] || 0) + 1;
+        return acc;
+    }, {});
+
+    // Absensi per mahasiswa
+    const absensiPerMahasiswa = new Map();
+    countedAbsensi
+        .filter(a => a.user?.role === 'MAHASISWA')
+        .forEach(a => absensiPerMahasiswa.set(a.id_user, (absensiPerMahasiswa.get(a.id_user) || 0) + 1));
+    const totalAbsensiMahasiswa = [...absensiPerMahasiswa.values()].reduce((sum, count) => sum + count, 0);
 
     res.status(200).json({
         status: "success",
         data: {
             totalPeserta,
-            totalAbsensi,
-            absensiByType: absensiByType.reduce((acc, item) => {
-                acc[item.type_absensi] = item._count.id_absensi;
-                return acc;
-            }, {}),
-            totalMahasiswaAbsensi: absensiPerMahasiswa.length,
-            averageAbsensiPerMahasiswa: absensiPerMahasiswa.length > 0
-                ? (absensiPerMahasiswa.reduce((sum, item) => sum + item._count.id_absensi, 0) / absensiPerMahasiswa.length).toFixed(2)
+            totalSesi,
+            totalAbsensi: countedAbsensi.length,
+            absensiByType,
+            totalMahasiswaAbsensi: absensiPerMahasiswa.size,
+            averageAbsensiPerMahasiswa: absensiPerMahasiswa.size > 0
+                ? (totalAbsensiMahasiswa / absensiPerMahasiswa.size).toFixed(2)
                 : 0
         }
     });
@@ -1952,8 +2181,8 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
  */
 exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { status, page = 1, limit = 20 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status } = req.query;
+    const { page, limit, skip } = clampPagination({ page: req.query.page, limit: req.query.limit ?? 20 });
 
     // Validate kelas exists
     const kelas = await prisma.kelas.findFirst({
@@ -2000,7 +2229,7 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
         prisma.sesiAbsensi.findMany({
             where,
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 _count: {
                     select: {
@@ -2027,9 +2256,9 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
         data: sesiWithStats,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });
@@ -2277,7 +2506,12 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
             });
         });
 
-        const sessions = kelasSesi.map(sesi => ({
+        // Sessions held before the student enrolled are not theirs to attend (keep one they did attend)
+        const enrolledAt = pk.createdAt ? new Date(pk.createdAt) : null;
+        const relevantSesi = kelasSesi.filter(sesi =>
+            !enrolledAt || new Date(sesi.mulai) >= enrolledAt || absensiMap.has(sesi.id_sesi_absensi));
+
+        const sessions = relevantSesi.map(sesi => ({
             id_sesi: sesi.id_sesi_absensi,
             id_sesi_absensi: sesi.id_sesi_absensi,
             tanggal: sesi.mulai,
@@ -2290,17 +2524,20 @@ exports.getAbsensiKuWithHistory = asyncHandler(async (req, res) => {
             waktu_absen: absensiMap.get(sesi.id_sesi_absensi)?.waktu || null
         }));
 
-        const totalHadir = sessions.filter(s => s.hadir).length;
+        // Stats count only closed sessions that started on/after the enrollment
+        const countedSesi = relevantSesi.filter(sesi => isCountableSession(sesi, pk.createdAt, now));
+        const totalSesi = countedSesi.length;
+        const totalHadir = countedSesi.filter(sesi => absensiMap.has(sesi.id_sesi_absensi)).length;
 
         return {
             kelas: pk.kelas,
             sessions,
             stats: {
-                total_sesi: kelasSesi.length,
+                total_sesi: totalSesi,
                 total_hadir: totalHadir,
-                total_tidak_hadir: kelasSesi.length - totalHadir,
-                persentase: kelasSesi.length > 0
-                    ? ((totalHadir / kelasSesi.length) * 100).toFixed(1)
+                total_tidak_hadir: totalSesi - totalHadir,
+                persentase: totalSesi > 0
+                    ? ((totalHadir / totalSesi) * 100).toFixed(1)
                     : 100
             }
         };
@@ -2397,7 +2634,8 @@ exports.getJadwalPenggantiByKelas = asyncHandler(async (req, res) => {
     };
 
     if (upcoming === 'true') {
-        where.tanggal_asli = { gte: new Date() };
+        // From 00:00 WIB today, so an override for later today is still listed
+        where.tanggal_asli = { gte: jakartaDayRange().start };
     }
 
     const jadwalPengganti = await prisma.jadwalPengganti.findMany({
@@ -2466,18 +2704,9 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
         whereClause.id_dosen = userId;
     }
 
-    // Get current week range to filter relevant overrides
-    const now = new Date();
-    // Start of week (Monday)
-    const day = now.getDay() || 7; // 1=Mon, 7=Sun
-    const startOfWeek = new Date(now);
-    startOfWeek.setHours(0, 0, 0, 0);
-    startOfWeek.setDate(now.getDate() - day + 1);
-
-    // End of week (Sunday)
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
+    // Get current week range to filter relevant overrides:
+    // Monday 00:00 WIB to Sunday 23:59:59.999 WIB of the current Jakarta week
+    const { start: startOfWeek, end: endOfWeek } = jakartaWeekRange(new Date());
 
     const kelas = await prisma.kelas.findMany({
         where: whereClause,
@@ -2579,8 +2808,7 @@ exports.getKelasWithHari = asyncHandler(async (req, res) => {
             if (override.status === 'GANTI_JADWAL' && override.tanggal_ganti) {
                 if (gantiInWeek) {
                     // Moved TO this week (or within this week) -> Show on new day
-                    const newDate = new Date(override.tanggal_ganti);
-                    targetDayIndex = newDate.getDay() === 0 ? 7 : newDate.getDay();
+                    targetDayIndex = jakartaWeekday(override.tanggal_ganti);
 
                     // Update display time/room
                     if (override.jam_mulai_ganti) jamMulai = override.jam_mulai_ganti;
@@ -2648,12 +2876,38 @@ exports.getAbsensiKuStats = asyncHandler(async (req, res) => {
     const where = { id_user: userId, deletedAt: null };
     if (id_kelas) where.id_kelas = parseInt(id_kelas);
 
-    // Aggregasi di database level
-    const stats = await prisma.absensi.groupBy({
-        by: ['id_kelas', 'type_absensi'],
-        where,
-        _count: { type_absensi: true }
+    // Each absensi with its session, plus the enrollment dates, so only attendance in closed
+    // sessions that started on/after the enrollment is counted
+    const [enrollments, absensiList] = await Promise.all([
+        prisma.pesertaKelas.findMany({
+            where: { id_mahasiswa: userId, ...(id_kelas && { id_kelas: parseInt(id_kelas) }) },
+            select: { id_kelas: true, createdAt: true }
+        }),
+        prisma.absensi.findMany({
+            where,
+            select: {
+                id_kelas: true,
+                type_absensi: true,
+                sesiAbsensi: { select: { mulai: true, selesai: true, status: true, deletedAt: true } }
+            }
+        })
+    ]);
+
+    const now = new Date();
+    const enrolledAtByKelas = new Map(enrollments.map(e => [e.id_kelas, e.createdAt]));
+
+    // Same shape as the former groupBy: [{ id_kelas, type_absensi, _count: { type_absensi } }]
+    const statsByKey = new Map();
+    absensiList.forEach(a => {
+        if (!a.sesiAbsensi || a.sesiAbsensi.deletedAt) return;
+        if (!isCountableSession(a.sesiAbsensi, enrolledAtByKelas.get(a.id_kelas), now)) return;
+
+        const key = `${a.id_kelas}:${a.type_absensi}`;
+        if (!statsByKey.has(key)) {
+            statsByKey.set(key, { id_kelas: a.id_kelas, type_absensi: a.type_absensi, _count: { type_absensi: 0 } });
+        }
+        statsByKey.get(key)._count.type_absensi += 1;
     });
 
-    res.status(200).json({ status: 'success', data: stats });
+    res.status(200).json({ status: 'success', data: [...statsByKey.values()] });
 });

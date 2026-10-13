@@ -8,6 +8,7 @@ const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
 const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
 const { pythonClient } = require("../utils/pythonClient");
+const { isUniqueViolation } = require("../utils/akademikHelpers");
 const {
   translateFaceServiceError,
   isFaceServiceInternalError,
@@ -1009,7 +1010,8 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     }
 
     // Step 8: Create attendance record
-    await prisma.$executeRaw`
+    try {
+      await prisma.$executeRaw`
             INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, "updatedAt")
             VALUES (
                 ${id_user},
@@ -1022,6 +1024,16 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 NOW()
             )
         `;
+    } catch (insertError) {
+      // A parallel request for the same session won the unique index (uq_absensi_user_sesi)
+      if (isUniqueViolation(insertError)) {
+        return res.status(409).json({
+          status: "error",
+          message: "Anda sudah melakukan absensi untuk sesi ini",
+        });
+      }
+      throw insertError;
+    }
 
     const absensi = await prisma.absensi.findFirst({
       where: { id_user, id_sesi_absensi: activeSesi.id_sesi_absensi },

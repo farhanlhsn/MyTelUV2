@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma'); // Use shared instance
+const { TZ, formatJakarta, jakartaDateString } = require('../utils/timezone');
+const { isCountableSession } = require('../utils/akademikHelpers');
 
 // ==========================================
 // HELPER: Validate ID Parameter
@@ -28,6 +30,30 @@ const getStatusStyle = (status) => {
         return { font: 'Helvetica-Bold', color: COLORS.success };
     }
     return { font: 'Helvetica', color: COLORS.dark };
+};
+
+// ==========================================
+// HELPER: One student's row of the class recap
+// ==========================================
+// '✓' attended, '✗' absent from a session that counts, '-' a session that does not count for this
+// student (held before they enrolled, or still running). Total and % use the counted sessions only.
+const buildRekapKehadiran = (peserta, sessions, absensiMap, now = new Date()) => {
+    let hadir = 0;
+    let dihitung = 0;
+
+    const cells = sessions.map((s) => {
+        const isHadir = absensiMap.has(`${peserta.id_mahasiswa}_${s.id_sesi_absensi}`);
+        const counted = isCountableSession(s, peserta.createdAt, now);
+        if (counted) {
+            dihitung++;
+            if (isHadir) hadir++;
+        }
+        if (isHadir) return '✓';
+        return counted ? '✗' : '-';
+    });
+
+    const persen = dihitung > 0 ? Math.round((hadir / dihitung) * 100) : 0;
+    return { cells, hadir, persen };
 };
 
 // ==========================================
@@ -144,10 +170,7 @@ const addFooter = (doc, isLandscape = false) => {
     doc.restore();
 
     // Footer text
-    const timestamp = new Date().toLocaleString('id-ID', {
-        year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    });
+    const timestamp = `${formatJakarta(new Date(), { withTime: true })} WIB`;
 
     doc.font('Helvetica')
         .fontSize(8)
@@ -269,13 +292,13 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
 
     // Stream response
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Sesi_${sesi.kelas.nama_kelas}_${new Date(sesi.mulai).toISOString().split('T')[0]}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=Sesi_${sesi.kelas.nama_kelas}_${jakartaDateString(sesi.mulai)}.pdf`);
 
     doc.pipe(res);
 
     // Header
     const formattedDate = new Date(sesi.mulai).toLocaleDateString('id-ID', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ
     });
 
     addHeader(doc, 'Laporan Kehadiran Sesi', `${sesi.kelas.matakuliah.nama_matakuliah} (${sesi.kelas.nama_kelas}) - ${formattedDate}`);
@@ -291,7 +314,7 @@ exports.generateLaporanSesiPdf = asyncHandler(async (req, res) => {
     const tableData = peserta.map((p, index) => {
         const record = attendanceMap.get(p.id_mahasiswa);
         const status = record ? '✓ HADIR' : '✗ TIDAK HADIR';
-        const waktu = record ? new Date(record.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+        const waktu = record ? new Date(record.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ }) : '-';
 
         return [
             (index + 1).toString(),
@@ -403,13 +426,14 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
     const sessionColWidth = sessions.length > 10 ? 25 : 30;
 
     sessions.forEach((s) => {
-        const dateStr = new Date(s.mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric' });
+        const dateStr = new Date(s.mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', timeZone: TZ });
         headers.push(dateStr);
     });
 
     headers.push("Total");
     headers.push("%");
 
+    const now = new Date();
     const rows = peserta.map((p, idx) => {
         const row = [
             (idx + 1).toString(),
@@ -417,16 +441,12 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
             p.mahasiswa.nama
         ];
 
-        let hadirCount = 0;
-        sessions.forEach(s => {
-            const isHadir = absensiMap.has(`${p.id_mahasiswa}_${s.id_sesi_absensi}`);
-            if (isHadir) hadirCount++;
-            row.push(isHadir ? "✓" : "✗"); // ✓ = Hadir, ✗ = Absen
-        });
+        // ✓ = Hadir, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
+        const rekap = buildRekapKehadiran(p, sessions, absensiMap, now);
+        row.push(...rekap.cells);
 
-        row.push(hadirCount.toString());
-        const percentage = sessions.length > 0 ? ((hadirCount / sessions.length) * 100).toFixed(0) + '%' : '0%';
-        row.push(percentage);
+        row.push(rekap.hadir.toString());
+        row.push(`${rekap.persen}%`);
 
         return row;
     });
@@ -485,6 +505,7 @@ exports.generateLaporanKelasPdf = asyncHandler(async (req, res) => {
     doc.text('Keterangan: ', 40, legendY);
     doc.font('Helvetica-Bold').fillColor(COLORS.success).text('✓ = Hadir', 110, legendY);
     doc.font('Helvetica-Bold').fillColor(COLORS.danger).text('✗ = Tidak Hadir', 170, legendY);
+    doc.font('Helvetica').fillColor(COLORS.gray).text('- = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)', 260, legendY);
 
     // Footer
     addFooter(doc, true);
@@ -558,7 +579,7 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
     worksheet.mergeCells('A2:E2');
     const subtitleCell = worksheet.getCell('A2');
     const formattedDate = new Date(sesi.mulai).toLocaleDateString('id-ID', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ
     });
     subtitleCell.value = `Tanggal: ${formattedDate}`;
     subtitleCell.font = { size: 11, color: { argb: 'FF616161' } };
@@ -580,7 +601,7 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
         const record = attendanceMap.get(p.id_mahasiswa);
         const status = record ? 'HADIR' : 'TIDAK HADIR';
         const waktu = record ? new Date(record.createdAt).toLocaleTimeString('id-ID', {
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
+            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: TZ
         }) : '-';
 
         const row = worksheet.addRow([
@@ -623,7 +644,7 @@ exports.generateLaporanSesiExcel = asyncHandler(async (req, res) => {
 
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=Sesi_${sesi.kelas.nama_kelas}_${new Date(sesi.mulai).toISOString().split('T')[0]}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Sesi_${sesi.kelas.nama_kelas}_${jakartaDateString(sesi.mulai)}.xlsx`);
 
     await workbook.xlsx.write(res);
 });
@@ -702,7 +723,7 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
     // Build headers
     const headers = ['No', 'NIM', 'Nama'];
     sessions.forEach((s) => {
-        const dateStr = new Date(s.mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric' });
+        const dateStr = new Date(s.mulai).toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', timeZone: TZ });
         headers.push(dateStr);
     });
     headers.push('Total', '%');
@@ -717,18 +738,16 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
     });
 
     // Data rows
+    const now = new Date();
     peserta.forEach((p, idx) => {
         const rowData = [idx + 1, p.mahasiswa.username, p.mahasiswa.nama];
 
-        let hadirCount = 0;
-        sessions.forEach(s => {
-            const isHadir = absensiMap.has(`${p.id_mahasiswa}_${s.id_sesi_absensi}`);
-            if (isHadir) hadirCount++;
-            rowData.push(isHadir ? '✓' : '✗');
-        });
+        // ✓ = Hadir, ✗ = Absen, - = sesi tidak dihitung untuk mahasiswa ini
+        const rekap = buildRekapKehadiran(p, sessions, absensiMap, now);
+        rowData.push(...rekap.cells);
 
-        const percentage = sessions.length > 0 ? Math.round((hadirCount / sessions.length) * 100) : 0;
-        rowData.push(hadirCount, `${percentage}%`);
+        const percentage = rekap.persen;
+        rowData.push(rekap.hadir, `${percentage}%`);
 
         const row = worksheet.addRow(rowData);
 
@@ -760,6 +779,10 @@ exports.generateLaporanKelasExcel = asyncHandler(async (req, res) => {
             cell.border = { top: borderStyle, left: borderStyle, bottom: borderStyle, right: borderStyle };
         });
     });
+
+    // Legend
+    worksheet.addRow([]);
+    worksheet.addRow(['Keterangan: ✓ = Hadir, ✗ = Tidak Hadir, - = Tidak dihitung (sebelum terdaftar / sesi masih berjalan)']);
 
     // Set column widths
     const columns = [

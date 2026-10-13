@@ -91,10 +91,48 @@ const haversineDistance = (lat1, lon1, lat2, lon2) => {
     return R * c;
 };
 
+/**
+ * Whether a session counts towards a student's attendance statistics.
+ *
+ * A session counts when it is closed — closed by hand (`status === false`) or past its end time — and it
+ * started on/after the student's enrollment. Running sessions and sessions from before the student joined
+ * the class are left out of both "hadir" and "tidak hadir".
+ *
+ * @param {{mulai: Date|string, selesai: Date|string, status: boolean}} sesi - SesiAbsensi row:
+ *        `mulai`/`selesai` are the session start/end instants, `status` is true while the session is open.
+ *        Callers filter out soft-deleted sessions (`deletedAt`) themselves.
+ * @param {Date|string|null|undefined} enrolledAt - PesertaKelas.createdAt of the student; null/undefined
+ *        means "unknown" and only the closed check applies.
+ * @param {Date} [now=new Date()]
+ * @returns {boolean}
+ */
+const isCountableSession = (sesi, enrolledAt, now = new Date()) => {
+    if (!sesi) return false;
+
+    const ended = new Date(sesi.selesai).getTime() < new Date(now).getTime();
+    const closed = sesi.status === false || ended;
+    if (!closed) return false;
+
+    if (enrolledAt === null || enrolledAt === undefined) return true;
+    return new Date(sesi.mulai).getTime() >= new Date(enrolledAt).getTime();
+};
+
+/**
+ * True when a Prisma error is a unique-constraint violation: P2002 from model queries, or
+ * P2010 carrying Postgres code 23505 from raw queries ($executeRaw / $queryRaw).
+ */
+const isUniqueViolation = (error) => {
+    if (!error) return false;
+    if (error.code === 'P2002') return true;
+    return error.code === 'P2010' && error.meta?.code === '23505';
+};
+
 module.exports = {
     parsePagination,
     buildPaginationResponse,
     isDosenAuthorizedForKelas,
     requireKelasOwnership,
-    haversineDistance
+    haversineDistance,
+    isCountableSession,
+    isUniqueViolation
 };

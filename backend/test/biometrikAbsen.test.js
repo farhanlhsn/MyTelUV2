@@ -688,6 +688,61 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
     /**
      * ============================================
+     * DUPLICATE INSERT RACE: the unique index (id_user, id_sesi_absensi) wins
+     * ============================================
+     */
+    describe('Duplicate insert race', () => {
+        const arrangeValidAttendance = () => {
+            pythonClient.post.mockResolvedValueOnce({
+                data: { success: true, embedding: [0.1, 0.2, 0.3] }
+            });
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1, id_user: 1, face_embedding: [0.1, 0.2, 0.3], deletedAt: null,
+                user: { id_user: 1, nama: 'Jane Doe', username: 'janedoe' }
+            });
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 2 }]);
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
+                id_sesi_absensi: 2, id_kelas: 2,
+                latitude: null, longitude: null, radius_meter: null,
+                type_absensi: 'LOKAL_ABSENSI',
+                kelas: { nama_kelas: 'Database B', ruangan: 'R.202', matakuliah: { nama_matakuliah: 'Basis Data' } }
+            }]);
+            // The pre-check sees no row: the parallel request has not committed yet
+            prisma.absensi.findFirst.mockResolvedValueOnce(null);
+        };
+
+        test.each([
+            ['P2002', Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })],
+            ['P2010 / 23505', Object.assign(new Error('Raw query failed'), { code: 'P2010', meta: { code: '23505' } })]
+        ])('TC015 - a %s unique violation on insert is a 409, not a 500', async (_label, err) => {
+            arrangeValidAttendance();
+            prisma.$executeRaw.mockRejectedValueOnce(err);
+
+            const res = createMockRes();
+            const next = jest.fn();
+            await biometrikAbsen(createMockReq(), res, next);
+
+            expect(next).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Anda sudah melakukan absensi untuk sesi ini'
+            });
+        });
+
+        test('TC015b - other insert errors still propagate', async () => {
+            arrangeValidAttendance();
+            prisma.$executeRaw.mockRejectedValueOnce(new Error('db down'));
+
+            const next = jest.fn();
+            await biometrikAbsen(createMockReq(), createMockRes(), next);
+
+            expect(next).toHaveBeenCalledWith(expect.any(Error));
+        });
+    });
+
+    /**
+     * ============================================
      * TEST MODE: only the TEST_MODE env var may bypass the face service
      * ============================================
      */
