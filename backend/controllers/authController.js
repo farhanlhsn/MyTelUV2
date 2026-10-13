@@ -6,46 +6,56 @@ const asyncHandler = require('express-async-handler');
 const { logAudit } = require('../utils/auditLogger');
 const embeddingCache = require('../utils/embeddingCache');
 
+// Picks the Indonesian 409 message for whichever unique field the existing row collides on.
+const duplicateMessage = (existing, wanted) => {
+    if (existing.username === wanted.username) return 'Username sudah digunakan';
+    if (wanted.nim_nip && existing.nim_nip === wanted.nim_nip) return 'NIM/NIP sudah terdaftar';
+    if (wanted.email && existing.email === wanted.email) return 'Email sudah terdaftar';
+    return 'Username, NIM/NIP, atau email sudah terdaftar';
+};
+
+// Public registration can only ever create a MAHASISWA. DOSEN and ADMIN accounts are created by an
+// admin; any `role` sent by the client is ignored (the Zod schema strips it, and it is never read here).
+const PUBLIC_REGISTER_ROLE = 'MAHASISWA';
+
 exports.register = asyncHandler(async (req, res) => {
-    const { nama, username, password, role, nim_nip } = req.body;
+    const { nama, username, password, nim_nip } = req.body;
+    const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
 
-    // Only allow MAHASISWA and DOSEN roles for public registration
-    // ADMIN role can only be assigned by existing admins
-    const allowedRoles = ['MAHASISWA', 'DOSEN'];
-    const userRole = allowedRoles.includes(role) ? role : 'MAHASISWA';
+    // The duplicate check deliberately includes soft-deleted users: the DB unique constraints on
+    // username / nim_nip / email still cover them, so excluding them here turned a duplicate into a 500.
+    const conflictFilters = [{ username }];
+    if (nim_nip) conflictFilters.push({ nim_nip });
+    if (email) conflictFilters.push({ email });
 
-    const checkExisted = await prisma.user.findFirst({
-        where: {
-            username: username,
-            deletedAt: null
-        }
+    const existing = await prisma.user.findFirst({
+        where: { OR: conflictFilters },
+        select: { username: true, nim_nip: true, email: true }
     });
-    if (checkExisted) {
-        return res.status(400).json({ status: "error", message: 'Username already exists' });
-    }
-
-    if (nim_nip) {
-        const checkNimNip = await prisma.user.findFirst({
-            where: {
-                nim_nip: nim_nip,
-                deletedAt: null
-            }
-        });
-        if (checkNimNip) {
-            return res.status(400).json({ status: "error", message: 'NIM/NIP already exists' });
-        }
+    if (existing) {
+        return res.status(409).json({ status: "error", message: duplicateMessage(existing, { username, nim_nip, email }) });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-        data: {
-            nama,
-            username,
-            password: hashedPassword,
-            role: userRole,
-            nim_nip: nim_nip || null
+    let user;
+    try {
+        user = await prisma.user.create({
+            data: {
+                nama,
+                username,
+                password: hashedPassword,
+                role: PUBLIC_REGISTER_ROLE,
+                nim_nip: nim_nip || null,
+                email
+            }
+        });
+    } catch (error) {
+        // A concurrent registration won the race for the same unique value after our check.
+        if (error?.code === 'P2002') {
+            return res.status(409).json({ status: "error", message: 'Username, NIM/NIP, atau email sudah terdaftar' });
         }
-    });
+        throw error;
+    }
     if (user) {
         res.status(201).json({
             status: "success",
@@ -351,10 +361,10 @@ exports.changePassword = asyncHandler(async (req, res) => {
         });
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
         return res.status(400).json({
             status: "error",
-            message: 'New password must be at least 6 characters'
+            message: 'Password minimal 8 karakter'
         });
     }
 
@@ -372,12 +382,16 @@ exports.changePassword = asyncHandler(async (req, res) => {
         });
     }
 
-    // Hash and save new password
+    // Hash and save new password; revoke every refresh token in the same transaction so a stolen
+    // session cannot outlive the password change.
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-        where: { id_user: userId },
-        data: { password: hashedPassword }
-    });
+    await prisma.$transaction([
+        prisma.user.update({
+            where: { id_user: userId },
+            data: { password: hashedPassword }
+        }),
+        prisma.refreshToken.deleteMany({ where: { id_user: userId } })
+    ]);
 
     res.status(200).json({
         status: "success",
@@ -396,10 +410,10 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
         });
     }
 
-    if (new_password.length < 6) {
+    if (new_password.length < 8) {
         return res.status(400).json({
             status: "error",
-            message: 'Password must be at least 6 characters'
+            message: 'Password minimal 8 karakter'
         });
     }
 
@@ -415,12 +429,15 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
         });
     }
 
-    // Hash and save new password
+    // Hash and save new password; revoke the target user's refresh tokens in the same transaction.
     const hashedPassword = await bcrypt.hash(new_password, 10);
-    await prisma.user.update({
-        where: { id_user: parseInt(id_user) },
-        data: { password: hashedPassword }
-    });
+    await prisma.$transaction([
+        prisma.user.update({
+            where: { id_user: parseInt(id_user) },
+            data: { password: hashedPassword }
+        }),
+        prisma.refreshToken.deleteMany({ where: { id_user: parseInt(id_user) } })
+    ]);
 
     // Audit log for sensitive action
     logAudit({
@@ -703,7 +720,9 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
         prisma.passwordResetToken.update({
             where: { id: resetRecord.id },
             data: { usedAt: new Date() }
-        })
+        }),
+        // Revoke every existing session: whoever knew the old password must log in again
+        prisma.refreshToken.deleteMany({ where: { id_user: resetRecord.id_user } })
     ]);
 
     logAudit({

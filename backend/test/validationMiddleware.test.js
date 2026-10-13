@@ -132,7 +132,8 @@ const schemaCases = [
     {
         schema: 'registerSchema',
         consumer: 'authController.register',
-        body: { nama: 'Budi', username: 'budi_1', password: 'Rahasia123', role: 'MAHASISWA', nim_nip: '13012100012' }
+        // role is deliberately NOT here: public register always creates MAHASISWA (the schema strips it)
+        body: { nama: 'Budi', username: 'budi_1', password: 'Rahasia123', email: 'budi@telkom.ac.id', nim_nip: '13012100012' }
     },
     {
         schema: 'loginSchema',

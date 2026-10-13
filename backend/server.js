@@ -32,6 +32,13 @@ try {
 const app = express();
 const port = process.env.PORT || 5050;
 
+// Behind Caddy (and Docker networking) the TCP peer is the proxy, so without this every client shares
+// one IP and the rate limiters key on the proxy. Trust only private/loopback hops by default;
+// TRUST_PROXY overrides it (a hop count such as "1", or a comma separated list of IPs/subnets).
+// This MUST be set before any rate limiter or anything else that reads req.ip.
+const trustProxy = (process.env.TRUST_PROXY ?? '').trim() || 'loopback, linklocal, uniquelocal';
+app.set('trust proxy', /^[0-9]+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+
 // CORS configuration
 const corsOptions = {
     origin: function (origin, callback) {
@@ -75,7 +82,6 @@ app.use(helmet({
     },
 }));
 
-// app.use(generalLimiter); // Apply rate limiting to all requests
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput); // Sanitize all input
@@ -138,6 +144,10 @@ const registerRoutes = (prefix) => {
     app.use(`${prefix}/posts`, postRoutes);
     app.use(`${prefix}/anomali`, anomaliRoutes);
 };
+
+// General rate limit for the whole API (/api and /api/v1). Mounted AFTER /health and Swagger so those
+// are never limited, and BEFORE the routers, so it counts per client IP (req.user is not set yet).
+app.use('/api', generalLimiter);
 
 registerRoutes('/api');
 registerRoutes('/api/v1');

@@ -19,9 +19,11 @@ const registerSchema = z.object({
         .max(30, "Username maksimal 30 karakter")
         .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Username harus diawali huruf dan hanya boleh berisi huruf, angka, dan underscore"),
     password: z.string()
-        .min(6, "Password minimal 6 karakter")
+        .min(8, "Password minimal 8 karakter")
         .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password harus mengandung minimal satu huruf dan satu angka"),
-    role: z.enum(['MAHASISWA', 'DOSEN']).optional(),
+    // No `role`: public registration always creates a MAHASISWA (the controller never reads a role).
+    // `email` must be declared here or the Zod output would strip it before the controller sees it.
+    email: z.string().email().optional(),
     nim_nip: z.string()
         .regex(/^\d{11,12}$/, "NIM/NIP harus 11 atau 12 digit")
         .optional()
@@ -43,13 +45,13 @@ const updateProfileSchema = z.object({
 const changePasswordSchema = z.object({
     oldPassword: z.string().min(1, "Password lama wajib diisi"),
     newPassword: z.string()
-        .min(6, "Password baru minimal 6 karakter")
+        .min(8, "Password minimal 8 karakter")
         .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password harus mengandung minimal satu huruf dan satu angka")
 });
 
 const adminResetPasswordSchema = z.object({
     id_user: z.union([z.number(), z.string()]),
-    new_password: z.string().min(6, "Password baru minimal 6 karakter")
+    new_password: z.string().min(8, "Password minimal 8 karakter")
 });
 
 const fcmTokenSchema = z.object({
@@ -66,7 +68,7 @@ const forgotPasswordSchema = z.object({
 const resetPasswordSchema = z.object({
     token: z.string().min(1, "Token wajib diisi"),
     newPassword: z.string()
-        .min(6, "Password baru minimal 6 karakter")
+        .min(8, "Password minimal 8 karakter")
         .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password harus mengandung minimal satu huruf dan satu angka")
 });
 

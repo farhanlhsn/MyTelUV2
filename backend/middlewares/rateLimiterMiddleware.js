@@ -1,12 +1,17 @@
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
-// General API rate limiter
+// NOTE: these limiters rely on `app.set('trust proxy', ...)` in server.js so that `req.ip` is the real
+// client IP (from Caddy's X-Forwarded-For) and not the reverse proxy's address.
+
+// General API rate limiter. server.js mounts it on /api BEFORE any route-level `protect`, so
+// `req.user` is not set yet and the key can only be the client IP.
 exports.generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 500 : 1000,
+  max: 300,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     status: "error",
-    message: 'Too many requests from this IP, please try again later.'
+    message: 'Terlalu banyak permintaan. Coba lagi beberapa menit lagi.'
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
@@ -24,13 +29,38 @@ exports.generalLimiter = rateLimit({
   }
 });
 
-// Strict rate limiter for authentication endpoints
+// Key for the auth limiter: client IP + lowercased username. Keying on the IP alone made every
+// student behind the campus NAT share one 5-attempt bucket; adding the username keeps a brute-force
+// attempt on one account limited without locking everybody else out.
+// (ipKeyGenerator takes the IP *string*; it also folds IPv6 addresses into their /56 subnet.)
+const authKeyGenerator = (req) => {
+  const username = typeof req.body?.username === 'string' ? req.body.username.toLowerCase() : '';
+  return `${ipKeyGenerator(req.ip)}:${username}`;
+};
+exports.authKeyGenerator = authKeyGenerator;
+
+// Strict rate limiter for authentication endpoints (login, register)
 exports.authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 5, // limit each IP to 5 requests per windowMs for auth
+  max: 5, // limit each IP + username to 5 requests per windowMs
+  keyGenerator: authKeyGenerator,
   message: {
     status: "error",
-    message: 'Too many authentication attempts, please try again later.'
+    message: 'Terlalu banyak percobaan autentikasi. Coba lagi beberapa menit lagi.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiter for token-based account flows that have no username in the request
+// (/refresh, /forgot-password, /reset-password): 10 requests / 15 minutes per client IP
+exports.sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: {
+    status: "error",
+    message: 'Terlalu banyak permintaan. Coba lagi dalam 15 menit.'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -40,9 +70,9 @@ exports.authLimiter = rateLimit({
 exports.biometrikLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5, // limit each user/IP to 5 requests per minute
-  keyGenerator: (req, res) => req.user?.id_user
+  keyGenerator: (req) => req.user?.id_user
     ? `user:${req.user.id_user}`
-    : `ip:${ipKeyGenerator(req, res)}`,
+    : `ip:${ipKeyGenerator(req.ip)}`,
   message: {
     status: "error",
     message: 'Terlalu banyak percobaan absensi. Coba lagi dalam 1 menit.'

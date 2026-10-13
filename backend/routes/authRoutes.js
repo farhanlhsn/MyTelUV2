@@ -3,7 +3,7 @@ const { login, logout, register, getMe, updateProfile, changePassword, getAllUse
 const { validateRequired, validatePassword, validateUsername, validateZod } = require('../middlewares/validationMiddleware');
 const { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, adminResetPasswordSchema, fcmTokenSchema, refreshTokenSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
-const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
+const { authLimiter, sensitiveLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();
 
 router.post('/register',
@@ -19,16 +19,19 @@ router.post('/login',
 );
 
 router.post('/refresh',
+    sensitiveLimiter,
     validateZod(refreshTokenSchema),
     refreshToken
 );
 
 // Password Reset Flow
 router.post('/forgot-password', 
+    sensitiveLimiter,
     validateZod(forgotPasswordSchema), 
     requestPasswordReset
 );
 router.post('/reset-password', 
+    sensitiveLimiter,
     validateZod(resetPasswordSchema), 
     resetPasswordWithToken
 );
