@@ -30,10 +30,28 @@ const registerSchema = z.object({
 });
 
 // Admin-created accounts: same fields and rules as public registration, plus an explicit role.
-// This is the only place a DOSEN or ADMIN account can be created.
-const adminCreateUserSchema = registerSchema.extend({
-    role: z.enum(['MAHASISWA', 'DOSEN', 'ADMIN'])
-});
+// This is the only place a DOSEN or ADMIN account can be created. The only difference from
+// registerSchema is nim_nip: a student NIM keeps the 11-12 digit rule, but a lecturer / admin
+// identifier may be an 18 digit NIP or a shorter NIDN, so those roles accept 8-20 digits
+// (the DB column is VARCHAR(20)).
+const adminCreateUserSchema = registerSchema
+    .omit({ nim_nip: true })
+    .extend({
+        role: z.enum(['MAHASISWA', 'DOSEN', 'ADMIN']),
+        nim_nip: z.string().optional()
+    })
+    .superRefine((data, ctx) => {
+        if (data.nim_nip === undefined) return;
+        const isStudent = data.role === 'MAHASISWA';
+        const valid = isStudent ? /^\d{11,12}$/.test(data.nim_nip) : /^\d{8,20}$/.test(data.nim_nip);
+        if (!valid) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['nim_nip'],
+                message: isStudent ? "NIM/NIP harus 11 atau 12 digit" : "NIP/NIDN harus 8 sampai 20 digit"
+            });
+        }
+    });
 
 const loginSchema = z.object({
     username: z.string().min(1, "Username wajib diisi"),

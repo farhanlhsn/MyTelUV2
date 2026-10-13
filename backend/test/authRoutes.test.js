@@ -97,6 +97,31 @@ describe('POST /auth/admin/users (ADMIN only)', () => {
         expect(data.nim_nip).toBe('198012345678');
     });
 
+    test('admin creates a DOSEN with an 18 digit NIP => 201', async () => {
+        const res = await request(app).post('/auth/admin/users').set(tokenFor(1))
+            .send({ ...newDosen, nim_nip: '198012345678901234' });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.role).toBe('DOSEN');
+        expect(prisma.user.create.mock.calls[0][0].data.nim_nip).toBe('198012345678901234');
+    });
+
+    test('admin creating a MAHASISWA with an 18 digit value => 400 (NIM keeps the 11-12 digit rule)', async () => {
+        const res = await request(app).post('/auth/admin/users').set(tokenFor(1))
+            .send({ ...newDosen, username: 'mhs_baru', role: 'MAHASISWA', nim_nip: '198012345678901234' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.status).toBe('error');
+        expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    test('admin creates a MAHASISWA with a valid 11 digit NIM => 201', async () => {
+        const res = await request(app).post('/auth/admin/users').set(tokenFor(1))
+            .send({ ...newDosen, username: 'mhs_baru', role: 'MAHASISWA', nim_nip: '13012100012' });
+
+        expect(res.status).toBe(201);
+    });
+
     test('a MAHASISWA is refused with 403 and nothing is created', async () => {
         const res = await request(app).post('/auth/admin/users').set(tokenFor(2)).send(newDosen);
 

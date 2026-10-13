@@ -75,7 +75,7 @@ module.exports = {
           password: { type: 'string', minLength: 8, example: 'secret1234' },
           role: { type: 'string', enum: ['MAHASISWA', 'DOSEN', 'ADMIN'] },
           email: { type: 'string', format: 'email', example: 'jane.doe@example.ac.id' },
-          nim_nip: { type: 'string', example: '198012345678' },
+          nim_nip: { type: 'string', example: '198012345678901234', description: 'Optional. MAHASISWA: 11 or 12 digits (NIM). DOSEN / ADMIN: 8 to 20 digits (NIP or NIDN).' },
         },
       },
       VehicleVerifyRequest: {

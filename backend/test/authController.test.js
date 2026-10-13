@@ -279,6 +279,57 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(400);
         });
 
+        describe('nim_nip depends on the role', () => {
+            const body = (role, nim_nip) => ({ ...validBody, role, ...(nim_nip === undefined ? {} : { nim_nip }) });
+
+            test.each([
+                ['DOSEN', '198012345678901234'], // 18 digit NIP
+                ['DOSEN', '0412058001'],         // 10 digit NIDN
+                ['DOSEN', '12345678'],           // lower bound (8)
+                ['DOSEN', '12345678901234567890'], // upper bound (20)
+                ['ADMIN', '198012345678901234'],
+                ['ADMIN', '12345678'],
+                ['MAHASISWA', '13012100012'],    // 11 digit NIM
+                ['MAHASISWA', '130121000123'],   // 12 digit NIM
+            ])('%s accepts nim_nip %s', async (role, nim_nip) => {
+                const { req, next } = await run(adminCreateUserSchema, body(role, nim_nip));
+
+                expect(next).toHaveBeenCalledWith();
+                expect(req.body.nim_nip).toBe(nim_nip);
+            });
+
+            test.each(['MAHASISWA', 'DOSEN', 'ADMIN'])('%s may omit nim_nip', async (role) => {
+                const { req, next } = await run(adminCreateUserSchema, body(role));
+
+                expect(next).toHaveBeenCalledWith();
+                expect(req.body).not.toHaveProperty('nim_nip');
+            });
+
+            test.each([
+                ['MAHASISWA', '198012345678901234'], // lecturer length is not a valid NIM
+                ['MAHASISWA', '12345678'],
+                ['MAHASISWA', '1234567890'],
+                ['DOSEN', '1234567'],                // 7 digits: too short
+                ['DOSEN', '123456789012345678901'],  // 21 digits: too long
+                ['DOSEN', '1980123456abcd7890'],     // not digits only
+                ['ADMIN', '1234567'],
+                ['ADMIN', '123456789012345678901'],
+            ])('%s rejects nim_nip %s with 400', async (role, nim_nip) => {
+                const { res, next } = await run(adminCreateUserSchema, body(role, nim_nip));
+
+                expect(next).not.toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(400);
+                expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'error' }));
+            });
+
+            test('public registerSchema is unchanged: an 18 digit value is still rejected', async () => {
+                const { res, next } = await run(registerSchema, { ...validBody, nim_nip: '198012345678901234' });
+
+                expect(next).not.toHaveBeenCalled();
+                expect(res.status).toHaveBeenCalledWith(400);
+            });
+        });
+
         test('keeps optional nim_nip and email, and still strips unknown keys', async () => {
             const { req, next } = await run(adminCreateUserSchema, {
                 ...validBody, role: 'DOSEN', nim_nip: '198012345678', email: 'dosen@telkom.ac.id', isSuperAdmin: true
