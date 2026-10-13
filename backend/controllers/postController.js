@@ -4,6 +4,7 @@ const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler')
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const { moderateContent } = require('../utils/contentModerator');
 const { sendSocialNotification } = require('../utils/firebase');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
 // ==================== POST CRUD ====================
 
@@ -164,9 +165,10 @@ exports.createPost = asyncHandler(async (req, res) => {
                 );
                 mediaUrls.push(result.fileUrl);
             } catch (error) {
+                console.error('Failed to upload media:', error.message);
                 return res.status(500).json({
                     status: "error",
-                    message: `Failed to upload media: ${error.message}`
+                    message: GENERIC_SERVER_ERROR
                 });
             }
         }
@@ -292,9 +294,10 @@ exports.updatePost = asyncHandler(async (req, res) => {
                 );
                 finalMedia.push(result.fileUrl);
             } catch (error) {
+                console.error('Failed to upload media:', error.message);
                 return res.status(500).json({
                     status: "error",
-                    message: `Failed to upload media: ${error.message}`
+                    message: GENERIC_SERVER_ERROR
                 });
             }
         }

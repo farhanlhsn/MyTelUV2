@@ -351,6 +351,22 @@ describe('Akademik Controller Tests', () => {
                 expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
             });
 
+            test('error messages are in Indonesian', async () => {
+                const dosenRes = await call(otherDosen);
+                expect(dosenRes.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Anda hanya dapat melihat peserta kelas yang Anda ajar'
+                });
+
+                prisma.kelas.findFirst.mockResolvedValue(null);
+                const missingRes = await call(admin);
+                expect(missingRes.status).toHaveBeenCalledWith(404);
+                expect(missingRes.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Kelas tidak ditemukan'
+                });
+            });
+
             test('own DOSEN and ADMIN get the roster', async () => {
                 expect((await call(ownDosen)).status).toHaveBeenCalledWith(200);
                 expect((await call(admin)).status).toHaveBeenCalledWith(200);

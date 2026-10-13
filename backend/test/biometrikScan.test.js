@@ -65,13 +65,32 @@ const detectMultiple = (embeddings) => ({
     },
 });
 
+// embeddingCache logs every hit / miss / flush; keep the test output pristine.
+let logSpy;
+
 beforeEach(() => {
     jest.resetAllMocks();
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     embeddingCache.invalidateCache();
     prisma.dataBiometrik.findMany.mockResolvedValue(ALL_ROWS);
 });
 
+afterEach(() => {
+    logSpy.mockRestore();
+});
+
 describe('scanWajah - who may scan and against whom', () => {
+    test('a scan without an image is rejected with 400 and an Indonesian message', async () => {
+        const req = createReq({ user: { id_user: 1, role: 'ADMIN' }, file: false });
+        const res = createRes();
+
+        await scanWajah(req, res, jest.fn());
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'File gambar wajib diisi' });
+        expect(axios.post).not.toHaveBeenCalled();
+    });
+
     test('DOSEN without id_kelas is rejected with 400 before the face service is called', async () => {
         const req = createReq({ user: { id_user: 2, role: 'DOSEN' } });
         const res = createRes();

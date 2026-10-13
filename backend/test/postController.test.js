@@ -107,6 +107,64 @@ describe('Post Controller Tests', () => {
             await postController.createPost(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
         });
+
+        test('a media upload failure returns a generic 500 and never leaks error.message', async () => {
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            const req = createMockReq(
+                { content: 'Hello' },
+                { id_user: 1 },
+                {}, {},
+                { media: [{ buffer: 'buf', originalname: 'a.jpg', mimetype: 'image/jpeg' }] }
+            );
+            const res = createMockRes();
+            uploadFile.mockRejectedValueOnce(new Error('connect ECONNREFUSED r2.internal.example:9000 password=hunter2'));
+
+            try {
+                await postController.createPost(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Terjadi kesalahan pada server'
+                });
+                expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+                expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
+    });
+
+    /**
+     * UPDATE POST
+     */
+    describe('updatePost', () => {
+        test('a media upload failure returns a generic 500 and never leaks error.message', async () => {
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            const req = createMockReq(
+                { content: 'Edited' },
+                { id_user: 1 },
+                { id: 1 }, {},
+                { media: [{ buffer: 'buf', originalname: 'a.jpg', mimetype: 'image/jpeg' }] }
+            );
+            const res = createMockRes();
+            prisma.post.findFirst.mockResolvedValueOnce({ id_post: 1, id_user: 1, content: 'Hello', media: [] });
+            uploadFile.mockRejectedValueOnce(new Error('connect ECONNREFUSED r2.internal.example:9000 password=hunter2'));
+
+            try {
+                await postController.updatePost(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Terjadi kesalahan pada server'
+                });
+                expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+                expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
     });
 
     /**

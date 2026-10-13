@@ -129,6 +129,7 @@ describe('Kendaraan Controller Tests', () => {
         });
 
         test('should cleanup files if db create fails', async () => {
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
             uploadFile.mockResolvedValue({ fileUrl: 'http://url.com/img.jpg' });
             prisma.kendaraan.findUnique.mockResolvedValue(null);
             prisma.kendaraan.create.mockRejectedValue(new Error('DB Error'));
@@ -137,10 +138,68 @@ describe('Kendaraan Controller Tests', () => {
             const req = createMockReq(mockBody, { id_user: 1 }, mockFiles);
             const res = createMockRes();
 
-            await kendaraanController.registerKendaraan(req, res);
+            try {
+                await kendaraanController.registerKendaraan(req, res);
 
-            expect(deleteFile).toHaveBeenCalled(); // Should attempt cleanup
-            expect(res.status).toHaveBeenCalledWith(500);
+                expect(deleteFile).toHaveBeenCalled(); // Should attempt cleanup
+                expect(res.status).toHaveBeenCalledWith(500);
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
+
+        describe('5xx responses never leak error.message', () => {
+            const leaky = new Error('connect ECONNREFUSED r2.internal.example:9000 password=hunter2');
+            let errorSpy;
+
+            beforeEach(() => {
+                errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+                prisma.kendaraan.findUnique.mockResolvedValueOnce(null); // plate is free
+                prisma.kendaraan.count.mockResolvedValueOnce(0);
+            });
+
+            afterEach(() => errorSpy.mockRestore());
+
+            const expectGeneric500 = (res) => {
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Terjadi kesalahan pada server'
+                });
+                expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+                expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+            };
+
+            test('vehicle photo upload failure', async () => {
+                uploadFile.mockReset().mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
+
+            test('STNK upload failure', async () => {
+                const ok = { fileUrl: 'http://url.com/img.jpg' };
+                uploadFile.mockReset()
+                    .mockResolvedValueOnce(ok).mockResolvedValueOnce(ok).mockResolvedValueOnce(ok)
+                    .mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
+
+            test('database save failure', async () => {
+                uploadFile.mockReset().mockResolvedValue({ fileUrl: 'http://url.com/img.jpg' });
+                prisma.kendaraan.create.mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
         });
     });
 

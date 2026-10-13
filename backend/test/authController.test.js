@@ -952,4 +952,31 @@ describe('Auth Controller Tests', () => {
             expect(prisma.user.update).not.toHaveBeenCalled();
         });
     });
+
+    describe('uploadProfilePicture', () => {
+        test('a storage failure returns a generic 500 and never leaks error.message', async () => {
+            const { uploadFile } = require('../utils/r2FileHandler');
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            uploadFile.mockRejectedValueOnce(new Error('connect ECONNREFUSED r2.internal.example:9000 password=hunter2'));
+            const req = {
+                user: { id_user: 1 },
+                file: { buffer: Buffer.from('img'), originalname: 'me.jpg', mimetype: 'image/jpeg' },
+            };
+            const res = createMockRes();
+
+            try {
+                await authController.uploadProfilePicture(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Terjadi kesalahan pada server'
+                });
+                expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+                expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
+    });
 });

@@ -1250,7 +1250,7 @@ exports.getPesertaKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1258,7 +1258,7 @@ exports.getPesertaKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only view peserta for your own classes"
+            message: "Anda hanya dapat melihat peserta kelas yang Anda ajar"
         });
     }
 

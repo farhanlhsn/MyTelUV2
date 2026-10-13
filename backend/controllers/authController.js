@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const asyncHandler = require('express-async-handler');
 const { logAudit } = require('../utils/auditLogger');
 const embeddingCache = require('../utils/embeddingCache');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
 // Picks the Indonesian 409 message for whichever unique field the existing row collides on.
 const duplicateMessage = (existing, wanted) => {
@@ -669,9 +670,10 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
             data: updatedUser
         });
     } catch (error) {
+        console.error('Failed to upload profile picture:', error.message);
         res.status(500).json({
             status: "error",
-            message: 'Failed to upload profile picture: ' + error.message
+            message: GENERIC_SERVER_ERROR
         });
     }
 });

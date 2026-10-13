@@ -153,7 +153,8 @@ module.exports = {
         summary: 'Health check',
         security: [],
         responses: {
-          200: { description: 'Service is healthy' },
+          200: { description: 'Database is up. Body: { status: "ok", db: "ok", services: { face, plate, anomaly } } where each service is "ok" or "error".' },
+          503: { description: 'Database is unreachable (status "degraded", db "error"). No error details are returned.' },
         },
       },
     },

@@ -153,6 +153,75 @@ describe('Anomaly Controller Tests', () => {
         });
     });
 
+    describe('5xx responses never leak error.message', () => {
+        const leaky = new Error('connect ECONNREFUSED db.internal.example:5432 password=hunter2');
+        let errorSpy;
+
+        beforeEach(() => {
+            errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        });
+
+        afterEach(() => errorSpy.mockRestore());
+
+        const expectGeneric500 = (res) => {
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Terjadi kesalahan pada server'
+            });
+            expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+            expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+        };
+
+        test('analyzeKelasAttendance (sync) when saving the analysis fails', async () => {
+            const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 });
+            const res = createMockRes();
+
+            prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
+            prisma.systemSetting.findUnique.mockResolvedValue(null);
+            prisma.$transaction.mockResolvedValueOnce([[{ mahasiswa: { id_user: 10, nama: 'Student A' } }], [], []]);
+            prisma.laporanAnomali.updateMany.mockRejectedValueOnce(leaky);
+
+            await anomaliController.analyzeKelasAttendance(req, res);
+
+            expectGeneric500(res);
+        });
+
+        test('updateAnomalySettings when the database write fails', async () => {
+            const req = createMockReq({ threshold_jarang_hadir: 50 }, { id_user: 1, role: 'ADMIN' });
+            const res = createMockRes();
+            prisma.systemSetting.upsert.mockRejectedValueOnce(leaky);
+
+            await anomaliController.updateAnomalySettings(req, res);
+
+            expectGeneric500(res);
+        });
+
+        test('getJobStatus replaces the raw error of a FAILED job', async () => {
+            const statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue({
+                id: 'anomaly_kelas_1_100',
+                status: 'FAILED',
+                progress: 100,
+                ownerId: 5,
+                error: leaky.message
+            });
+            try {
+                const req = createMockReq({}, { id_user: 5, role: 'DOSEN' }, { jobId: 'anomaly_kelas_1_100' });
+                const res = createMockRes();
+
+                await anomaliController.getJobStatus(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(200);
+                const { data } = res.json.mock.calls[0][0];
+                expect(data.status).toBe('FAILED');
+                expect(data.error).toBe('Terjadi kesalahan pada server');
+                expect(JSON.stringify(data)).not.toMatch(/ECONNREFUSED|hunter2/);
+            } finally {
+                statusSpy.mockRestore();
+            }
+        });
+    });
+
     describe('async analysis jobs: ownership', () => {
         let statusSpy;
 

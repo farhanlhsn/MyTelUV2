@@ -36,7 +36,7 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
     const res = await axios.get(`${API_BASE}/health`);
     expect(res.status).toBe(200);
     expect(res.data.status).toBe("ok");
-    expect(res.data.services.database.status).toBe("ok");
+    expect(res.data.db).toBe("ok");
   });
 
   test("2. Authentication Flow - Login as Mahasiswa & Dosen", async () => {

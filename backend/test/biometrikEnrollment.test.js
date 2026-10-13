@@ -57,11 +57,19 @@ const createRes = () => {
 
 const faceDetected = (embedding) => ({ data: { success: true, embedding, face_score: 0.99 } });
 
+// embeddingCache logs every invalidation; keep the test output pristine.
+let logSpy;
+
 beforeEach(() => {
     jest.resetAllMocks();
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     uploadFile.mockResolvedValue({ fileUrl: 'https://example.com/face.jpg' });
     // Another active user (10) has face [1,0,0] enrolled.
     prisma.dataBiometrik.findMany.mockResolvedValue([{ id_user: 10, face_embedding: [1, 0, 0] }]);
+});
+
+afterEach(() => {
+    logSpy.mockRestore();
 });
 
 describe('addBiometrik - duplicate face guard', () => {
@@ -154,5 +162,49 @@ describe('editBiometrik - duplicate face guard', () => {
 
         expect(res.status).toHaveBeenCalledWith(200);
         expect(prisma.dataBiometrik.update).toHaveBeenCalled();
+    });
+});
+
+describe('duplicate face guard is skipped in TEST_MODE', () => {
+    // In TEST_MODE the face service returns one dummy embedding for every image, so "this face is
+    // already registered for someone else" would be true for everybody.
+    const originalTestMode = process.env.TEST_MODE;
+
+    beforeEach(() => {
+        process.env.TEST_MODE = 'true';
+    });
+
+    afterEach(() => {
+        if (originalTestMode === undefined) delete process.env.TEST_MODE;
+        else process.env.TEST_MODE = originalTestMode;
+    });
+
+    test('addBiometrik enrolls a face identical to another user without querying other embeddings', async () => {
+        prisma.user.findUnique.mockResolvedValue({ id_user: 20, nama: 'Mhs 20' });
+        prisma.dataBiometrik.findUnique.mockResolvedValue(null);
+        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
+        prisma.dataBiometrik.upsert.mockResolvedValue({
+            id_biometrik: 5, id_user: 20, photo_url: 'https://example.com/face.jpg', createdAt: new Date(),
+        });
+        const res = createRes();
+
+        await addBiometrik(createReq({ body: { id_user: '20' } }), res, jest.fn());
+
+        expect(res.status).toHaveBeenCalledWith(201);
+        expect(prisma.dataBiometrik.findMany).not.toHaveBeenCalled();
+    });
+
+    test('editBiometrik updates to a face identical to another user without querying other embeddings', async () => {
+        prisma.dataBiometrik.findUnique.mockResolvedValue({ id_biometrik: 7, id_user: 20, deletedAt: null });
+        axios.post.mockResolvedValueOnce(faceDetected([1, 0, 0])); // identical to user 10's embedding
+        prisma.dataBiometrik.update.mockResolvedValue({
+            id_biometrik: 7, id_user: 20, photo_url: 'https://example.com/face.jpg', updatedAt: new Date(),
+        });
+        const res = createRes();
+
+        await editBiometrik(createReq({ params: { id_user: '20' } }), res, jest.fn());
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(prisma.dataBiometrik.findMany).not.toHaveBeenCalled();
     });
 });

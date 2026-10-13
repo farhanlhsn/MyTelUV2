@@ -113,8 +113,12 @@ const DUPLICATE_FACE_MESSAGE = "Wajah ini sudah terdaftar untuk pengguna lain";
 /**
  * True when the embedding matches ANOTHER user's active embedding at or above the verification
  * threshold. Queries the database directly (not the cache) because it guards enrollment.
+ * Skipped in TEST_MODE: the face service then returns one dummy embedding for every image, so every
+ * enrollment would look like a duplicate of the previous one.
  */
 const isFaceRegisteredByOtherUser = async (embedding, userId) => {
+  if (process.env.TEST_MODE === "true") return false;
+
   const others = await prisma.dataBiometrik.findMany({
     where: { deletedAt: null, id_user: { not: userId } },
     select: { id_user: true, face_embedding: true },
@@ -550,7 +554,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 

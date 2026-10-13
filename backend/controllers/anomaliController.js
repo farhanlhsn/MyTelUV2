@@ -4,6 +4,7 @@ const axios = require('axios');
 const { logAudit } = require('../utils/auditLogger'); // Opsional, jika Anda menggunakan logger
 const CircuitBreaker = require('../utils/CircuitBreaker');
 const { globalAnomalyQueue } = require('../utils/TaskQueue');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
 // URL Service Python (Port 5003 sesuai setup anomaly_detection)
 // Gunakan environment variable atau fallback ke localhost
@@ -242,7 +243,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
         console.error("Local Rule Service Error:", error.message);
         return res.status(500).json({
             status: "error",
-            message: "Gagal memproses analisis: " + error.message
+            message: GENERIC_SERVER_ERROR
         });
     }
 });
@@ -383,6 +384,12 @@ exports.getJobStatus = asyncHandler(async (req, res) => {
 
     const { ownerId, ...publicJob } = job;
 
+    // A failed job's error is the raw exception message of the analysis (database / driver details).
+    // TaskQueue already logged it; the client only learns that the job failed.
+    if (publicJob.error) {
+        publicJob.error = GENERIC_SERVER_ERROR;
+    }
+
     res.status(200).json({
         status: "success",
         data: publicJob
@@ -466,9 +473,10 @@ exports.updateAnomalySettings = asyncHandler(async (req, res) => {
             message: "Konfigurasi threshold anomali berhasil diperbarui"
         });
     } catch (error) {
+        console.error("Failed to update anomaly settings:", error.message);
         return res.status(500).json({
             status: "error",
-            message: "Gagal memperbarui konfigurasi (tabel system_settings mungkin belum dibuat): " + error.message
+            message: GENERIC_SERVER_ERROR
         });
     }
 });

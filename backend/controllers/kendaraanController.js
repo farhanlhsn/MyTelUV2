@@ -3,6 +3,7 @@ const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
 const { sendPushNotification } = require('../utils/firebase');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
     const { plat_nomor, nama_kendaraan } = req.body;
@@ -73,9 +74,10 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             );
             uploadedFotoKendaraan.push(result.fileUrl);
         } catch (error) {
+            console.error('Failed to upload fotoKendaraan:', error.message);
             return res.status(500).json({
                 status: "error",
-                message: `Failed to upload fotoKendaraan: ${error.message}`
+                message: GENERIC_SERVER_ERROR
             });
         }
     }
@@ -91,9 +93,10 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         );
         uploadedFotoSTNK = result.fileUrl;
     } catch (error) {
+        console.error('Failed to upload fotoSTNK:', error.message);
         return res.status(500).json({
             status: "error",
-            message: `Failed to upload fotoSTNK: ${error.message}`
+            message: GENERIC_SERVER_ERROR
         });
     }
 
@@ -131,9 +134,10 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             console.error(`Failed to cleanup foto STNK: ${cleanupError.message}`);
         }
 
+        console.error('Failed to save kendaraan:', error.message);
         return res.status(500).json({
             status: "error",
-            message: `Failed to save kendaraan: ${error.message}`
+            message: GENERIC_SERVER_ERROR
         });
     }
 });
