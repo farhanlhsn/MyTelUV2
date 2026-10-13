@@ -4,10 +4,11 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 // client IP (from Caddy's X-Forwarded-For) and not the reverse proxy's address.
 
 // General API rate limiter. server.js mounts it on /api BEFORE any route-level `protect`, so
-// `req.user` is not set yet and the key can only be the client IP.
+// `req.user` is not set yet and the key can only be the client IP. Many students share one campus
+// NAT IP, so the budget is generous: it is a flood guard, not a per-user quota.
 exports.generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
+  max: 1000,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
   message: {
     status: "error",
@@ -52,8 +53,8 @@ exports.authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Limiter for token-based account flows that have no username in the request
-// (/refresh, /forgot-password, /reset-password): 10 requests / 15 minutes per client IP
+// Limiter for the account recovery flows that have no username to key on
+// (/forgot-password, /reset-password): 10 requests / 15 minutes per client IP
 exports.sensitiveLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
@@ -61,6 +62,21 @@ exports.sensitiveLimiter = rateLimit({
   message: {
     status: "error",
     message: 'Terlalu banyak permintaan. Coba lagi dalam 15 menit.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiter for /refresh only: every logged-in device calls it whenever its 1 h access token expires,
+// and a whole campus can sit behind one NAT IP, so it gets 60 requests / 15 minutes per client IP.
+// It has its own counter, so recovery-flow traffic (sensitiveLimiter) never locks out token refresh.
+exports.refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: {
+    status: "error",
+    message: 'Terlalu banyak permintaan refresh token. Coba lagi beberapa menit lagi.'
   },
   standardHeaders: true,
   legacyHeaders: false,

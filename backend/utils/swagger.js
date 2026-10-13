@@ -55,13 +55,27 @@ module.exports = {
       },
       AuthRegisterRequest: {
         type: 'object',
+        description: 'Public registration. The created account is always a MAHASISWA; a `role` field is ignored.',
         required: ['nama', 'username', 'password'],
         properties: {
           nama: { type: 'string', example: 'John Doe' },
-          username: { type: 'string', example: 'john.doe' },
-          password: { type: 'string', example: 'secret123' },
-          role: { type: 'string', enum: ['MAHASISWA', 'DOSEN'] },
-          nim_nip: { type: 'string', example: '12345678901' },
+          username: { type: 'string', example: 'john_doe', description: '3-30 characters, starts with a letter, letters/digits/underscore only' },
+          password: { type: 'string', minLength: 8, example: 'secret1234', description: 'At least 8 characters with a letter and a digit' },
+          email: { type: 'string', format: 'email', example: 'john.doe@student.example.ac.id', description: 'Optional; stored lowercased. Needed for password reset emails.' },
+          nim_nip: { type: 'string', example: '12345678901', description: '11 or 12 digits' },
+        },
+      },
+      AuthAdminCreateUserRequest: {
+        type: 'object',
+        description: 'Admin-created account. This is the only way to create DOSEN or ADMIN accounts.',
+        required: ['nama', 'username', 'password', 'role'],
+        properties: {
+          nama: { type: 'string', example: 'Dr. Jane Doe' },
+          username: { type: 'string', example: 'jane_doe' },
+          password: { type: 'string', minLength: 8, example: 'secret1234' },
+          role: { type: 'string', enum: ['MAHASISWA', 'DOSEN', 'ADMIN'] },
+          email: { type: 'string', format: 'email', example: 'jane.doe@example.ac.id' },
+          nim_nip: { type: 'string', example: '198012345678' },
         },
       },
       VehicleVerifyRequest: {
@@ -146,7 +160,7 @@ module.exports = {
     '/auth/register': {
       post: {
         tags: ['Auth'],
-        summary: 'Register a new user',
+        summary: 'Register a new user (always MAHASISWA)',
         security: [],
         requestBody: {
           required: true,
@@ -156,7 +170,33 @@ module.exports = {
             },
           },
         },
-        responses: { 201: { description: 'User created' } },
+        responses: {
+          201: { description: 'Account created (role MAHASISWA)' },
+          400: { description: 'Validation error (e.g. password shorter than 8 characters)' },
+          409: { description: 'Username, NIM/NIP or email already registered (soft-deleted accounts included)' },
+          429: { description: 'Too many attempts for this IP and username' },
+        },
+      },
+    },
+    '/auth/admin/users': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Create a user with an explicit role (ADMIN only)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AuthAdminCreateUserRequest' },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Account created with the requested role' },
+          400: { description: 'Validation error (e.g. invalid role)' },
+          401: { description: 'Missing or invalid token' },
+          403: { description: 'Caller is not an ADMIN' },
+          409: { description: 'Username, NIM/NIP or email already registered (soft-deleted accounts included)' },
+        },
       },
     },
     '/auth/login': {

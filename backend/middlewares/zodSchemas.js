@@ -29,6 +29,12 @@ const registerSchema = z.object({
         .optional()
 });
 
+// Admin-created accounts: same fields and rules as public registration, plus an explicit role.
+// This is the only place a DOSEN or ADMIN account can be created.
+const adminCreateUserSchema = registerSchema.extend({
+    role: z.enum(['MAHASISWA', 'DOSEN', 'ADMIN'])
+});
+
 const loginSchema = z.object({
     username: z.string().min(1, "Username wajib diisi"),
     password: z.string().min(1, "Password wajib diisi")
@@ -168,6 +174,7 @@ const createAbsensiSchema = z.object({
 
 module.exports = {
     registerSchema,
+    adminCreateUserSchema,
     loginSchema,
     refreshTokenSchema,
     updateProfileSchema,

@@ -58,7 +58,7 @@ const { logAudit } = require('../utils/auditLogger');
 // Import the controller
 const authController = require('../controllers/authController');
 const { validateZod } = require('../middlewares/validationMiddleware');
-const { registerSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema } = require('../middlewares/zodSchemas');
+const { registerSchema, adminCreateUserSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema } = require('../middlewares/zodSchemas');
 
 // Helper functions for req/res
 const createMockReq = (body = {}, user = null) => ({
@@ -71,6 +71,15 @@ const createMockRes = () => {
     res.status = jest.fn().mockReturnValue(res);
     res.json = jest.fn().mockReturnValue(res);
     return res;
+};
+
+// Runs a schema through validateZod and returns what the next handler would see.
+const run = async (schema, body) => {
+    const req = { body };
+    const res = createMockRes();
+    const next = jest.fn();
+    await validateZod(schema)(req, res, next);
+    return { req, res, next };
 };
 
 describe('Auth Controller Tests', () => {
@@ -110,7 +119,7 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(201);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'success',
-                message: 'User created successfully'
+                message: 'Akun berhasil dibuat'
             }));
         });
 
@@ -219,13 +228,6 @@ describe('Auth Controller Tests', () => {
      * REGISTER SCHEMA (public registration hardening)
      */
     describe('registerSchema', () => {
-        const run = async (schema, body) => {
-            const req = { body };
-            const res = createMockRes();
-            const next = jest.fn();
-            await validateZod(schema)(req, res, next);
-            return { req, res, next };
-        };
         const validBody = { nama: 'Budi', username: 'budi_1', password: 'Rahasia123' };
 
         test('strips a client supplied role so it never reaches the controller', async () => {
@@ -251,25 +253,166 @@ describe('Auth Controller Tests', () => {
     });
 
     /**
+     * ADMIN CREATE USER (the only way to create DOSEN / ADMIN accounts)
+     */
+    describe('adminCreateUserSchema', () => {
+        const validBody = { nama: 'Pak Dosen', username: 'dosen_1', password: 'Rahasia123' };
+
+        test.each(['MAHASISWA', 'DOSEN', 'ADMIN'])('accepts and keeps role %s', async (role) => {
+            const { req, next } = await run(adminCreateUserSchema, { ...validBody, role });
+
+            expect(next).toHaveBeenCalledWith();
+            expect(req.body.role).toBe(role);
+        });
+
+        test.each(['SUPERUSER', 'dosen', '', null, 5])('rejects invalid role %p with 400', async (role) => {
+            const { res, next } = await run(adminCreateUserSchema, { ...validBody, role });
+
+            expect(next).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        test('rejects a missing role with 400', async () => {
+            const { res, next } = await run(adminCreateUserSchema, validBody);
+
+            expect(next).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        test('keeps optional nim_nip and email, and still strips unknown keys', async () => {
+            const { req, next } = await run(adminCreateUserSchema, {
+                ...validBody, role: 'DOSEN', nim_nip: '198012345678', email: 'dosen@telkom.ac.id', isSuperAdmin: true
+            });
+
+            expect(next).toHaveBeenCalledWith();
+            expect(req.body).toEqual({
+                ...validBody, role: 'DOSEN', nim_nip: '198012345678', email: 'dosen@telkom.ac.id'
+            });
+        });
+    });
+
+    describe('adminCreateUser', () => {
+        const admin = { id_user: 99, nama: 'Admin Kampus', role: 'ADMIN' };
+        const body = { nama: 'Pak Dosen', username: 'dosen_1', password: 'Rahasia123', role: 'DOSEN' };
+        const makeReq = (extra = {}) => ({ ...createMockReq({ ...body, ...extra }, admin), ip: '10.0.0.1', headers: {} });
+        const created = {
+            id_user: 5, nama: 'Pak Dosen', username: 'dosen_1', role: 'DOSEN',
+            nim_nip: null, email: null, password: 'hashed_password'
+        };
+
+        test('creates a DOSEN account with 201 and never returns the password hash', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+            bcrypt.hash.mockResolvedValue('hashed_password');
+            prisma.user.create.mockResolvedValue(created);
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq(), res);
+
+            expect(bcrypt.hash).toHaveBeenCalledWith('Rahasia123', 10);
+            expect(prisma.user.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
+                nama: 'Pak Dosen', username: 'dosen_1', password: 'hashed_password', role: 'DOSEN', nim_nip: null, email: null
+            }));
+            expect(res.status).toHaveBeenCalledWith(201);
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.status).toBe('success');
+            expect(payload.data).toEqual(expect.objectContaining({ id: 5, username: 'dosen_1', nama: 'Pak Dosen', role: 'DOSEN' }));
+            expect(JSON.stringify(payload)).not.toContain('hashed_password');
+            expect(payload.data).not.toHaveProperty('password');
+        });
+
+        test.each(['ADMIN', 'MAHASISWA'])('creates the requested role %s', async (role) => {
+            prisma.user.findFirst.mockResolvedValue(null);
+            bcrypt.hash.mockResolvedValue('hashed_password');
+            prisma.user.create.mockResolvedValue({ ...created, role });
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq({ role }), res);
+
+            expect(prisma.user.create.mock.calls[0][0].data.role).toBe(role);
+            expect(res.status).toHaveBeenCalledWith(201);
+        });
+
+        test('stores email lowercased and nim_nip', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+            bcrypt.hash.mockResolvedValue('hashed_password');
+            prisma.user.create.mockResolvedValue({ ...created, email: 'dosen@telkom.ac.id', nim_nip: '198012345678' });
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq({ email: 'Dosen@Telkom.AC.id', nim_nip: '198012345678' }), res);
+
+            const { data } = prisma.user.create.mock.calls[0][0];
+            expect(data.email).toBe('dosen@telkom.ac.id');
+            expect(data.nim_nip).toBe('198012345678');
+            expect(res.json.mock.calls[0][0].data).toEqual(expect.objectContaining({ email: 'dosen@telkom.ac.id', nim_nip: '198012345678' }));
+        });
+
+        test('writes an ADMIN_CREATE_USER audit entry', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+            bcrypt.hash.mockResolvedValue('hashed_password');
+            prisma.user.create.mockResolvedValue(created);
+
+            await authController.adminCreateUser(makeReq(), createMockRes());
+
+            expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'ADMIN_CREATE_USER',
+                performedBy: 99,
+                targetUserId: 5,
+                ip: '10.0.0.1'
+            }));
+        });
+
+        test('uses the same duplicate rules as register: soft-deleted rows count, 409 with an Indonesian message', async () => {
+            prisma.user.findFirst.mockResolvedValue({ username: 'dosen_1', nim_nip: null, email: null });
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq(), res);
+
+            const { where } = prisma.user.findFirst.mock.calls[0][0];
+            expect(JSON.stringify(where)).not.toContain('deletedAt');
+            expect(where.OR).toEqual(expect.arrayContaining([{ username: 'dosen_1' }]));
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Username sudah digunakan' });
+            expect(prisma.user.create).not.toHaveBeenCalled();
+            expect(logAudit).not.toHaveBeenCalled();
+        });
+
+        test('409 for a duplicate email, compared lowercased', async () => {
+            prisma.user.findFirst.mockResolvedValue({ username: 'lain', nim_nip: null, email: 'dosen@telkom.ac.id' });
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq({ email: 'DOSEN@telkom.ac.id' }), res);
+
+            expect(prisma.user.findFirst.mock.calls[0][0].where.OR).toEqual(expect.arrayContaining([{ email: 'dosen@telkom.ac.id' }]));
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Email sudah terdaftar' });
+        });
+
+        test('maps a concurrent unique-constraint race (P2002) to 409', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+            bcrypt.hash.mockResolvedValue('hashed_password');
+            prisma.user.create.mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+
+            const res = createMockRes();
+            await authController.adminCreateUser(makeReq(), res);
+
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(logAudit).not.toHaveBeenCalled();
+        });
+    });
+
+    /**
      * PASSWORD POLICY (min 8)
      */
     describe('password policy (min 8)', () => {
-        const run = async (schema, body) => {
-            const req = { body };
-            const res = createMockRes();
-            const next = jest.fn();
-            await validateZod(schema)(req, res, next);
-            return { req, res, next };
-        };
-
         // '1234567' is the brief's example; 'abc1234' has a letter AND a digit, so only the length rule can reject it.
         test.each([
             ['registerSchema', { nama: 'Budi', username: 'budi_1' }, 'password'],
             ['changePasswordSchema', { oldPassword: 'lama12345' }, 'newPassword'],
             ['resetPasswordSchema', { token: 'tok' }, 'newPassword'],
             ['adminResetPasswordSchema', { id_user: 7 }, 'new_password'],
+            ['adminCreateUserSchema', { nama: 'Pak Dosen', username: 'dosen_1', role: 'DOSEN' }, 'password'],
         ])('%s rejects a 7 character password with 400 "Password minimal 8 karakter"', async (schemaName, base, field) => {
-            const schema = { registerSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema }[schemaName];
+            const schema = { registerSchema, adminCreateUserSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema }[schemaName];
 
             for (const short of ['1234567', 'abc1234']) {
                 const { res, next } = await run(schema, { ...base, [field]: short });
@@ -287,8 +430,9 @@ describe('Auth Controller Tests', () => {
             ['changePasswordSchema', { oldPassword: 'lama12345' }, 'newPassword'],
             ['resetPasswordSchema', { token: 'tok' }, 'newPassword'],
             ['adminResetPasswordSchema', { id_user: 7 }, 'new_password'],
+            ['adminCreateUserSchema', { nama: 'Pak Dosen', username: 'dosen_1', role: 'DOSEN' }, 'password'],
         ])('%s accepts an 8 character password', async (schemaName, base, field) => {
-            const schema = { registerSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema }[schemaName];
+            const schema = { registerSchema, adminCreateUserSchema, changePasswordSchema, resetPasswordSchema, adminResetPasswordSchema }[schemaName];
 
             const { req, next } = await run(schema, { ...base, [field]: 'abcdef12' });
             expect(next).toHaveBeenCalledWith();
@@ -331,11 +475,15 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'success',
-                message: 'Login successful',
+                message: 'Login berhasil',
                 data: expect.objectContaining({
                     token: 'mock_token'
                 })
             }));
+            // changePassword returns the very same shape (see its test)
+            expect(Object.keys(res.json.mock.calls[0][0].data).sort()).toEqual(
+                ['id_user', 'nama', 'refresh_token', 'role', 'token', 'username']
+            );
         });
 
         test('should return 401 if user not found', async () => {
@@ -349,7 +497,7 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid username or password'
+                message: 'Username atau password salah'
             });
         });
 
@@ -365,7 +513,7 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid username or password'
+                message: 'Username atau password salah'
             });
         });
     });
@@ -419,6 +567,10 @@ describe('Auth Controller Tests', () => {
      * CHANGE PASSWORD TESTS
      */
     describe('changePassword', () => {
+        const changePasswordUser = {
+            id_user: 1, username: 'testu', nama: 'Test User', role: 'MAHASISWA', password: 'hashed_old_pass'
+        };
+
         test('should change password successfully', async () => {
             const req = createMockReq({
                 oldPassword: 'oldpass',
@@ -426,12 +578,14 @@ describe('Auth Controller Tests', () => {
             }, { id_user: 1 });
             const res = createMockRes();
 
-            prisma.user.findUnique.mockResolvedValue({ id_user: 1, password: 'hashed_old_pass' });
+            prisma.user.findUnique.mockResolvedValue({ ...changePasswordUser });
             bcrypt.compare.mockResolvedValue(true);
             bcrypt.hash.mockResolvedValue('hashed_new_pass');
             prisma.user.update.mockReturnValue('UPDATE_OP');
             prisma.refreshToken.deleteMany.mockReturnValue('REVOKE_OP');
+            prisma.refreshToken.create.mockReturnValue('CREATE_OP');
             prisma.$transaction.mockResolvedValue([]);
+            jwt.sign.mockReturnValue('new_access_token');
 
             await authController.changePassword(req, res);
 
@@ -442,30 +596,49 @@ describe('Auth Controller Tests', () => {
                 data: { password: 'hashed_new_pass' }
             });
             expect(res.status).toHaveBeenCalledWith(200);
-            expect(res.json).toHaveBeenCalledWith({
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 status: 'success',
-                message: 'Password changed successfully'
-            });
+                message: 'Password berhasil diubah'
+            }));
         });
 
-        test('revokes every refresh token of the user in the same transaction as the password update', async () => {
+        test('revokes every refresh token in the transaction, then issues a fresh pair for the caller (login response shape)', async () => {
             const req = createMockReq({
                 oldPassword: 'oldpass',
                 newPassword: 'newpassword123'
             }, { id_user: 1 });
             const res = createMockRes();
 
-            prisma.user.findUnique.mockResolvedValue({ id_user: 1, password: 'hashed_old_pass' });
+            prisma.user.findUnique.mockResolvedValue({ ...changePasswordUser });
             bcrypt.compare.mockResolvedValue(true);
             bcrypt.hash.mockResolvedValue('hashed_new_pass');
             prisma.user.update.mockReturnValue('UPDATE_OP');
             prisma.refreshToken.deleteMany.mockReturnValue('REVOKE_OP');
+            prisma.refreshToken.create.mockReturnValue('CREATE_OP');
             prisma.$transaction.mockResolvedValue([]);
+            jwt.sign.mockReturnValue('new_access_token');
 
             await authController.changePassword(req, res);
 
+            // all old tokens go first, the new one is created after them (order matters inside the transaction)
             expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { id_user: 1 } });
-            expect(prisma.$transaction).toHaveBeenCalledWith(['UPDATE_OP', 'REVOKE_OP']);
+            expect(prisma.$transaction).toHaveBeenCalledWith(['UPDATE_OP', 'REVOKE_OP', 'CREATE_OP']);
+            expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+                data: { token: 'mocked-uuid-token', id_user: 1, expiresAt: expect.any(Date) }
+            });
+            expect(jwt.sign).toHaveBeenCalledWith({ id: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+            const body = res.json.mock.calls[0][0];
+            expect(body.status).toBe('success');
+            expect(body.data).toEqual({
+                id_user: 1,
+                token: 'new_access_token',
+                refresh_token: 'mocked-uuid-token',
+                username: 'testu',
+                nama: 'Test User',
+                role: 'MAHASISWA'
+            });
+            expect(JSON.stringify(body)).not.toContain('hashed');
         });
 
         test('does not revoke sessions when the old password is wrong', async () => {
@@ -476,6 +649,7 @@ describe('Auth Controller Tests', () => {
             await authController.changePassword(req, createMockRes());
 
             expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
+            expect(prisma.refreshToken.create).not.toHaveBeenCalled();
             expect(prisma.$transaction).not.toHaveBeenCalled();
         });
 
@@ -494,7 +668,7 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Old password is incorrect'
+                message: 'Password lama salah'
             });
         });
 
@@ -553,6 +727,23 @@ describe('Auth Controller Tests', () => {
             expect(prisma.$transaction).toHaveBeenCalledWith(['UPDATE_OP', 'REVOKE_OP']);
             expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'ADMIN_RESET_PASSWORD', targetUserId: 7 }));
             expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'success',
+                message: 'Password untuk Budi berhasil direset'
+            });
+        });
+
+        test('returns Indonesian messages for missing fields and an unknown user', async () => {
+            const missing = createMockRes();
+            await authController.adminResetPassword({ ...createMockReq({ id_user: 7 }, admin), ip: '10.0.0.1', headers: {} }, missing);
+            expect(missing.status).toHaveBeenCalledWith(400);
+            expect(missing.json).toHaveBeenCalledWith({ status: 'error', message: 'id_user dan new_password wajib diisi' });
+
+            prisma.user.findUnique.mockResolvedValue(null);
+            const unknown = createMockRes();
+            await authController.adminResetPassword({ ...createMockReq({ id_user: 7, new_password: 'Baru12345' }, admin), ip: '10.0.0.1', headers: {} }, unknown);
+            expect(unknown.status).toHaveBeenCalledWith(404);
+            expect(unknown.json).toHaveBeenCalledWith({ status: 'error', message: 'User tidak ditemukan' });
         });
 
         test('rejects a 7 character password without touching the database', async () => {
@@ -598,6 +789,7 @@ describe('Auth Controller Tests', () => {
             expect(ops).toEqual(expect.arrayContaining(['UPDATE_OP', 'USED_OP', 'REVOKE_OP']));
             expect(ops).toHaveLength(3);
             expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith({ status: 'success', message: 'Password berhasil direset' });
         });
 
         test('does not revoke sessions for an invalid or used token', async () => {
@@ -609,8 +801,41 @@ describe('Auth Controller Tests', () => {
             await authController.resetPasswordWithToken(req, res);
 
             expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Token reset tidak valid atau sudah kedaluwarsa' });
             expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
             expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+    });
+
+    /**
+     * REQUEST PASSWORD RESET TESTS
+     */
+    describe('requestPasswordReset', () => {
+        test('looks the email up case-insensitively (register stores emails lowercased)', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+
+            const res = createMockRes();
+            await authController.requestPasswordReset(createMockReq({ username: 'Budi.Santoso@Telkom.AC.id' }), res);
+
+            const { where } = prisma.user.findFirst.mock.calls[0][0];
+            expect(where.deletedAt).toBeNull();
+            expect(where.OR).toEqual([
+                { username: 'Budi.Santoso@Telkom.AC.id' },
+                { email: { equals: 'Budi.Santoso@Telkom.AC.id', mode: 'insensitive' } }
+            ]);
+        });
+
+        test('answers 200 with the same Indonesian message whether or not the account exists', async () => {
+            prisma.user.findFirst.mockResolvedValue(null);
+
+            const res = createMockRes();
+            await authController.requestPasswordReset(createMockReq({ username: 'tidak.ada' }), res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'success',
+                message: 'Jika username atau email terdaftar, tautan reset password telah dikirim.'
+            });
         });
     });
 

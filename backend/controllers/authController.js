@@ -15,12 +15,14 @@ const duplicateMessage = (existing, wanted) => {
 };
 
 // Public registration can only ever create a MAHASISWA. DOSEN and ADMIN accounts are created by an
-// admin; any `role` sent by the client is ignored (the Zod schema strips it, and it is never read here).
+// admin through adminCreateUser; any `role` sent to /register is ignored (the Zod schema strips it,
+// and register never reads it).
 const PUBLIC_REGISTER_ROLE = 'MAHASISWA';
 
-exports.register = asyncHandler(async (req, res) => {
-    const { nama, username, password, nim_nip } = req.body;
-    const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
+// Shared by register and adminCreateUser so both apply exactly the same duplicate rules.
+// Resolves to { user } on success or { conflict: <Indonesian message> } for a 409.
+const createUserAccount = async ({ nama, username, password, role, nim_nip, email: rawEmail }) => {
+    const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
 
     // The duplicate check deliberately includes soft-deleted users: the DB unique constraints on
     // username / nim_nip / email still cover them, so excluding them here turned a duplicate into a 500.
@@ -33,44 +35,104 @@ exports.register = asyncHandler(async (req, res) => {
         select: { username: true, nim_nip: true, email: true }
     });
     if (existing) {
-        return res.status(409).json({ status: "error", message: duplicateMessage(existing, { username, nim_nip, email }) });
+        return { conflict: duplicateMessage(existing, { username, nim_nip, email }) };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    let user;
     try {
-        user = await prisma.user.create({
+        const user = await prisma.user.create({
             data: {
                 nama,
                 username,
                 password: hashedPassword,
-                role: PUBLIC_REGISTER_ROLE,
+                role,
                 nim_nip: nim_nip || null,
                 email
             }
         });
+        return { user };
     } catch (error) {
         // A concurrent registration won the race for the same unique value after our check.
         if (error?.code === 'P2002') {
-            return res.status(409).json({ status: "error", message: 'Username, NIM/NIP, atau email sudah terdaftar' });
+            return { conflict: 'Username, NIM/NIP, atau email sudah terdaftar' };
         }
         throw error;
     }
-    if (user) {
-        res.status(201).json({
-            status: "success",
-            message: 'User created successfully',
-            data: {
-                id: user.id_user,
-                username: user.username,
-                nama: user.nama,
-                role: user.role
-            }
-        });
-    } else {
-        res.status(400).json({ status: "error", message: 'Invalid user data' });
-        throw new Error('Invalid user data');
+};
+
+exports.register = asyncHandler(async (req, res) => {
+    const { nama, username, password, nim_nip, email } = req.body;
+
+    const { user, conflict } = await createUserAccount({
+        nama, username, password, nim_nip, email, role: PUBLIC_REGISTER_ROLE
+    });
+    if (conflict) {
+        return res.status(409).json({ status: "error", message: conflict });
     }
+
+    res.status(201).json({
+        status: "success",
+        message: 'Akun berhasil dibuat',
+        data: {
+            id: user.id_user,
+            username: user.username,
+            nama: user.nama,
+            role: user.role
+        }
+    });
+});
+
+// ADMIN only (see authRoutes): creates an account with an explicit role, which is how DOSEN and
+// ADMIN accounts come to exist now that public registration is MAHASISWA only.
+exports.adminCreateUser = asyncHandler(async (req, res) => {
+    const { nama, username, password, role, nim_nip, email } = req.body;
+
+    const { user, conflict } = await createUserAccount({ nama, username, password, role, nim_nip, email });
+    if (conflict) {
+        return res.status(409).json({ status: "error", message: conflict });
+    }
+
+    logAudit({
+        action: 'ADMIN_CREATE_USER',
+        performedBy: req.user.id_user,
+        targetUserId: user.id_user,
+        details: `Admin ${req.user.nama} created ${user.role} account '${user.username}'`,
+        ip: req.ip || req.headers['x-forwarded-for']
+    });
+
+    res.status(201).json({
+        status: "success",
+        message: 'Akun berhasil dibuat',
+        data: {
+            id: user.id_user,
+            username: user.username,
+            nama: user.nama,
+            role: user.role,
+            nim_nip: user.nim_nip,
+            email: user.email
+        }
+    });
+});
+
+// Issues an access token (1 hour) plus a refresh token and its expiry (7 days). The caller stores the
+// refresh token row, so login can do it standalone and changePassword can do it inside its transaction.
+const issueSession = (userId) => {
+    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    return { token, refreshToken, expiresAt };
+};
+
+// The `data` object of a successful login. changePassword returns the same shape so the client can
+// treat both responses identically.
+const sessionPayload = (user, token, refreshToken) => ({
+    id_user: user.id_user,
+    token: token,
+    refresh_token: refreshToken,
+    username: user.username,
+    nama: user.nama,
+    role: user.role
 });
 
 exports.login = asyncHandler(async (req, res) => {
@@ -83,21 +145,15 @@ exports.login = asyncHandler(async (req, res) => {
         }
     });
     if (!user) {
-        return res.status(401).json({ status: "error", message: 'Invalid username or password' });
+        return res.status(401).json({ status: "error", message: 'Username atau password salah' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-        return res.status(401).json({ status: "error", message: 'Invalid username or password' });
+        return res.status(401).json({ status: "error", message: 'Username atau password salah' });
     }
 
-    // Generate access token (1 hour)
-    const token = jwt.sign({ id: user.id_user }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    
-    // Generate refresh token (7 days)
-    const refreshToken = uuidv4();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    const { token, refreshToken, expiresAt } = issueSession(user.id_user);
 
     // Store refresh token in DB
     await prisma.refreshToken.create({
@@ -110,15 +166,8 @@ exports.login = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Login successful',
-        data: {
-            id_user: user.id_user,
-            token: token,
-            refresh_token: refreshToken,
-            username: user.username,
-            nama: user.nama,
-            role: user.role
-        }
+        message: 'Login berhasil',
+        data: sessionPayload(user, token, refreshToken)
     });
 });
 
@@ -357,7 +406,7 @@ exports.changePassword = asyncHandler(async (req, res) => {
     if (!oldPassword || !newPassword) {
         return res.status(400).json({
             status: "error",
-            message: 'Old password and new password are required'
+            message: 'Password lama dan password baru wajib diisi'
         });
     }
 
@@ -378,24 +427,31 @@ exports.changePassword = asyncHandler(async (req, res) => {
     if (!isPasswordValid) {
         return res.status(401).json({
             status: "error",
-            message: 'Old password is incorrect'
+            message: 'Password lama salah'
         });
     }
 
-    // Hash and save new password; revoke every refresh token in the same transaction so a stolen
-    // session cannot outlive the password change.
+    // Hash and save the new password. Every refresh token of the user is revoked in the same
+    // transaction so a stolen session cannot outlive the password change; the caller's own session is
+    // replaced by a fresh pair (created after the delete, in the same transaction) so this device
+    // stays logged in.
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const { token, refreshToken, expiresAt } = issueSession(userId);
     await prisma.$transaction([
         prisma.user.update({
             where: { id_user: userId },
             data: { password: hashedPassword }
         }),
-        prisma.refreshToken.deleteMany({ where: { id_user: userId } })
+        prisma.refreshToken.deleteMany({ where: { id_user: userId } }),
+        prisma.refreshToken.create({
+            data: { token: refreshToken, id_user: userId, expiresAt }
+        })
     ]);
 
     res.status(200).json({
         status: "success",
-        message: 'Password changed successfully'
+        message: 'Password berhasil diubah',
+        data: sessionPayload(user, token, refreshToken)
     });
 });
 
@@ -406,7 +462,7 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     if (!id_user || !new_password) {
         return res.status(400).json({
             status: "error",
-            message: 'id_user and new_password are required'
+            message: 'id_user dan new_password wajib diisi'
         });
     }
 
@@ -425,7 +481,7 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     if (!user || user.deletedAt) {
         return res.status(404).json({
             status: "error",
-            message: 'User not found'
+            message: 'User tidak ditemukan'
         });
     }
 
@@ -450,7 +506,7 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: `Password for ${user.nama} has been reset successfully`
+        message: `Password untuk ${user.nama} berhasil direset`
     });
 });
 
@@ -628,15 +684,19 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
 
 const { sendPasswordResetEmail } = require('../utils/mailer');
 
+// Same answer whether or not the account exists (prevents user enumeration)
+const PASSWORD_RESET_REQUESTED_MESSAGE = 'Jika username atau email terdaftar, tautan reset password telah dikirim.';
+
 exports.requestPasswordReset = asyncHandler(async (req, res) => {
     const { username } = req.body;
     
-    // Find user by username or email
+    // Find user by username or email. Emails are stored lowercased by register, but older rows may not
+    // be, so the email match is case-insensitive.
     const user = await prisma.user.findFirst({
         where: {
             OR: [
                 { username: username },
-                { email: username } // Also check email if they enter email
+                { email: { equals: username, mode: 'insensitive' } } // Also check email if they enter email
             ],
             deletedAt: null
         }
@@ -646,14 +706,14 @@ exports.requestPasswordReset = asyncHandler(async (req, res) => {
         // Return 200 anyway to prevent user enumeration attacks
         return res.status(200).json({
             status: "success",
-            message: "If the username or email exists, a reset link has been sent."
+            message: PASSWORD_RESET_REQUESTED_MESSAGE
         });
     }
 
     // Respond immediately to prevent timing attack / user enumeration
     res.status(200).json({
         status: "success",
-        message: "If the username or email exists, a reset link has been sent."
+        message: PASSWORD_RESET_REQUESTED_MESSAGE
     });
 
     // Handle token creation and email sending asynchronously in the background
@@ -699,14 +759,14 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
     if (!resetRecord || resetRecord.usedAt || new Date() > resetRecord.expiresAt) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid or expired reset token"
+            message: "Token reset tidak valid atau sudah kedaluwarsa"
         });
     }
 
     if (resetRecord.user.deletedAt) {
         return res.status(400).json({
             status: "error",
-            message: "User account is deactivated"
+            message: "Akun pengguna sudah dinonaktifkan"
         });
     }
 
@@ -735,6 +795,6 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Password has been successfully reset"
+        message: "Password berhasil direset"
     });
 });

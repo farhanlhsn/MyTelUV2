@@ -136,6 +136,11 @@ const schemaCases = [
         body: { nama: 'Budi', username: 'budi_1', password: 'Rahasia123', email: 'budi@telkom.ac.id', nim_nip: '13012100012' }
     },
     {
+        schema: 'adminCreateUserSchema',
+        consumer: 'authController.adminCreateUser',
+        body: { nama: 'Pak Dosen', username: 'dosen_1', password: 'Rahasia123', role: 'DOSEN', email: 'dosen@telkom.ac.id', nim_nip: '198012345678' }
+    },
+    {
         schema: 'loginSchema',
         consumer: 'authController.login',
         body: { username: 'budi_1', password: 'Rahasia123' }

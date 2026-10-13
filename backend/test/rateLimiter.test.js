@@ -4,6 +4,7 @@ const {
     generalLimiter,
     authLimiter,
     sensitiveLimiter,
+    refreshLimiter,
     authKeyGenerator
 } = require('../middlewares/rateLimiterMiddleware');
 
@@ -154,18 +155,70 @@ describe('sensitiveLimiter', () => {
     });
 });
 
+describe('refreshLimiter', () => {
+    // /refresh is hit by every logged-in device whenever its 1 h access token expires, and many
+    // students share one campus NAT IP, so it needs far more headroom than sensitiveLimiter.
+    test('allows 60 requests per IP, blocks the 61st with 429', async () => {
+        const app = buildApp('/refresh', refreshLimiter);
+        const ip = freshIp();
+
+        let last;
+        for (let i = 0; i < 60; i++) {
+            last = await hit(app, '/refresh', ip, { refresh_token: `t${i}` });
+            if (last.status !== 200) break;
+        }
+        expect(last.status).toBe(200);
+        expect(last.headers['ratelimit-limit']).toBe('60');
+
+        const blocked = await hit(app, '/refresh', ip, { refresh_token: 't61' });
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.status).toBe('error');
+        expect(typeof blocked.body.message).toBe('string');
+    });
+
+    test('is keyed by IP only: another client IP is unaffected', async () => {
+        const app = buildApp('/refresh', refreshLimiter);
+        const ipA = freshIp();
+        const ipB = freshIp();
+
+        await hit(app, '/refresh', ipA, { refresh_token: 'a' });
+        const a = await hit(app, '/refresh', ipA, { refresh_token: 'a' });
+        const b = await hit(app, '/refresh', ipB, { refresh_token: 'b' });
+
+        expect(a.headers['ratelimit-remaining']).toBe('58');
+        expect(b.headers['ratelimit-remaining']).toBe('59');
+    });
+
+    test('has its own counter: exhausting sensitiveLimiter does not touch refreshLimiter', async () => {
+        const app = express();
+        app.set('trust proxy', TRUST_PROXY);
+        app.use(express.json());
+        app.post('/forgot-password', sensitiveLimiter, (req, res) => res.status(200).json({ status: 'success' }));
+        app.post('/refresh', refreshLimiter, (req, res) => res.status(200).json({ status: 'success' }));
+        const ip = freshIp();
+
+        for (let i = 0; i < 11; i++) await hit(app, '/forgot-password', ip, { username: 'x' });
+        const forgot = await hit(app, '/forgot-password', ip, { username: 'x' });
+        const refresh = await hit(app, '/refresh', ip, { refresh_token: 'a' });
+
+        expect(forgot.status).toBe(429);
+        expect(refresh.status).toBe(200);
+        expect(refresh.headers['ratelimit-remaining']).toBe('59');
+    });
+});
+
 describe('generalLimiter', () => {
-    test('allows 300 requests per 15 minutes per IP, blocks the 301st with 429', async () => {
+    test('allows 1000 requests per 15 minutes per IP, blocks the 1001st with 429', async () => {
         const app = buildApp('/api/anything', generalLimiter);
         const ip = freshIp();
 
         let last;
-        for (let i = 0; i < 300; i++) {
+        for (let i = 0; i < 1000; i++) {
             last = await request(app).get('/api/anything').set('X-Forwarded-For', ip);
             if (last.status !== 200) break;
         }
         expect(last.status).toBe(200);
-        expect(last.headers['ratelimit-limit']).toBe('300');
+        expect(last.headers['ratelimit-limit']).toBe('1000');
 
         const blocked = await request(app).get('/api/anything').set('X-Forwarded-For', ip);
         expect(blocked.status).toBe(429);
@@ -181,8 +234,8 @@ describe('generalLimiter', () => {
         const a = await request(app).get('/api/anything').set('X-Forwarded-For', ipA);
         const b = await request(app).get('/api/anything').set('X-Forwarded-For', ipB);
 
-        expect(a.headers['ratelimit-remaining']).toBe('298');
-        expect(b.headers['ratelimit-remaining']).toBe('299');
+        expect(a.headers['ratelimit-remaining']).toBe('998');
+        expect(b.headers['ratelimit-remaining']).toBe('999');
     });
 
     test('keys by IP even when an earlier middleware set req.user (it runs before protect in server.js)', async () => {
@@ -196,7 +249,7 @@ describe('generalLimiter', () => {
         await request(app).get('/api/anything').set('X-Forwarded-For', ip);
         const second = await request(app).get('/api/anything').set('X-Forwarded-For', ip);
 
-        expect(second.headers['ratelimit-remaining']).toBe('298');
+        expect(second.headers['ratelimit-remaining']).toBe('998');
     });
 
     test('never limits the edge device endpoint', async () => {
