@@ -10,18 +10,66 @@ jest.mock('../utils/prisma', () => ({
     pesertaKelas: { findMany: jest.fn() },
     absensi: { findMany: jest.fn() },
     sesiAbsensi: { findMany: jest.fn(), count: jest.fn() },
-    laporanAnomali: { findFirst: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), createMany: jest.fn(), update: jest.fn() },
+    laporanAnomali: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), updateMany: jest.fn(), createMany: jest.fn(), update: jest.fn() },
     systemSetting: { findUnique: jest.fn(), upsert: jest.fn() },
     $transaction: jest.fn(),
     $queryRaw: jest.fn(),
 }));
 
-jest.mock('axios');
+// The Python anomaly service is called through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { post: jest.fn() } }));
 
 const prisma = require('../utils/prisma');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const anomaliController = require('../controllers/anomaliController');
 const { globalAnomalyQueue } = require('../utils/TaskQueue');
+
+const POLA_WAKTU_WARNING = 'Layanan analisis pola waktu tidak tersedia';
+
+// $transaction: the batch of reads (array form) resolves to `reads`; the save (callback form) runs
+// against the same mock client, with `inTransaction` set while the callback runs
+let inTransaction = false;
+const mockTransactions = (reads) => prisma.$transaction.mockImplementation(async (arg) => {
+    if (typeof arg !== 'function') return reads;
+    inTransaction = true;
+    try {
+        return await arg(prisma);
+    } finally {
+        inTransaction = false;
+    }
+});
+
+// In-memory laporan_anomali table behind findMany/updateMany/createMany; every write records
+// whether it ran inside the save transaction
+const fakeLaporanTable = (rows = []) => {
+    const table = rows.map((r) => ({ deletedAt: null, catatan_dosen: null, deskripsi: null, confidence: null, ...r }));
+    const writes = [];
+    let nextId = 100;
+    const matches = (row, where = {}) => Object.entries(where).every(([field, cond]) => {
+        if (cond && typeof cond === 'object' && Array.isArray(cond.in)) return cond.in.includes(row[field]);
+        return row[field] === cond;
+    });
+
+    prisma.laporanAnomali.findMany.mockImplementation(async ({ where } = {}) =>
+        table.filter((r) => matches(r, where)).map((r) => ({ ...r })));
+    prisma.laporanAnomali.updateMany.mockImplementation(async ({ where, data }) => {
+        writes.push({ op: 'updateMany', where, data, inTransaction });
+        const hit = table.filter((r) => matches(r, where));
+        hit.forEach((r) => Object.assign(r, data));
+        return { count: hit.length };
+    });
+    prisma.laporanAnomali.createMany.mockImplementation(async ({ data }) => {
+        writes.push({ op: 'createMany', data, inTransaction });
+        data.forEach((d) => table.push({ id_anomali: nextId++, deletedAt: null, catatan_dosen: null, ...d }));
+        return { count: data.length };
+    });
+    return { table, writes };
+};
+
+// The breaker is a module singleton: start every test with a closed circuit and no counted failures
+const resetAnomalyBreaker = () => Object.assign(anomaliController.anomalyApiBreaker || {}, {
+    state: 'CLOSED', failureCount: 0, successCount: 0, lastStateChanged: Date.now()
+});
 
 const createMockReq = (body = {}, user = { id_user: 1, role: 'DOSEN' }, params = {}, query = {}, headers = {}) => ({
     body,
@@ -42,6 +90,12 @@ describe('Anomaly Controller Tests', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        // reset (not only clear): no queued once-values or fake tables leak between tests
+        Object.values(prisma.laporanAnomali).forEach((fn) => fn.mockReset());
+        prisma.$transaction.mockReset();
+        prisma.laporanAnomali.findMany.mockResolvedValue([]);
+        pythonClient.post.mockReset();
+        resetAnomalyBreaker();
     });
 
     describe('analyzeKelasAttendance', () => {
@@ -94,9 +148,9 @@ describe('Anomaly Controller Tests', () => {
                 { id_sesi_absensi: 1, mulai: new Date(Date.now() - 3 * 60 * 60 * 1000), selesai: new Date(Date.now() - 60 * 60 * 1000), status: false }
             ];
 
-            prisma.$transaction.mockResolvedValue([mockPeserta, mockAbsensi, mockSesi]);
-            prisma.laporanAnomali.updateMany.mockResolvedValue({ count: 1 });
-            prisma.laporanAnomali.createMany.mockResolvedValue({ count: 1 });
+            mockTransactions([mockPeserta, mockAbsensi, mockSesi]);
+            // An OPEN report of Student A, who now attends: replaced (soft-deleted)
+            fakeLaporanTable([{ id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN' }]);
 
             await anomaliController.analyzeKelasAttendance(req, res);
 
@@ -104,6 +158,26 @@ describe('Anomaly Controller Tests', () => {
             expect(prisma.laporanAnomali.updateMany).toHaveBeenCalled();
             expect(prisma.laporanAnomali.createMany).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('never reports KEHADIRAN_GANDA (impossible under uq_absensi_user_sesi)', async () => {
+            const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 });
+            const res = createMockRes();
+            prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
+            prisma.systemSetting.findUnique.mockResolvedValue(null);
+            const sesi = { id_sesi_absensi: 1, mulai: new Date('2026-09-02T01:00:00Z'), selesai: new Date('2026-09-02T03:00:00Z'), status: false };
+            // Two rows for one session (cannot exist in the database any more)
+            mockTransactions([
+                [{ mahasiswa: { id_user: 10, nama: 'Student A' } }],
+                [{ id_user: 10, id_sesi_absensi: 1, status: 'HADIR' }, { id_user: 10, id_sesi_absensi: 1, status: 'HADIR' }],
+                [sesi]
+            ]);
+            fakeLaporanTable();
+
+            await anomaliController.analyzeKelasAttendance(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json.mock.calls[0][0].data.map((a) => a.type_anomali)).not.toContain('KEHADIRAN_GANDA');
         });
 
         /**
@@ -125,12 +199,11 @@ describe('Anomaly Controller Tests', () => {
                 id_user, id_sesi_absensi, status, createdAt: new Date('2026-09-02T01:05:00Z')
             });
 
-            const analyze = async (pesertaList, absensiList, sesiList = SESSIONS) => {
+            const analyze = async (pesertaList, absensiList, sesiList = SESSIONS, thresholdSetting = null) => {
                 prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
-                prisma.systemSetting.findUnique.mockResolvedValue(null); // default threshold 50%
-                prisma.$transaction.mockResolvedValue([pesertaList, absensiList, sesiList]);
-                prisma.laporanAnomali.updateMany.mockResolvedValue({ count: 0 });
-                prisma.laporanAnomali.createMany.mockResolvedValue({ count: 0 });
+                prisma.systemSetting.findUnique.mockResolvedValue(thresholdSetting); // null: default threshold 50%
+                mockTransactions([pesertaList, absensiList, sesiList]);
+                fakeLaporanTable();
 
                 const res = createMockRes();
                 await anomaliController.analyzeKelasAttendance(
@@ -189,6 +262,298 @@ describe('Anomaly Controller Tests', () => {
                 const anomalies = await analyze([peserta(10, new Date('2026-09-30T00:00:00Z'))], []);
 
                 expect(anomalies).toEqual([]);
+            });
+
+            test('nothing to count is never an anomaly, even with a 100% threshold', async () => {
+                const anomalies = await analyze(
+                    // 10: enrolled after every session; 11: excused at every session
+                    [peserta(10, new Date('2026-09-30T00:00:00Z')), peserta(11)],
+                    [row(11, 1, 'IZIN'), row(11, 2, 'SAKIT'), row(11, 3, 'IZIN'), row(11, 4, 'SAKIT')],
+                    SESSIONS,
+                    { key: 'anomaly_threshold_jarang_hadir', value: '100' }
+                );
+
+                expect(anomalies).toEqual([]);
+            });
+        });
+
+        /**
+         * Re-analysis replaces only OPEN reports. A REVIEWED/RESOLVED report (with the dosen's catatan)
+         * is never changed or deleted, and blocks a new OPEN report with the same (id_user, id_kelas, type).
+         */
+        describe('re-analysis keeps REVIEWED/RESOLVED reports', () => {
+            const closed = (id, day) => ({
+                id_sesi_absensi: id, status: false,
+                mulai: new Date(`2026-09-${day}T01:00:00Z`), selesai: new Date(`2026-09-${day}T03:00:00Z`)
+            });
+            const SESSIONS = [closed(1, '02'), closed(2, '09')];
+            const enrolled = new Date('2026-09-01T00:00:00Z');
+            const PESERTA = [10, 11, 12].map((id) => ({
+                id_mahasiswa: id, createdAt: enrolled, mahasiswa: { id_user: id, nama: `Mahasiswa ${id}` }
+            }));
+            // 10 and 11 never attend (TIDAK_HADIR_BERULANG); 12 attends both sessions
+            const ABSENSI = [
+                { id_user: 12, id_sesi_absensi: 1, status: 'HADIR' },
+                { id_user: 12, id_sesi_absensi: 2, status: 'HADIR' }
+            ];
+
+            const reanalyze = async (existingReports) => {
+                prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
+                prisma.systemSetting.findUnique.mockResolvedValue(null);
+                mockTransactions([PESERTA, ABSENSI, SESSIONS]);
+                const fake = fakeLaporanTable(existingReports);
+
+                const res = createMockRes();
+                await anomaliController.analyzeKelasAttendance(
+                    createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res
+                );
+                expect(res.status).toHaveBeenCalledWith(200);
+                return { ...fake, res };
+            };
+            const active = (table, id_user, type_anomali) =>
+                table.filter((r) => r.id_user === id_user && r.type_anomali === type_anomali && r.deletedAt === null);
+
+            test('a RESOLVED report detected again keeps its status and catatan, and no OPEN duplicate is added', async () => {
+                const resolved = {
+                    id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED',
+                    catatan_dosen: 'Sudah konfirmasi: sakit, ada surat dokter', deskripsi: 'Kehadiran rendah: 0%', confidence: 1
+                };
+                const { table } = await reanalyze([resolved]);
+
+                expect(active(table, 10, 'TIDAK_HADIR_BERULANG')).toEqual([{ ...resolved, deletedAt: null }]);
+            });
+
+            test('a REVIEWED report that is no longer detected is kept', async () => {
+                const reviewed = {
+                    id_anomali: 2, id_user: 12, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'REVIEWED',
+                    catatan_dosen: 'Dipantau', deskripsi: 'Kehadiran rendah: 0%', confidence: 1
+                };
+                const { table } = await reanalyze([reviewed]);
+
+                expect(active(table, 12, 'TIDAK_HADIR_BERULANG')).toEqual([{ ...reviewed, deletedAt: null }]);
+            });
+
+            test('OPEN reports are replaced: refreshed when detected again, removed when not, new ones created', async () => {
+                const { table } = await reanalyze([
+                    // still detected: refreshed in place (same id, catatan kept)
+                    { id_anomali: 3, id_user: 11, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN', catatan_dosen: 'Hubungi wali', deskripsi: 'lama', confidence: 0.2 },
+                    // no longer detected: soft-deleted
+                    { id_anomali: 4, id_user: 12, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN' }
+                ]);
+
+                expect(active(table, 11, 'TIDAK_HADIR_BERULANG')).toEqual([expect.objectContaining({
+                    id_anomali: 3, status: 'OPEN', catatan_dosen: 'Hubungi wali', deskripsi: 'Kehadiran rendah: 0% (Threshold: 50%)', confidence: 1
+                })]);
+                expect(active(table, 12, 'TIDAK_HADIR_BERULANG')).toEqual([]);
+                expect(table.find((r) => r.id_anomali === 4).deletedAt).toEqual(expect.any(Date));
+                expect(active(table, 10, 'TIDAK_HADIR_BERULANG')).toEqual([expect.objectContaining({ status: 'OPEN', id_kelas: 1 })]);
+            });
+
+            test('every write runs inside one transaction and only touches OPEN reports', async () => {
+                const { writes } = await reanalyze([
+                    { id_anomali: 1, id_user: 10, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'RESOLVED', catatan_dosen: 'x' },
+                    { id_anomali: 4, id_user: 12, id_kelas: 1, type_anomali: 'TIDAK_HADIR_BERULANG', status: 'OPEN' }
+                ]);
+
+                expect(writes.length).toBeGreaterThan(0);
+                expect(writes.every((w) => w.inTransaction)).toBe(true);
+                // updates are guarded by status OPEN, so a report a dosen just reviewed is never overwritten
+                writes.filter((w) => w.op === 'updateMany').forEach((w) => expect(w.where.status).toBe('OPEN'));
+                expect(prisma.laporanAnomali.update).not.toHaveBeenCalled();
+            });
+        });
+
+        /**
+         * POLA_WAKTU_TIDAK_WAJAR comes from the Python anomaly service (IsolationForest on check-in times).
+         * Only real check-ins (HADIR/TELAT with a check-in, not entered by a dosen) of countable sessions are
+         * sent; every other rule result of the service is ignored. When the service is unavailable the rule
+         * is skipped and the response carries a warning.
+         */
+        describe('POLA_WAKTU_TIDAK_WAJAR via the Python anomaly service', () => {
+            const closed = (id, day) => ({
+                id_sesi_absensi: id, status: false,
+                mulai: new Date(`2026-09-${day}T01:00:00Z`), selesai: new Date(`2026-09-${day}T03:00:00Z`)
+            });
+            const RUNNING = { id_sesi_absensi: 9, status: true, mulai: new Date(Date.now() - 60 * 60 * 1000), selesai: new Date(Date.now() + 60 * 60 * 1000) };
+            const SESSIONS = [closed(1, '02'), closed(2, '09'), closed(3, '16'), RUNNING];
+            const enrolled = new Date('2026-09-01T00:00:00Z');
+            const PESERTA = [10, 11, 12].map((id) => ({
+                id_mahasiswa: id, createdAt: enrolled, mahasiswa: { id_user: id, nama: `Mahasiswa ${id}` }
+            }));
+            const checkIn = (id_user, id_sesi_absensi, status, createdAt) => ({ id_user, id_sesi_absensi, status, createdAt: new Date(createdAt), check_in: true });
+            // a status the dosen entered without a check-in (no location): createdAt is not a check-in time
+            const byDosen = (id_user, id_sesi_absensi, status) => ({ id_user, id_sesi_absensi, status, createdAt: new Date('2026-09-20T09:00:00Z'), check_in: false });
+            const ABSENSI = [
+                // 10: three real check-ins (the TELAT ones near the end of the session) -> 100%
+                checkIn(10, 1, 'HADIR', '2026-09-02T01:05:00Z'),
+                checkIn(10, 2, 'TELAT', '2026-09-09T02:50:00Z'),
+                checkIn(10, 3, 'TELAT', '2026-09-16T02:55:00Z'),
+                // 11: a check-in, a check-in the dosen turned into ALPHA, an IZIN -> 1 of 2 = 50%
+                checkIn(11, 1, 'HADIR', '2026-09-02T01:10:00Z'),
+                checkIn(11, 2, 'ALPHA', '2026-09-09T01:10:00Z'),
+                byDosen(11, 3, 'IZIN'),
+                // 12: HADIR entered by the dosen, then two check-ins -> 100%
+                byDosen(12, 1, 'HADIR'),
+                checkIn(12, 2, 'HADIR', '2026-09-09T01:02:00Z'),
+                checkIn(12, 3, 'HADIR', '2026-09-16T01:03:00Z'),
+                // check-in into the running session: not countable yet
+                checkIn(10, 9, 'HADIR', new Date().toISOString())
+            ];
+
+            const ORIGINAL_KEY = process.env.ANOMALY_API_KEY;
+            beforeEach(() => { process.env.ANOMALY_API_KEY = 'anomaly-test-key'; });
+            afterEach(() => {
+                if (ORIGINAL_KEY === undefined) delete process.env.ANOMALY_API_KEY;
+                else process.env.ANOMALY_API_KEY = ORIGINAL_KEY;
+            });
+
+            const analyze = async (absensiList = ABSENSI) => {
+                prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
+                prisma.systemSetting.findUnique.mockResolvedValue(null);
+                mockTransactions([PESERTA, absensiList, SESSIONS]);
+                const fake = fakeLaporanTable();
+                const res = createMockRes();
+                await anomaliController.analyzeKelasAttendance(
+                    createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }), res
+                );
+                expect(res.status).toHaveBeenCalledWith(200);
+                return { body: res.json.mock.calls[0][0], ...fake };
+            };
+
+            test('sends the real check-ins of countable sessions with the API key and keeps only POLA_WAKTU_TIDAK_WAJAR', async () => {
+                pythonClient.post.mockResolvedValueOnce({
+                    data: {
+                        success: true,
+                        count: 4,
+                        anomalies: [
+                            { id_user: 10, type_anomali: 'POLA_WAKTU_TIDAK_WAJAR', confidence: 0.67, description: 'Pola check-in tidak wajar (2/3)' },
+                            { id_user: 10, type_anomali: 'KEHADIRAN_GANDA', confidence: 1, description: 'ganda' },
+                            { id_user: 11, type_anomali: 'TIDAK_HADIR_BERULANG', confidence: 1, description: 'status-blind' },
+                            { id_user: 999, type_anomali: 'POLA_WAKTU_TIDAK_WAJAR', confidence: 1, description: 'bukan peserta' }
+                        ]
+                    }
+                });
+
+                const { body, table } = await analyze();
+
+                expect(pythonClient.post).toHaveBeenCalledTimes(1);
+                const [url, payload, config] = pythonClient.post.mock.calls[0];
+                expect(url).toMatch(/\/detect-anomalies$/);
+                expect(config.headers['X-API-Key']).toBe('anomaly-test-key');
+                expect(config.timeout).toEqual(expect.any(Number));
+                expect(payload.students).toEqual([{ id_user: 10 }, { id_user: 11 }, { id_user: 12 }]);
+                expect(payload.attendance).toEqual([
+                    { id_user: 10, id_sesi: 1, timestamp: '2026-09-02T01:05:00.000Z' },
+                    { id_user: 10, id_sesi: 2, timestamp: '2026-09-09T02:50:00.000Z' },
+                    { id_user: 10, id_sesi: 3, timestamp: '2026-09-16T02:55:00.000Z' },
+                    { id_user: 11, id_sesi: 1, timestamp: '2026-09-02T01:10:00.000Z' },
+                    { id_user: 12, id_sesi: 2, timestamp: '2026-09-09T01:02:00.000Z' },
+                    { id_user: 12, id_sesi: 3, timestamp: '2026-09-16T01:03:00.000Z' }
+                ]);
+                expect(payload.sessions).toEqual([
+                    { id_sesi: 1, mulai: '2026-09-02T01:00:00.000Z', selesai: '2026-09-02T03:00:00.000Z' },
+                    { id_sesi: 2, mulai: '2026-09-09T01:00:00.000Z', selesai: '2026-09-09T03:00:00.000Z' },
+                    { id_sesi: 3, mulai: '2026-09-16T01:00:00.000Z', selesai: '2026-09-16T03:00:00.000Z' }
+                ]);
+                expect(payload.total_sessions).toBe(3);
+                // the service's own (status-blind) absence rule must never fire
+                expect(payload.threshold).toBe(0);
+
+                expect(body).not.toHaveProperty('warnings');
+                const pola = body.data.filter((a) => a.type_anomali === 'POLA_WAKTU_TIDAK_WAJAR');
+                expect(pola).toEqual([{
+                    id_user: 10, nama: 'Mahasiswa 10', type_anomali: 'POLA_WAKTU_TIDAK_WAJAR',
+                    confidence: 0.67, description: 'Pola check-in tidak wajar (2/3)'
+                }]);
+                expect(body.data.map((a) => a.type_anomali)).not.toContain('KEHADIRAN_GANDA');
+                // 11's status-aware rate is 1/2 = 50% -> flagged by the backend rule, not by the service result
+                expect(body.data.filter((a) => a.id_user === 11).map((a) => a.description)).toEqual(['Kehadiran rendah: 50% (Threshold: 50%)']);
+                expect(table.filter((r) => r.type_anomali === 'POLA_WAKTU_TIDAK_WAJAR').map((r) => r.id_user)).toEqual([10]);
+            });
+
+            test('a student already flagged TIDAK_HADIR_BERULANG gets no POLA_WAKTU_TIDAK_WAJAR report', async () => {
+                pythonClient.post.mockResolvedValueOnce({
+                    data: { success: true, count: 1, anomalies: [{ id_user: 11, type_anomali: 'POLA_WAKTU_TIDAK_WAJAR', confidence: 1, description: 'x' }] }
+                });
+
+                const { body } = await analyze();
+
+                expect(body.data.filter((a) => a.id_user === 11).map((a) => a.type_anomali)).toEqual(['TIDAK_HADIR_BERULANG']);
+            });
+
+            test('service failure: 200 with the other rules and a warning', async () => {
+                const errorSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+                const failure = Object.assign(new Error('connect ECONNREFUSED anomaly:5003'), { code: 'ECONNREFUSED' });
+                pythonClient.post.mockRejectedValueOnce(failure);
+
+                try {
+                    const { body, table } = await analyze();
+
+                    expect(body.status).toBe('success');
+                    expect(body.warnings).toEqual([POLA_WAKTU_WARNING]);
+                    expect(body.data.map((a) => a.type_anomali)).toEqual(['TIDAK_HADIR_BERULANG']);
+                    expect(table.map((r) => r.type_anomali)).toEqual(['TIDAK_HADIR_BERULANG']);
+                    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED/);
+                } finally {
+                    errorSpy.mockRestore();
+                }
+            });
+
+            test('an invalid service response counts as a failure', async () => {
+                const errorSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+                pythonClient.post.mockResolvedValueOnce({ data: { success: false, error: 'Internal server error' } });
+
+                try {
+                    const { body } = await analyze();
+
+                    expect(body.warnings).toEqual([POLA_WAKTU_WARNING]);
+                } finally {
+                    errorSpy.mockRestore();
+                }
+            });
+
+            test('open circuit breaker: the service is not called and the response carries the warning', async () => {
+                const errorSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+                anomaliController.anomalyApiBreaker.forceState('OPEN');
+
+                try {
+                    const { body } = await analyze();
+
+                    expect(pythonClient.post).not.toHaveBeenCalled();
+                    expect(body.warnings).toEqual([POLA_WAKTU_WARNING]);
+                } finally {
+                    errorSpy.mockRestore();
+                }
+            });
+
+            test('without a student with two check-ins the service is not called', async () => {
+                const { body } = await analyze([checkIn(10, 1, 'HADIR', '2026-09-02T01:05:00Z')]);
+
+                expect(pythonClient.post).not.toHaveBeenCalled();
+                expect(body).not.toHaveProperty('warnings');
+            });
+        });
+    });
+
+    describe('getLaporanAnomali', () => {
+        test('is paginated (limit capped at 100) and selects the NIM', async () => {
+            prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
+            prisma.$transaction.mockResolvedValueOnce([[{ id_anomali: 1 }], 250]);
+            const res = createMockRes();
+
+            await anomaliController.getLaporanAnomali(
+                createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: '1' }, { page: '2', limit: '1000' }), res
+            );
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            const [findArgs] = prisma.laporanAnomali.findMany.mock.calls[0];
+            expect(findArgs).toMatchObject({ where: { id_kelas: 1, deletedAt: null }, skip: 100, take: 100 });
+            expect(findArgs.include.user.select).toMatchObject({ nim_nip: true });
+            expect(prisma.laporanAnomali.count).toHaveBeenCalledWith({ where: { id_kelas: 1, deletedAt: null } });
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'success',
+                data: [{ id_anomali: 1 }],
+                pagination: expect.objectContaining({ total: 250, page: 2, limit: 100, totalPages: 3 })
             });
         });
     });
@@ -266,8 +631,13 @@ describe('Anomaly Controller Tests', () => {
 
             prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
             prisma.systemSetting.findUnique.mockResolvedValue(null);
-            prisma.$transaction.mockResolvedValueOnce([[{ mahasiswa: { id_user: 10, nama: 'Student A' } }], [], []]);
-            prisma.laporanAnomali.updateMany.mockRejectedValueOnce(leaky);
+            const reads = [[{ mahasiswa: { id_user: 10, nama: 'Student A' } }], [], []];
+            // the reads succeed, the save transaction fails
+            prisma.$transaction.mockImplementation(async (arg) => {
+                if (typeof arg === 'function') throw leaky;
+                return reads;
+            });
+            prisma.laporanAnomali.updateMany.mockRejectedValue(leaky);
 
             await anomaliController.analyzeKelasAttendance(req, res);
 
@@ -340,6 +710,29 @@ describe('Anomaly Controller Tests', () => {
                 expect(addJobSpy).toHaveBeenCalledWith(expect.any(String), expect.any(Function), 1);
             } finally {
                 addJobSpy.mockRestore();
+            }
+        });
+
+        test('the async job result carries the anomalies and the warnings', async () => {
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const addJobSpy = jest.spyOn(globalAnomalyQueue, 'addJob').mockImplementation(() => ({}));
+            try {
+                const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }, { async: 'true' });
+                prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1, nama_kelas: 'A' });
+                prisma.systemSetting.findUnique.mockResolvedValue(null);
+                const sesi = (id) => ({ id_sesi_absensi: id, status: false, mulai: new Date(`2026-09-0${id}T01:00:00Z`), selesai: new Date(`2026-09-0${id}T03:00:00Z`) });
+                const checkIn = (id) => ({ id_user: 10, id_sesi_absensi: id, status: 'HADIR', createdAt: new Date(`2026-09-0${id}T01:05:00Z`), check_in: true });
+                mockTransactions([[{ mahasiswa: { id_user: 10, nama: 'Student A' } }], [checkIn(1), checkIn(2)], [sesi(1), sesi(2)]]);
+                fakeLaporanTable();
+                anomaliController.anomalyApiBreaker.forceState('OPEN');
+
+                await anomaliController.analyzeKelasAttendance(req, createMockRes());
+                const job = addJobSpy.mock.calls[0][1];
+
+                await expect(job()).resolves.toEqual({ anomalies: [], warnings: [POLA_WAKTU_WARNING] });
+            } finally {
+                addJobSpy.mockRestore();
+                warnSpy.mockRestore();
             }
         });
 

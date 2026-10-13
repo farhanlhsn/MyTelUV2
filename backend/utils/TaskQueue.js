@@ -5,12 +5,15 @@
  * sequentially or with limited concurrency to avoid resource exhaustion.
  * Runs in-memory for zero external dependencies (no Redis requirement for testing).
  */
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // finished jobs are dropped by an hourly cleanup()
+
 class TaskQueue {
   constructor(concurrency = 1) {
     this.concurrency = concurrency;
     this.queue = [];
     this.activeWorkers = 0;
     this.jobs = new Map(); // Store job status: id -> { ownerId, status, result, error, progress }
+    this.cleanupTimer = null;
   }
 
   /**
@@ -95,6 +98,27 @@ class TaskQueue {
    */
   getJobStatus(jobId) {
     return this.jobs.get(jobId) || null;
+  }
+
+  /**
+   * Run cleanup() every `intervalMs` (default hourly). The timer is unref()ed, so it never keeps the
+   * process alive. Calling it again while the timer runs returns the same timer.
+   * @param {number} [intervalMs=3600000]
+   * @returns {NodeJS.Timeout}
+   */
+  startCleanupTimer(intervalMs = CLEANUP_INTERVAL_MS) {
+    if (this.cleanupTimer) return this.cleanupTimer;
+    this.cleanupTimer = setInterval(() => this.cleanup(), intervalMs);
+    if (typeof this.cleanupTimer.unref === 'function') this.cleanupTimer.unref();
+    return this.cleanupTimer;
+  }
+
+  /**
+   * Stop the timer started by startCleanupTimer()
+   */
+  stopCleanupTimer() {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    this.cleanupTimer = null;
   }
 
   /**
