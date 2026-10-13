@@ -179,6 +179,7 @@ Catatan penting:
   ```
 - Image backend sengaja tetap membawa Prisma CLI (`npm ci --omit=dev` mempertahankannya karena dependensi opsional `@prisma/client`), dan build gagal bila CLI itu hilang.
 - Caddy (`deploy/Caddyfile`) hanya meneruskan `/api/*`, `/socket.io/*`, dan `/health` ke backend. Layanan AI (face, plate, anomaly) tidak dibuka ke luar; backend memanggilnya lewat jaringan Docker dengan header `X-API-Key`.
+- **IP klien dan rate limiter.** Semua limiter per IP (termasuk `/health`) bergantung pada `X-Forwarded-For`. Caddy di Docker memakai `trusted_proxies static private_ranges` (blok opsi global di `deploy/Caddyfile`) sehingga rantai `X-Forwarded-For` dari proxy host dipertahankan, dan backend memakai `trust proxy` default `loopback, linklocal, uniquelocal`. Reverse proxy di level host (yang meneruskan ke `127.0.0.1:8880`) wajib mengirim `X-Forwarded-For` (Caddy melakukannya secara default; untuk nginx tambahkan `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). Tanpa itu semua pengguna terlihat memiliki satu IP.
 - Log audit backend ditulis ke `AUDIT_LOG_DIR` (default `/app/logs`, volume `myteluv2-backend-logs`). Log container dirotasi (`json-file`, 10 MB x 3 file), setiap service punya batas memori (`mem_limit`), dan semua container memakai `TZ=Asia/Jakarta`.
 
 ## Key API Areas

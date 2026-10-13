@@ -4,6 +4,16 @@
 # are internal: the backend calls them over the Docker network with X-API-Key, and they are
 # deliberately NOT routed here.
 
+# Global options (must be the first block). This Caddy sits behind the host-level reverse proxy,
+# which reaches it from a loopback / Docker-gateway address. Trusting private ranges makes Caddy keep
+# the X-Forwarded-For chain that proxy sends instead of replacing it with the proxy's own address, so
+# the backend sees the real client IP (every per-IP rate limiter depends on it).
+{
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
 :80 {
     # Enable compression
     encode gzip
