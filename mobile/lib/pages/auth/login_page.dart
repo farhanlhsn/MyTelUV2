@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
-import '../../utils/error_helper.dart';
+import '../../utils/app_theme.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -43,7 +43,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -89,7 +89,7 @@ class _LoginPageState extends State<LoginPage> {
                           const Text(
                             'Selamat Datang Kembali',
                             style: TextStyle(
-                              color: Color(0xFFE63946),
+                              color: AppColors.primary,
                               fontWeight: FontWeight.bold,
                               fontSize: 24,
                             ),
@@ -188,7 +188,7 @@ class _LoginPageState extends State<LoginPage> {
                                 Get.toNamed(AppRoutes.forgotPassword);
                               },
                               style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFFE63946),
+                                foregroundColor: AppColors.primary,
                                 padding: EdgeInsets.zero,
                                 minimumSize: const Size(50, 30),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -212,7 +212,7 @@ class _LoginPageState extends State<LoginPage> {
                                 key: const Key('login_submit_button'),
                                 onPressed: isLoading ? null : _handleLogin,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE63946),
+                                  backgroundColor: AppColors.primary,
                                   disabledBackgroundColor: const Color(
                                     0xFFFAA0A0,
                                   ),
@@ -247,8 +247,9 @@ class _LoginPageState extends State<LoginPage> {
 
                           // Register Link
                           Center(
-                            child: RichText(
-                              text: TextSpan(
+                            // Text.rich, unlike RichText, follows the user's text scale
+                            child: Text.rich(
+                              TextSpan(
                                 style: const TextStyle(
                                   color: Colors.black,
                                   fontWeight: FontWeight.w600,
@@ -258,7 +259,7 @@ class _LoginPageState extends State<LoginPage> {
                                   TextSpan(
                                     text: 'Daftar',
                                     style: const TextStyle(
-                                      color: Color(0xFFE63946),
+                                      color: AppColors.primary,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     recognizer: TapGestureRecognizer()

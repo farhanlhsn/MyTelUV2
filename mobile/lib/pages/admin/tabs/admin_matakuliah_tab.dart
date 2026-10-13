@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile/models/matakuliah.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminMatakuliahTab extends StatefulWidget {
   const AdminMatakuliahTab({super.key});
@@ -150,7 +151,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -265,7 +266,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -390,7 +391,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE63946)),
+                borderSide: const BorderSide(color: AppColors.primary),
               ),
               filled: true,
               fillColor: Colors.grey.shade50,
@@ -403,7 +404,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
         Expanded(
           child: _isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error != null
                   ? Center(
@@ -448,7 +449,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                                 style: TextStyle(color: Colors.white),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE63946),
+                                backgroundColor: AppColors.primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -510,7 +511,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -544,11 +545,11 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: const Color(0xFFE63946).withOpacity(0.1),
+              color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Center(
-              child: Icon(Icons.book, color: Color(0xFFE63946)),
+              child: Icon(Icons.book, color: AppColors.primary),
             ),
           ),
           const SizedBox(width: 16),
@@ -560,7 +561,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                   mk.kodeMatakuliah,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                     fontSize: 14,
                   ),
                 ),

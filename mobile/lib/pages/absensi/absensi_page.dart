@@ -8,6 +8,7 @@ import '../../utils/error_helper.dart';
 import '../biometrik/biometrik_verification_page.dart';
 import '../common/error_retry_view.dart';
 import '../../controllers/anomali_controller.dart';
+import '../../utils/app_theme.dart';
 
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
@@ -31,7 +32,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
   String? _filterType; // null, 'AMAN', 'KRITIS'
   final TextEditingController _searchController = TextEditingController();
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
 
   @override
   void initState() {
@@ -133,12 +134,13 @@ class _AbsensiPageState extends State<AbsensiPage> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -642,7 +644,7 @@ class AbsensiDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return Scaffold(
       backgroundColor: primaryRed,
@@ -652,12 +654,13 @@ class AbsensiDetailPage extends StatelessWidget {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 8),
                   const Expanded(
@@ -894,7 +897,7 @@ class AbsensiDetailPage extends StatelessWidget {
     required String statusText,
     required int? idSesiAbsensi,
   }) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
     final statusBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(

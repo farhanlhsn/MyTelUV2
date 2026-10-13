@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/kelas.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminPesertaTab extends StatefulWidget {
   const AdminPesertaTab({super.key});
@@ -121,7 +121,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('Pilih Semua', style: TextStyle(fontWeight: FontWeight.bold)),
                   value: selectedIds.length == availableMahasiswa.length,
-                  activeColor: const Color(0xFFE63946),
+                  activeColor: AppColors.primary,
                   onChanged: (bool? value) {
                     setDialogState(() {
                       if (value == true) {
@@ -146,7 +146,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                         title: Text(m['nama'] as String),
                         subtitle: Text(m['username'] as String),
                         value: isSelected,
-                        activeColor: const Color(0xFFE63946),
+                        activeColor: AppColors.primary,
                         onChanged: (bool? value) {
                           setDialogState(() {
                             if (value == true) {
@@ -176,7 +176,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                       await _addPeserta(selectedIds.toList());
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: Text('TAMBAH (${selectedIds.length})', 
@@ -263,23 +263,23 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFE63946).withOpacity(0.1),
+                color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.people, color: Color(0xFFE63946)),
+                  const Icon(Icons.people, color: AppColors.primary),
                   const SizedBox(width: 12),
                   Text(
                     'Total Peserta: ${_pesertaList.length}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFE63946),
+                      color: AppColors.primary,
                     ),
                   ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.person_add, color: Color(0xFFE63946)),
+                    icon: const Icon(Icons.person_add, color: AppColors.primary),
                     onPressed: _showAddPesertaDialog,
                     tooltip: 'Tambah Peserta',
                   ),
@@ -308,7 +308,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                 )
               : _isLoadingPeserta
                   ? const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                      child: CircularProgressIndicator(color: AppColors.primary),
                     )
                   : _pesertaList.isEmpty
                       ? Center(
@@ -328,7 +328,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                                 label: const Text('Tambah Peserta',
                                     style: TextStyle(color: Colors.white)),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE63946),
+                                  backgroundColor: AppColors.primary,
                                 ),
                               ),
                             ],
@@ -369,7 +369,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFFE63946).withOpacity(0.1),
+              color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
@@ -377,7 +377,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
                 '$number',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                 ),
               ),
             ),

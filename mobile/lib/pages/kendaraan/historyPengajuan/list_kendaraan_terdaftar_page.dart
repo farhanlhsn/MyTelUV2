@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
-import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/utils/logger.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class ListKendaraanTerdaftarPage extends StatefulWidget {
   const ListKendaraanTerdaftarPage({super.key});
@@ -114,7 +114,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -157,7 +157,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       backgroundColor: primaryColor,
@@ -170,6 +170,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
@@ -212,10 +213,10 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE63946).withOpacity(0.08),
+                            color: AppColors.primary.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFFE63946).withOpacity(0.2),
+                              color: AppColors.primary.withOpacity(0.2),
                             ),
                           ),
                           child: Row(
@@ -223,7 +224,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                             children: [
                               const Row(
                                 children: [
-                                  Icon(Icons.directions_car, color: Color(0xFFE63946)),
+                                  Icon(Icons.directions_car, color: AppColors.primary),
                                   SizedBox(width: 12),
                                   Text(
                                     'Kuota Kendaraan Aktif',
@@ -240,7 +241,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
-                                  color: Color(0xFFE63946),
+                                  color: AppColors.primary,
                                 ),
                               ),
                             ],
@@ -262,7 +263,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          color: Color(0xFFE63946),
+          color: AppColors.primary,
         ),
       );
     }

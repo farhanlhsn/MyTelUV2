@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../controllers/notification_controller.dart';
 import '../../utils/date_helper.dart';
 import '../../utils/notification_router.dart';
+import '../../utils/app_theme.dart';
 
 class NotificationListPage extends StatefulWidget {
   const NotificationListPage({super.key});
@@ -33,7 +34,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -41,6 +42,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
         backgroundColor: primaryColor,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Kembali',
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Get.back(),
         ),
@@ -273,7 +275,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
 
     return RefreshIndicator(
       onRefresh: () => _controller.loadNotifications(),
-      color: const Color(0xFFE63946),
+      color: AppColors.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(16.0),
         itemCount: list.length,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'biometrik_verification_page.dart';
+import '../../utils/app_theme.dart';
 
 class BiometrikStatusWidget extends StatelessWidget {
   /// Whether biometric is registered for current user; null while the status is still loading
@@ -23,7 +24,7 @@ class BiometrikStatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -137,7 +138,7 @@ class AbsensiBiometrikCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return GestureDetector(
       onTap: onCardTap,

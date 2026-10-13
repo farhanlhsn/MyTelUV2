@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:camera/camera.dart';
@@ -6,6 +7,7 @@ import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/biometrik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminBiometrikPage extends StatefulWidget {
   const AdminBiometrikPage({super.key});
@@ -163,7 +165,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -173,6 +175,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -215,7 +218,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE63946)),
+                            borderSide: const BorderSide(color: AppColors.primary),
                           ),
                           filled: true,
                           fillColor: Colors.grey.shade50,
@@ -228,7 +231,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     Expanded(
                       child: _isLoading
                           ? const Center(
-                              child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                              child: CircularProgressIndicator(color: AppColors.primary),
                             )
                           : _error != null
                               ? Center(
@@ -309,17 +312,17 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     ? Colors.green.withOpacity(0.1)
                     : role == 'DOSEN'
                         ? Colors.blue.withOpacity(0.1)
-                        : const Color(0xFFE63946).withOpacity(0.1),
+                        : AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: hasBiometric ? Border.all(color: Colors.green, width: 2) : null,
               ),
               child: biometricPhoto != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        biometricPhoto,
+                      child: CachedNetworkImage(
+                        imageUrl: biometricPhoto,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
+                        errorWidget: (_, __, ___) => const Icon(
                           Icons.face,
                           color: Colors.green,
                         ),
@@ -327,7 +330,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     )
                   : Icon(
                       role == 'DOSEN' ? Icons.school : Icons.person,
-                      color: role == 'DOSEN' ? Colors.blue : const Color(0xFFE63946),
+                      color: role == 'DOSEN' ? Colors.blue : AppColors.primary,
                     ),
             ),
           ),
@@ -361,7 +364,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                           '✓ Bio',
                           style: TextStyle(
                             color: Colors.green,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -384,7 +387,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           IconButton(
             icon: Icon(
               hasBiometric ? Icons.refresh : Icons.face_retouching_natural,
-              color: const Color(0xFFE63946),
+              color: AppColors.primary,
             ),
             tooltip: hasBiometric ? 'Update Biometrik' : 'Tambah Biometrik',
             onPressed: () => _addBiometrik(user),
@@ -410,12 +413,17 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(
-                photoUrl,
+              child: CachedNetworkImage(
+                imageUrl: photoUrl,
                 width: 300,
                 height: 300,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox(
+                placeholder: (_, __) => const SizedBox(
+                  width: 300,
+                  height: 300,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (_, __, ___) => const SizedBox(
                   width: 300,
                   height: 300,
                   child: Center(child: Icon(Icons.error, size: 64)),

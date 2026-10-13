@@ -9,6 +9,7 @@ import '../../utils/date_helper.dart';
 import 'create_post_page.dart';
 import 'comments_page.dart';
 import '../common/image_viewer_page.dart';
+import '../../utils/app_theme.dart';
 
 class PostPage extends StatefulWidget {
   final VoidCallback? onCloseTapped;
@@ -35,7 +36,7 @@ class _PostPageState extends State<PostPage> {
   int? _currentUserId;
   String? _currentUserName;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {

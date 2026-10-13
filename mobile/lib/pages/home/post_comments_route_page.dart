@@ -5,6 +5,7 @@ import '../../models/post_model.dart';
 import '../../services/post_service.dart';
 import '../common/error_retry_view.dart';
 import 'comments_page.dart';
+import '../../utils/app_theme.dart';
 
 /// Route target of a social notification: only the post id is known (`Get.arguments['id_post']`),
 /// so the post is fetched first and then shown in the comments page.
@@ -93,12 +94,12 @@ class _PostCommentsRoutePageState extends State<PostCommentsRoutePage> {
           'Komentar',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFE63946)),
+              child: CircularProgressIndicator(color: AppColors.primary),
             )
           : ErrorRetryView(
               title: _notFound ? 'Postingan tidak tersedia' : 'Gagal membuka postingan',

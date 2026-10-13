@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../utils/error_helper.dart';
 import 'auth_middleware.dart';
 import 'routes.dart';
+import '../utils/app_theme.dart';
 
 class RoleMiddleware extends GetMiddleware {
   final List<String> allowedRoles;
@@ -23,7 +24,7 @@ class RoleMiddleware extends GetMiddleware {
         ErrorHelper.showToast(
           'Akses Ditolak',
           'Anda tidak memiliki akses ke halaman ini.',
-          backgroundColor: const Color(0xFFE63946),
+          backgroundColor: AppColors.primary,
           icon: const Icon(Icons.lock, color: Colors.white),
         );
       });

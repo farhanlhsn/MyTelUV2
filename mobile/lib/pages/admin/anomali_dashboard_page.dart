@@ -12,6 +12,7 @@ import '../common/error_retry_view.dart';
 import '../../app/routes.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../app/auth_middleware.dart';
+import '../../utils/app_theme.dart';
 
 class AnomaliDashboardPage extends StatefulWidget {
   const AnomaliDashboardPage({super.key});
@@ -25,7 +26,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   final AkademikService _akademikService = AkademikService();
   final DosenService _dosenService = DosenService();
 
-  static const Color primaryRed = Color(0xFFE63946);
+  static const Color primaryRed = AppColors.primary;
   
   List<dynamic> _kelasList = []; // Can be KelasModel or Map<String, dynamic>
   dynamic _selectedKelas;
@@ -215,9 +216,10 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
           // Title Row
           Row(
             children: [
-              GestureDetector(
-                onTap: () => Get.back(),
-                child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+              IconButton(
+                tooltip: 'Kembali',
+                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                onPressed: () => Get.back(),
               ),
               const SizedBox(width: 8),
               const Text(

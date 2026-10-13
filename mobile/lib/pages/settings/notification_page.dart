@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../services/auth_service.dart';
 import '../../utils/error_helper.dart';
 import '../common/error_retry_view.dart';
+import '../../utils/app_theme.dart';
 
 /// Push notification preference. The switch shows what the server has for the user
 /// (`push_notifications_enabled` of `GET /auth/me`) and saves a change with
@@ -100,7 +101,7 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   Widget build(BuildContext context) {
     // Warna tema
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -112,6 +113,7 @@ class _NotificationPageState extends State<NotificationPage> {
         backgroundColor: Colors.white,
         elevation: 0.5,
         leading: IconButton(
+          tooltip: 'Kembali',
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
           onPressed: () => Get.back(),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/app_theme.dart';
 
 /// Error state of a page that loads its data: what went wrong plus a "Coba Lagi" button. Without
 /// [onRetry] there is no button, for an answer that asking again cannot change (a deleted post).
@@ -49,7 +50,7 @@ class ErrorRetryView extends StatelessWidget {
                   style: TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE63946),
+                  backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

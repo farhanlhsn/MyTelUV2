@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/error_helper.dart';
 import 'package:mobile/utils/validators.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminUserManagementPage extends StatefulWidget {
   const AdminUserManagementPage({super.key});
@@ -316,7 +317,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -462,7 +463,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -510,7 +511,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -520,6 +521,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -628,18 +630,18 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE63946).withOpacity(0.1),
+                          color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.people, color: Color(0xFFE63946)),
+                            const Icon(Icons.people, color: AppColors.primary),
                             const SizedBox(width: 12),
                             Text(
                               'Total User: $_totalUsers',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFE63946),
+                                color: AppColors.primary,
                               ),
                             ),
                           ],
@@ -653,7 +655,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       child: _isLoading
                           ? const Center(
                               child: CircularProgressIndicator(
-                                color: Color(0xFFE63946),
+                                color: AppColors.primary,
                               ),
                             )
                           : _error != null
@@ -704,9 +706,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                         style: TextStyle(color: Colors.white),
                                       ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFFE63946,
-                                        ),
+                                        backgroundColor: AppColors.primary,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
                                             8,
@@ -764,7 +764,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                       ),
                                       child: Center(
                                         child: CircularProgressIndicator(
-                                          color: Color(0xFFE63946),
+                                          color: AppColors.primary,
                                         ),
                                       ),
                                     );
@@ -867,7 +867,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                         role,
                         style: TextStyle(
                           color: roleColor,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -889,7 +889,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
 
           // Reset password button
           IconButton(
-            icon: const Icon(Icons.lock_reset, color: Color(0xFFE63946)),
+            icon: const Icon(Icons.lock_reset, color: AppColors.primary),
             tooltip: 'Reset Password',
             onPressed: () => _showResetPasswordDialog(user),
           ),

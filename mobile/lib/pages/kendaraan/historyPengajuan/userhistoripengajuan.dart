@@ -7,6 +7,7 @@ import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/utils/kendaraan_helper.dart';
 import 'package:mobile/pages/common/error_retry_view.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class UserHistoriPengajuan extends StatefulWidget {
   const UserHistoriPengajuan({super.key});
@@ -92,7 +93,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946), // Warna header
+      backgroundColor: AppColors.primary, // Warna header
       body: SafeArea(
         child: Column(
           children: [
@@ -137,7 +138,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                   ),
                 ),
                 width: double.infinity,
-                child: _buildContent(const Color(0xFFE63946)),
+                child: _buildContent(AppColors.primary),
               ),
             ),
           ],

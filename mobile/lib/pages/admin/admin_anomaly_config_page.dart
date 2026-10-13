@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/anomali_controller.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/app_theme.dart';
 
 class AdminAnomalyConfigPage extends StatefulWidget {
   const AdminAnomalyConfigPage({super.key});
@@ -13,7 +14,7 @@ class AdminAnomalyConfigPage extends StatefulWidget {
 class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   final AnomaliController _controller = Get.put(AnomaliController());
   
-  static const Color primaryRed = Color(0xFFE63946);
+  static const Color primaryRed = AppColors.primary;
   static const Color darkBlue = Color(0xFF1D3557);
   static const Color accentGreen = Color(0xFF2A9D8F);
 
@@ -111,6 +112,7 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
                     onPressed: () => Get.back(),
                   ),

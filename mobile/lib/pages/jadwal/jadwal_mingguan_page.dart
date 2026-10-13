@@ -6,6 +6,7 @@ import '../../app/routes.dart';
 import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/jadwal_cache.dart';
+import '../../utils/app_theme.dart';
 
 class JadwalMingguanPage extends StatefulWidget {
   const JadwalMingguanPage({super.key});
@@ -74,7 +75,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         title: const Text('Jadwal Mingguan'),
         bottom: TabBar(
@@ -179,7 +180,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
     } catch (_) {}
 
     Color cardColor = Colors.white;
-    Color statusColor = const Color(0xFFE63946);
+    Color statusColor = AppColors.primary;
     String statusText = '';
 
     if (override != null) {
@@ -265,7 +266,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                             color: statusColor,
                           ),
                         ),
-                        Text('-', style: TextStyle(color: statusColor, fontSize: 10)),
+                        Text('-', style: TextStyle(color: statusColor, fontSize: 11)),
                         Text(
                           _formatTime(kelas['jam_berakhir']),
                           style: TextStyle(
@@ -306,7 +307,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                             child: Text(
                               matakuliah['kode_matakuliah'] ?? '',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 11,
                                 color: Colors.grey[700],
                                 fontWeight: FontWeight.w500,
                               ),
@@ -394,7 +395,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.calendar_month, color: Color(0xFFE63946)),
+              leading: const Icon(Icons.calendar_month, color: AppColors.primary),
               title: const Text('Buat Jadwal Pengganti / Libur'),
               subtitle: const Text('Ubah jadwal untuk minggu ini'),
               onTap: () async {

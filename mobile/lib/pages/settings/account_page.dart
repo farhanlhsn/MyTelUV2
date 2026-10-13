@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/account_controller.dart';
+import '../../utils/app_theme.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -9,7 +10,7 @@ class AccountPage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Injeksi controller
     final controller = Get.put(AccountController());
-    final primaryColor = const Color(0xFFE63946); // Merah sesuai tema settings Anda
+    final primaryColor = AppColors.primary; // Merah sesuai tema settings Anda
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -18,6 +19,7 @@ class AccountPage extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Kembali',
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
           onPressed: () => Get.back(),
         ),
@@ -37,10 +39,11 @@ class AccountPage extends StatelessWidget {
                         border: Border.all(color: primaryColor.withOpacity(0.2), width: 3),
                         shape: BoxShape.circle,
                       ),
-                      child: const CircleAvatar(
+                      // No profile photo exists: a neutral avatar, not a stock picture fetched from a third party
+                      child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.grey,
-                        backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=12'), // Placeholder img
+                        backgroundColor: Colors.grey.shade300,
+                        child: const Icon(Icons.person, size: 56, color: Colors.white),
                       ),
                     ),
                     Positioned(
@@ -165,7 +168,7 @@ class AccountPage extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     );
@@ -193,7 +196,7 @@ class AccountPage extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     ));

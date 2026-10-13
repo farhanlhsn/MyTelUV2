@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:dio/dio.dart';
+import './app_theme.dart';
 
 /// Utility class untuk menangani error secara konsisten di seluruh aplikasi
 class ErrorHelper {
@@ -59,7 +60,7 @@ class ErrorHelper {
             child: ElevatedButton(
               onPressed: () => Get.back(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -141,7 +142,7 @@ class ErrorHelper {
                     onRetry();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),

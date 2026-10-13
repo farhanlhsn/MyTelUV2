@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminPengajuanDetailPage extends StatefulWidget {
   final PengajuanPlatModel pengajuan;
@@ -169,11 +169,11 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 hintText: hintText,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE63946)),
+                  borderSide: const BorderSide(color: AppColors.primary),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
                 ),
               ),
             ),
@@ -196,7 +196,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -214,7 +214,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -224,6 +224,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
@@ -262,7 +263,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       )
                     : SingleChildScrollView(
@@ -500,7 +501,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                       color: Colors.grey[200],
                       child: const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -528,7 +529,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _currentImageIndex == index
-                    ? const Color(0xFFE63946)
+                    ? AppColors.primary
                     : Colors.grey[300],
               ),
             ),
@@ -565,7 +566,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           color: Colors.grey[200],
           child: const Center(
             child: CircularProgressIndicator(
-              color: Color(0xFFE63946),
+              color: AppColors.primary,
             ),
           ),
         ),
@@ -622,12 +623,12 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
             onPressed: _isLoading ? null : _handleReject,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFFE63946),
+              foregroundColor: AppColors.primary,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: const BorderSide(
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                   width: 2,
                 ),
               ),

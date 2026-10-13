@@ -2,8 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../utils/app_theme.dart';
 
-const Color _primaryColor = Color(0xFFE63946);
+const Color _primaryColor = AppColors.primary;
 
 /// Bottom sheet that asks where a photo comes from. Returns null when dismissed.
 Future<ImageSource?> showFotoSourceSheet(BuildContext context) {

@@ -5,6 +5,7 @@ import '../../../services/parkir_socket_service.dart';
 import '../../../services/api_client.dart';
 import '../../../models/parkir_model.dart';
 import 'package:mobile/utils/logger.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AnalitikParkirPage extends StatefulWidget {
   const AnalitikParkirPage({super.key});
@@ -22,7 +23,7 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
   bool _isLive = false;       // true ketika WebSocket berhasil connect
   String? _errorMessage;
 
-  static const Color primaryColor   = Color(0xFFE63946);
+  static const Color primaryColor   = AppColors.primary;
   static const Color darkRedColor   = Color(0xFFC14A44);
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -147,12 +148,13 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Expanded(

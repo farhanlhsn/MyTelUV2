@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/models/kelas.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminAbsensiMonitoringPage extends StatefulWidget {
   const AdminAbsensiMonitoringPage({super.key});
@@ -70,7 +70,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -80,6 +80,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -137,7 +138,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                 ),
                 child: _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                        child: CircularProgressIndicator(color: AppColors.primary),
                       )
                     : _error != null
                         ? Center(
@@ -231,10 +232,10 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                 width: 45,
                 height: 45,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.class_, color: Color(0xFFE63946)),
+                child: const Icon(Icons.class_, color: AppColors.primary),
               ),
               const SizedBox(width: 12),
               Expanded(

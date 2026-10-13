@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
 import '../../services/post_service.dart';
 import '../common/location_picker_page.dart';
+import '../../utils/app_theme.dart';
 
 class CreatePostPage extends StatefulWidget {
   const CreatePostPage({super.key});
@@ -24,7 +25,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   String? _locationName;
   String? _userName;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
   static const int _maxMediaCount = 4;
   static const int _maxVideoBytes = 25 * 1024 * 1024;
 

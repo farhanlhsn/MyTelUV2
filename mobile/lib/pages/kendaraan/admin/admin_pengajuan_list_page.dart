@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:mobile/utils/logger.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/pages/kendaraan/admin/admin_pengajuan_detail_page.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 
 
@@ -148,7 +148,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -158,6 +158,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
@@ -213,7 +214,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       )
                     : _errorMessage != null
@@ -224,7 +225,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                                    child: _buildFilterBar(const Color(0xFFE63946)),
+                                    child: _buildFilterBar(AppColors.primary),
                                   ),
                                   Expanded(
                                     child: _filteredPengajuanList.isEmpty
@@ -263,7 +264,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
             ElevatedButton(
               onPressed: _loadPengajuan,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
               ),
               child: const Text(
                 'Coba Lagi',
@@ -318,7 +319,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
     final filteredList = _filteredPengajuanList;
     return RefreshIndicator(
       onRefresh: _loadPengajuan,
-      color: const Color(0xFFE63946),
+      color: AppColors.primary,
       child: ListView.separated(
         controller: _scrollController,
         padding: const EdgeInsets.symmetric(
@@ -334,7 +335,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
               padding: EdgeInsets.symmetric(vertical: 16.0),
               child: Center(
                 child: CircularProgressIndicator(
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                 ),
               ),
             );
@@ -396,12 +397,12 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: (isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFE63946)).withOpacity(0.1),
+                  color: (isDeleteRequest ? const Color(0xFFD32F2F) : AppColors.primary).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   isDeleteRequest ? Icons.delete_forever : Icons.directions_car,
-                  color: isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFE63946),
+                  color: isDeleteRequest ? const Color(0xFFD32F2F) : AppColors.primary,
                   size: 28,
                 ),
               ),

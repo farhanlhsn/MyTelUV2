@@ -9,6 +9,7 @@ import 'package:mobile/app/auth_middleware.dart';
 import 'package:mobile/controllers/notification_controller.dart';
 import 'package:mobile/utils/logger.dart';
 import 'package:mobile/utils/notification_inbox.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 /// Environment configuration for API URLs.
 ///
@@ -400,7 +401,7 @@ class ApiClient {
                   Get.offAllNamed('/login');
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE63946),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),

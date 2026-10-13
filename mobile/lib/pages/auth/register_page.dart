@@ -7,6 +7,7 @@ import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/validators.dart';
 import 'auth_feedback.dart';
+import '../../utils/app_theme.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,7 +17,7 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  static const Color _primaryRed = Color(0xFFE63946);
+  static const Color _primaryRed = AppColors.primary;
 
   final AuthController _authController = Get.find<AuthController>();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();

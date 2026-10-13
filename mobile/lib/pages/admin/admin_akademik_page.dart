@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile/pages/admin/tabs/admin_matakuliah_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_kelas_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_peserta_tab.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminAkademikPage extends StatefulWidget {
   const AdminAkademikPage({super.key});
@@ -29,7 +30,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: SafeArea(
         child: Column(
           children: [
@@ -39,6 +40,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
@@ -73,7 +75,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                labelColor: const Color(0xFFE63946),
+                labelColor: AppColors.primary,
                 unselectedLabelColor: Colors.white,
                 labelStyle: const TextStyle(
                   fontWeight: FontWeight.bold,

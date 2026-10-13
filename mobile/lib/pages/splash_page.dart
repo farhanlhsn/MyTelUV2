@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../app/routes.dart';
 import '../app/auth_middleware.dart';
 import '../utils/notification_router.dart';
+import '../utils/app_theme.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -48,7 +49,7 @@ class _SplashPageState extends State<SplashPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946), // Red color matching homepage
+      backgroundColor: AppColors.primary, // Red color matching homepage
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

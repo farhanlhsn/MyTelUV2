@@ -15,6 +15,7 @@ import '../../utils/attendance_helper.dart';
 import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/kelas_helper.dart';
+import '../../utils/app_theme.dart';
 
 /// Attendance page of one session. A session that requires a face goes through the liveness check
 /// and POST /biometrik/absen; a GPS-only session (`requireFace: false`) skips the selfie and posts
@@ -84,7 +85,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   DateTime? _livenessTokenFetchedAt;
   int? _idSesiAbsensi;
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
   static const Duration _livenessTokenMaxAge = Duration(minutes: 4);
 
   @override
@@ -557,17 +558,14 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16.0,
-                vertical: 20.0,
+                vertical: 8.0,
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(
-                      Icons.arrow_back_ios,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   Text(

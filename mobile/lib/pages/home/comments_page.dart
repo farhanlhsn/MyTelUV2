@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
 import '../../utils/date_helper.dart';
+import '../../utils/app_theme.dart';
 
 class CommentsPage extends StatefulWidget {
   final PostModel post;
@@ -24,7 +25,7 @@ class _CommentsPageState extends State<CommentsPage> {
   bool _isSending = false;
   int? _currentUserId;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -130,6 +131,7 @@ class _CommentsPageState extends State<CommentsPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
+          tooltip: 'Kembali',
           icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
           onPressed: () => Get.back(result: _comments.length),
         ),

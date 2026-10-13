@@ -6,6 +6,7 @@ import 'package:mobile/utils/kendaraan_helper.dart';
 
 import 'registerplat.dart' show RegisterPlatBerhasilPage;
 import 'widgets/foto_upload_field.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class ResubmitKendaraanPage extends StatefulWidget {
   const ResubmitKendaraanPage({super.key});
@@ -160,7 +161,7 @@ class _ResubmitKendaraanPageState extends State<ResubmitKendaraanPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       body: Stack(

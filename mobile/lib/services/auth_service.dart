@@ -2,7 +2,6 @@ import 'package:mobile/utils/logger.dart';
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
-import 'package:mobile/utils/logger.dart';
 
 
 

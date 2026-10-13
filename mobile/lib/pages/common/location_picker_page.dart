@@ -5,7 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
-import 'package:mobile/utils/logger.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 
 
@@ -41,7 +41,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   List<Map<String, dynamic>> _searchResults = [];
   Timer? _debounce;
   
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -280,6 +280,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                       Row(
                         children: [
                           IconButton(
+                            tooltip: 'Kembali',
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(Icons.arrow_back),
                           ),

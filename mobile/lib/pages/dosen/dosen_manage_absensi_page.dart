@@ -11,6 +11,7 @@ import '../../utils/validators.dart';
 import '../common/error_retry_view.dart';
 import '../common/geofence_picker_page.dart';
 import 'dosen_sesi_detail_page.dart';
+import '../../utils/app_theme.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -47,7 +48,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
   Map<int, List<Map<String, dynamic>>> _sesiMap = {};
   Map<int, bool> _loadingSesi = {};
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
 
   @override
   void initState() {
@@ -355,12 +356,13 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(

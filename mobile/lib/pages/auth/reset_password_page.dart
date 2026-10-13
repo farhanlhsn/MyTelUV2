@@ -6,6 +6,7 @@ import '../../controllers/auth_controller.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/validators.dart';
 import 'auth_feedback.dart';
+import '../../utils/app_theme.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
@@ -65,7 +66,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Buat Password Baru'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
@@ -82,7 +83,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -181,7 +182,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           ? null
                           : _handleResetPassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE63946),
+                        backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),

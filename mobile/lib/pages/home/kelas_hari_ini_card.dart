@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/kelas_hari_ini.dart';
 import '../../utils/attendance_helper.dart';
 import '../../utils/kelas_helper.dart';
+import '../../utils/app_theme.dart';
 
 /// Card of one class in the "kelas hari ini" carousel of the home page. Tapping it (only while the
 /// class has an active attendance session) calls [onTap].
@@ -12,7 +13,7 @@ class KelasHariIniCard extends StatelessWidget {
 
   const KelasHariIniCard({super.key, required this.kelas, this.onTap});
 
-  static const Color _primaryRed = Color(0xFFE63946);
+  static const Color _primaryRed = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +73,7 @@ class KelasHariIniCard extends StatelessWidget {
                         attendanceBadgeLabel(requireFace),
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -90,7 +91,7 @@ class KelasHariIniCard extends StatelessWidget {
                           'Tap untuk absen →',
                           style: TextStyle(
                             color: _primaryRed,
-                            fontSize: 9,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

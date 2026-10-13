@@ -1,8 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../services/parkir_service.dart';
 import '../../../models/parkir_model.dart';
 import '../../../utils/date_helper.dart';
+import '../../../utils/app_theme.dart';
 
 class HistoriParkirPage extends StatefulWidget {
   const HistoriParkirPage({super.key});
@@ -85,7 +87,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return Scaffold(
       backgroundColor: primaryRed,
@@ -97,17 +99,14 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16.0,
-                vertical: 20.0,
+                vertical: 8.0,
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(
-                      Icons.arrow_back_ios,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -579,33 +578,28 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                       borderRadius: BorderRadius.circular(8),
                       child: Stack(
                         children: [
-                          Image.network(
-                            imageUrl,
+                          CachedNetworkImage(
+                            imageUrl: imageUrl,
                             height: 100,
                             width: double.infinity,
                             fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                height: 100,
-                                color: Colors.grey.shade100,
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
+                            placeholder: (context, url) => Container(
+                              height: 100,
+                              color: Colors.grey.shade100,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                height: 100,
-                                color: Colors.grey.shade200,
-                                child: const Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                ),
-                              );
-                            },
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              height: 100,
+                              color: Colors.grey.shade200,
+                              child: const Icon(
+                                Icons.broken_image,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ),
                           Positioned(
                             bottom: 4,
@@ -623,7 +617,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                                 'Plat',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 10,
+                                  fontSize: 11,
                                 ),
                               ),
                             ),
@@ -697,7 +691,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
             const SizedBox(height: 4),
             Text(
               'Tidak ada\nfoto',
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -712,28 +706,23 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
         borderRadius: BorderRadius.circular(8),
         child: Stack(
           children: [
-            Image.network(
-              url,
+            CachedNetworkImage(
+              imageUrl: url,
               height: 100,
               width: double.infinity,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  height: 100,
-                  color: Colors.grey.shade100,
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  height: 100,
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image, color: Colors.grey),
-                );
-              },
+              placeholder: (context, url) => Container(
+                height: 100,
+                color: Colors.grey.shade100,
+                child: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              errorWidget: (context, url, error) => Container(
+                height: 100,
+                color: Colors.grey.shade200,
+                child: const Icon(Icons.broken_image, color: Colors.grey),
+              ),
             ),
             // Label: "Wajah" or "Full Frame"
             Positioned(
@@ -758,7 +747,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                     const SizedBox(width: 2),
                     Text(
                       detected ? 'Wajah' : 'Full',
-                      style: const TextStyle(color: Colors.white, fontSize: 9),
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
                     ),
                   ],
                 ),
@@ -786,7 +775,17 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                 child: InteractiveViewer(
                   minScale: 0.5,
                   maxScale: 4.0,
-                  child: Image.network(imageUrl, fit: BoxFit.contain),
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.contain,
+                    placeholder: (context, url) =>
+                        const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) => const Icon(
+                      Icons.broken_image,
+                      color: Colors.white54,
+                      size: 48,
+                    ),
+                  ),
                 ),
               ),
             ),

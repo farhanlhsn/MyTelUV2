@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../app/routes.dart';
+import '../../utils/app_theme.dart';
 
 class RegisterSuccessPage extends StatefulWidget {
   const RegisterSuccessPage({super.key});
@@ -29,7 +30,7 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),

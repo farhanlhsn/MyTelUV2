@@ -5,6 +5,7 @@ import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/error_helper.dart';
 import 'auth_feedback.dart';
+import '../../utils/app_theme.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -55,7 +56,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lupa Password'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
@@ -72,7 +73,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -113,7 +114,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           ? null
                           : _handleForgotPassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE63946),
+                        backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),
@@ -137,7 +138,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     onPressed: () => Get.toNamed(AppRoutes.resetPassword),
                     child: const Text(
                       'Sudah punya token? Masukkan di sini',
-                      style: TextStyle(color: Color(0xFFE63946)),
+                      style: TextStyle(color: AppColors.primary),
                     ),
                   ),
                 ),

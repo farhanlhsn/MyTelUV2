@@ -3,6 +3,7 @@ import 'package:mobile/app/routes.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/utils/date_helper.dart';
 import 'package:mobile/utils/ui_helpers.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 /// Detail of one vehicle submission: plate, status badge, the status timeline
 /// (diajukan -> status sekarang, with the admin feedback) and, for a rejected one, the way to
@@ -162,7 +163,7 @@ class DetailPengajuanPlat extends StatelessWidget {
                               );
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE63946),
+                              backgroundColor: AppColors.primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),

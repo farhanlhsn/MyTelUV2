@@ -4,6 +4,7 @@ import 'package:mobile/models/matakuliah.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
 import 'package:mobile/pages/common/typed_confirm_dialog.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminKelasTab extends StatefulWidget {
   const AdminKelasTab({super.key});
@@ -368,7 +369,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: isSubmitting
@@ -558,7 +559,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
         Expanded(
           child: _isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error != null
                   ? Center(
@@ -603,7 +604,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                                 style: TextStyle(color: Colors.white),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE63946),
+                                backgroundColor: AppColors.primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -666,7 +667,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -708,11 +709,11 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Center(
-                  child: Icon(Icons.class_, color: Color(0xFFE63946)),
+                  child: Icon(Icons.class_, color: AppColors.primary),
                 ),
               ),
               const SizedBox(width: 16),

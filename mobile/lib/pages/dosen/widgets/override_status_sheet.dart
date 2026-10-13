@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../utils/attendance_status.dart';
+import '../../../utils/app_theme.dart';
 
 /// Saves the chosen status and note. Returns the error text to show in the sheet, or null when it
 /// was saved (the sheet then closes).
@@ -163,7 +164,7 @@ class _OverrideStatusSheetState extends State<OverrideStatusSheet> {
                         key: const Key('override-save'),
                         onPressed: _saving || _selected == null || _unchanged ? null : _save,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE63946),
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                         ),
                         child: _saving

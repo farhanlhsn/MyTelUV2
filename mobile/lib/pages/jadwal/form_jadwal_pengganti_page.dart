@@ -4,6 +4,7 @@ import '../../services/akademik_service.dart';
 import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/jadwal_pengganti_helper.dart';
+import '../../utils/app_theme.dart';
 
 class FormJadwalPenggantiPage extends StatefulWidget {
   /// For tests; the app uses the default one.
@@ -166,7 +167,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Atur Jadwal Pengganti'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -210,7 +211,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     value: 'LIBUR',
                     groupValue: _status,
                     onChanged: (val) => setState(() => _status = val!),
-                    activeColor: const Color(0xFFE63946),
+                    activeColor: AppColors.primary,
                   ),
                   const Text('Liburkan Kelas'),
                   const SizedBox(width: 16),
@@ -218,7 +219,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     value: 'GANTI_JADWAL',
                     groupValue: _status,
                     onChanged: (val) => setState(() => _status = val!),
-                    activeColor: const Color(0xFFE63946),
+                    activeColor: AppColors.primary,
                   ),
                   const Text('Ganti Jadwal'),
                 ],
@@ -317,7 +318,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

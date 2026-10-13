@@ -15,6 +15,7 @@ import '../../models/kelas_hari_ini.dart';
 import '../../controllers/notification_controller.dart';
 import '../../app/routes.dart';
 import '../../utils/attendance_status.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -58,7 +59,7 @@ class _HomePageState extends State<HomePage> {
               ListTile(
                 leading: const Icon(
                   Icons.pie_chart,
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                 ), // Icon Chart untuk Analitik
                 title: const Text('Analitik Ketersediaan Parkir'),
                 subtitle: const Text('Cek slot parkir yang tersedia'),
@@ -71,7 +72,7 @@ class _HomePageState extends State<HomePage> {
 
               // Opsi 2: Histori Parkir
               ListTile(
-                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.history, color: AppColors.primary),
                 title: const Text('Histori Parkir'),
                 subtitle: const Text('Lihat riwayat parkir kendaraan'),
                 onTap: () {
@@ -119,25 +120,25 @@ class _HomePageState extends State<HomePage> {
     {
       'icon': Icons.badge_outlined,
       'label': 'Kendaraan',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': AppRoutes.userHistoriPengajuan,
     },
     {
       'icon': Icons.assignment_ind_outlined,
       'label': 'Absensi',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': AppRoutes.absensi,
     },
     {
       'icon': Icons.qr_code_scanner,
       'label': 'Biometrik',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': null,
     },
     {
       'icon': Icons.local_parking,
       'label': 'Parkir',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': null,
     },
   ];
@@ -172,7 +173,7 @@ class _HomePageState extends State<HomePage> {
   // --- Widget untuk konten Halaman Home (Index 0) ---
   Widget _buildHomeContent() {
     return Container(
-      color: const Color(0xFFE63946),
+      color: AppColors.primary,
       child: Column(
         children: [
           _buildTopBar(),
@@ -212,7 +213,7 @@ class _HomePageState extends State<HomePage> {
                   child: const CircleAvatar(
                     radius: 20,
                     backgroundColor: Colors.white,
-                    child: Icon(Icons.person, color: Color(0xFFE63946)),
+                    child: Icon(Icons.person, color: AppColors.primary),
                   ),
                 ),
               ),
@@ -250,7 +251,7 @@ class _HomePageState extends State<HomePage> {
                                 kehadiranLabel(totalKehadiran),
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.8),
-                                  fontSize: 10,
+                                  fontSize: 11,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -299,7 +300,7 @@ class _HomePageState extends State<HomePage> {
                               unread > 9 ? '9+' : '$unread',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 9,
+                                fontSize: 11,
                                 fontWeight: FontWeight.bold,
                               ),
                               textAlign: TextAlign.center,
@@ -381,7 +382,7 @@ class _HomePageState extends State<HomePage> {
                         'Lihat jadwal mingguan →',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -491,13 +492,13 @@ class _HomePageState extends State<HomePage> {
                 filteredMenuItems.add({
                   'icon': Icons.school,
                   'label': 'Akademik',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.adminAkademik,
                 });
                 filteredMenuItems.add({
                   'icon': Icons.manage_accounts,
                   'label': 'Pengguna',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.adminUserManagement,
                 });
               }
@@ -507,7 +508,7 @@ class _HomePageState extends State<HomePage> {
                 filteredMenuItems.add({
                   'icon': Icons.warning_amber_rounded,
                   'label': 'Anomali',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.anomaliDashboard,
                 });
               }
@@ -669,7 +670,7 @@ class _HomePageState extends State<HomePage> {
           height: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
+            color: isSelected ? AppColors.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Column(
@@ -743,7 +744,7 @@ class _HomePageState extends State<HomePage> {
                 ListTile(
                   leading: const Icon(
                     Icons.verified_user,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                   ),
                   title: const Text('Persetujuan Kendaraan'),
                   subtitle: const Text('Setujui atau tolak pengajuan'),
@@ -756,7 +757,7 @@ class _HomePageState extends State<HomePage> {
               ],
 
               ListTile(
-                leading: const Icon(Icons.add_circle, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.add_circle, color: AppColors.primary),
                 title: const Text('Daftar Kendaraan Baru'),
                 subtitle: const Text('Tambahkan kendaraan ke sistem'),
                 onTap: () {
@@ -766,7 +767,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.list_alt, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.list_alt, color: AppColors.primary),
                 title: const Text('List Kendaraan Terdaftar'),
                 subtitle: const Text('Daftar kendaraan Anda yang aktif'),
                 onTap: () {
@@ -776,7 +777,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.history, color: AppColors.primary),
                 title: const Text('Histori Pengajuan'),
                 subtitle: const Text('Lihat status pengajuan kendaraan'),
                 onTap: () {

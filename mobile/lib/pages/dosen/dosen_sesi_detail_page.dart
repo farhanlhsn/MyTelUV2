@@ -9,6 +9,7 @@ import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../common/error_retry_view.dart';
 import 'widgets/override_status_sheet.dart';
+import '../../utils/app_theme.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -63,7 +64,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   /// so no refresh answer is applied while one is out.
   int _savesInFlight = 0;
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
 
   @override
   void initState() {
@@ -314,12 +315,13 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   Expanded(

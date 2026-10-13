@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/app_theme.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -19,7 +20,7 @@ class MePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         leading: IconButton(
           onPressed: () => Get.back(),
@@ -58,7 +59,7 @@ class MePage extends StatelessWidget {
                     Center(
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: const Color(0xFFE63946),
+                        backgroundColor: AppColors.primary,
                         child: Text(
                           nama.isNotEmpty ? nama[0].toUpperCase() : 'U',
                           style: const TextStyle(

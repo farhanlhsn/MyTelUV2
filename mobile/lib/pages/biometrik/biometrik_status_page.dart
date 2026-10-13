@@ -7,6 +7,7 @@ import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../common/error_retry_view.dart';
 import 'biometrik_status_widget.dart';
+import '../../utils/app_theme.dart';
 
 /// What the student's "Biometrik" menu item opens: whether a face is enrolled for the account
 /// (GET /biometrik/status). Face attendance itself starts from a class with an open session (home
@@ -22,7 +23,7 @@ class BiometrikStatusPage extends StatefulWidget {
 }
 
 class _BiometrikStatusPageState extends State<BiometrikStatusPage> {
-  static const Color _primaryRed = Color(0xFFE63946);
+  static const Color _primaryRed = AppColors.primary;
 
   late final BiometrikService _service = widget.service ?? BiometrikService();
 
@@ -75,17 +76,14 @@ class _BiometrikStatusPageState extends State<BiometrikStatusPage> {
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16.0,
-                vertical: 20.0,
+                vertical: 8.0,
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(
-                      Icons.arrow_back_ios,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(
