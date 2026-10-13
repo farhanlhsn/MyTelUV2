@@ -3,6 +3,8 @@ import '../models/kelas.dart';
 import '../models/kelas_hari_ini.dart';
 import '../models/matakuliah.dart';
 import '../models/absensi.dart';
+import '../utils/attendance_helper.dart';
+import '../utils/error_helper.dart';
 import '../utils/jadwal_cache.dart';
 import 'api_client.dart';
 
@@ -266,16 +268,19 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get all kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
-  // Create absensi
-  Future<bool> createAbsensi({
+  /// Absensi GPS-only (sesi tanpa verifikasi wajah). Mengembalikan body respons
+  /// (`data` = catatan absensi, termasuk `status` HADIR|TELAT). Pesan dari backend (mis. 409
+  /// "Anda sudah melakukan absensi untuk sesi ini") dibawa di Exception.
+  Future<Map<String, dynamic>> createAbsensi({
     required int idKelas,
     required int idSesiAbsensi,
     required double latitude,
     required double longitude,
+    bool isMockLocation = false,
   }) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
@@ -285,12 +290,18 @@ class AkademikService {
           'id_sesi_absensi': idSesiAbsensi,
           'latitude': latitude,
           'longitude': longitude,
+          'is_mock_location': isMockLocation,
         },
       );
 
-      return response.statusCode == 201;
+      if (response.data is Map<String, dynamic>) {
+        return response.data as Map<String, dynamic>;
+      }
+      return <String, dynamic>{};
     } on DioException catch (e) {
-      throw Exception('Failed to create absensi: ${e.message}');
+      throw Exception(
+        attendanceServerMessage(e.response?.data) ?? ErrorHelper.parseError(e),
+      );
     }
   }
 
@@ -314,7 +325,7 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get absensi history: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 

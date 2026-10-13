@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
 import '../../utils/error_helper.dart';
+import '../common/error_retry_view.dart';
 import '../common/geofence_picker_page.dart';
 import 'dosen_sesi_detail_page.dart';
 
@@ -52,17 +53,23 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
   }
 
   Future<void> _loadKelas() async {
-    setState(() => _isLoading = true);
+    // Clear the previous error first, otherwise a successful retry would still show it
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final kelas = await _dosenService.getKelasDiampu();
+      if (!mounted) return;
       setState(() {
         _kelasList = kelas;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -78,10 +85,15 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
         _loadingSesi[idKelas] = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadingSesi[idKelas] = false;
       });
-      ErrorHelper.showError('Gagal memuat sesi: $e');
+      ErrorHelper.showErrorWithRetry(
+        e,
+        title: 'Gagal Memuat Sesi',
+        onRetry: () => _loadSesiForKelas(idKelas),
+      );
     }
   }
 
@@ -272,7 +284,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -299,7 +311,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -345,7 +357,10 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _errorMessage != null
-                        ? Center(child: Text(_errorMessage!))
+                        ? ErrorRetryView(
+                            message: _errorMessage!,
+                            onRetry: _loadKelas,
+                          )
                         : _kelasList.isEmpty
                             ? _buildEmptyState()
                             : _buildKelasList(),

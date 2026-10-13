@@ -241,12 +241,13 @@ class HomeController extends GetxController {
   }) async {
     try {
       isLoading.value = true;
-      final bool success = await _akademikService.createAbsensi(
+      final Map<String, dynamic> body = await _akademikService.createAbsensi(
         idKelas: idKelas,
         idSesiAbsensi: idSesiAbsensi,
         latitude: latitude,
         longitude: longitude,
       );
+      final bool success = body['status'] == 'success';
 
       if (success) {
         await loadAbsensi(); // Reload absensi list

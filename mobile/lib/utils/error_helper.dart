@@ -161,20 +161,30 @@ class ErrorHelper {
 
     // Handle Exception biasa
     if (error is Exception) {
-      String msg = error.toString();
-      // Remove "Exception:" prefix if present
-      if (msg.startsWith('Exception:')) {
-        msg = msg.substring(10).trim();
-      }
-      return msg;
+      return _orUnknown(stripExceptionPrefix(error.toString()));
     }
 
-    // Handle string langsung
+    // Handle string langsung (mis. hasil e.toString() dari pemanggil)
     if (error is String) {
-      return error;
+      return _orUnknown(stripExceptionPrefix(error));
     }
 
-    return 'Terjadi kesalahan yang tidak diketahui.';
+    return _unknownError;
+  }
+
+  static const String _unknownError = 'Terjadi kesalahan yang tidak diketahui.';
+
+  static String _orUnknown(String message) =>
+      message.isEmpty ? _unknownError : message;
+
+  /// Menghapus awalan "Exception:" (juga yang bertumpuk, "Exception: Exception: ...")
+  /// agar pengguna tidak melihat nama kelas Dart.
+  static String stripExceptionPrefix(String message) {
+    var text = message.trim();
+    while (text.startsWith('Exception:')) {
+      text = text.substring('Exception:'.length).trim();
+    }
+    return text;
   }
 
   /// Parse DioException untuk pesan yang lebih user-friendly
@@ -199,7 +209,6 @@ class ErrorHelper {
         return 'Terjadi masalah keamanan koneksi.';
 
       case DioExceptionType.unknown:
-      default:
         if (error.message?.contains('SocketException') == true ||
             error.message?.contains('Connection refused') == true ||
             error.message?.contains('Network is unreachable') == true) {

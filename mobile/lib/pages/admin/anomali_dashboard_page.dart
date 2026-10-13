@@ -5,7 +5,9 @@ import '../../models/anomali_model.dart';
 import '../../services/akademik_service.dart';
 import '../../services/dosen_service.dart';
 import '../../models/kelas.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../utils/anomali_helper.dart';
+import '../../utils/error_helper.dart';
+import '../../utils/kelas_helper.dart';
 import '../../app/routes.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../app/auth_middleware.dart';
@@ -26,7 +28,6 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   
   List<dynamic> _kelasList = []; // Can be KelasModel or Map<String, dynamic>
   dynamic _selectedKelas;
-  String _selectedFilter = 'Semua';
   bool _isLoadingKelas = true;
   bool _isScanning = false;
   String? _userRole;
@@ -60,35 +61,84 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoadingKelas = false);
-      Get.snackbar('Error', 'Gagal memuat daftar kelas: $e');
+      Get.snackbar('Error', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
     }
   }
 
   Future<void> _scanKelas(int idKelas) async {
     setState(() => _isScanning = true);
-    
+
     // Langsung await ke analyzeKelas (sekarang return Future)
     await _anomaliController.analyzeKelas(idKelas);
-    
+
+    if (!mounted) return;
     setState(() => _isScanning = false);
   }
 
+  /// Scan of the class that is selected in the dropdown. [_selectedKelas] is a KelasModel for an
+  /// ADMIN but a raw Map for a DOSEN, so the id goes through [kelasIdOf].
+  void _scanSelectedKelas() {
+    final int? idKelas = kelasIdOf(_selectedKelas);
+    if (idKelas != null) _scanKelas(idKelas);
+  }
+
   Future<void> _scanAllKelas() async {
+    if (_kelasList.isEmpty) {
+      Get.snackbar('Info', 'Tidak ada kelas untuk dipindai');
+      return;
+    }
+
     setState(() => _isScanning = true);
     _anomaliController.anomaliList.clear();
-    
+
+    final List<AnomaliModel> hasil = <AnomaliModel>[];
+    final List<String> peringatan = <String>[];
+    int gagal = 0;
+
     for (final kelas in _kelasList) {
-      // Handle both KelasModel and Map<String, dynamic>
-      final int idKelas = kelas is KelasModel 
-          ? kelas.idKelas 
-          : (kelas as Map<String, dynamic>)['id_kelas'] as int;
-      _anomaliController.analyzeKelas(idKelas);
+      final int? idKelas = kelasIdOf(kelas);
+      if (idKelas == null) {
+        gagal++;
+        continue;
+      }
+
+      // await each scan: the next one must not start before this one is done, and a failure
+      // must be counted instead of reported as a success
+      final bool berhasil = await _anomaliController.analyzeKelas(
+        idKelas,
+        silent: true,
+      );
+      if (berhasil) {
+        hasil.addAll(_anomaliController.anomaliList);
+        for (final w in _anomaliController.warnings) {
+          if (!peringatan.contains(w)) peringatan.add(w);
+        }
+      } else {
+        gagal++;
+      }
       await Future.delayed(const Duration(milliseconds: 300));
     }
-    
+
+    // analyzeKelas leaves only the last class in the list: show every class together
+    _anomaliController.anomaliList.assignAll(hasil);
+    _anomaliController.warnings.assignAll(peringatan);
+    final String ringkasan = scanSummaryMessage(
+      total: _kelasList.length,
+      failed: gagal,
+    );
+    _anomaliController.message.value = ringkasan;
+
+    if (!mounted) return;
     setState(() => _isScanning = false);
-    Get.snackbar('Sukses', 'Scan selesai untuk ${_kelasList.length} kelas');
+
+    final String peringatanText = joinWarnings(peringatan);
+    Get.snackbar(
+      gagal == 0 ? 'Sukses' : 'Sebagian Gagal',
+      peringatanText.isEmpty ? ringkasan : '$ringkasan\n$peringatanText',
+      duration: const Duration(seconds: 5),
+    );
   }
 
   List<AnomaliModel> get _filteredAnomalies {
@@ -123,7 +173,9 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                     
                     // Kelas Dropdown
                     _buildKelasDropdown(),
-                    
+
+                    _buildWarningBanner(),
+
                     const SizedBox(height: 16),
                     
                     // Anomaly List
@@ -164,9 +216,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
               const Spacer(),
               // Refresh Button
               GestureDetector(
-                onTap: _selectedKelas != null 
-                    ? () => _scanKelas(_selectedKelas!.idKelas)
-                    : null,
+                onTap: _selectedKelas != null ? _scanSelectedKelas : null,
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -286,6 +336,39 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     );
   }
 
+  Widget _buildWarningBanner() {
+    return Obx(() {
+      final warnings = _anomaliController.warnings;
+      if (warnings.isEmpty) return const SizedBox.shrink();
+
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange.shade700, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  joinWarnings(warnings.toList()),
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
   Widget _buildKelasDropdown() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -345,13 +428,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
                       }).toList(),
                       onChanged: (dynamic kelas) {
                         setState(() => _selectedKelas = kelas);
-                        if (kelas != null) {
-                          // Get idKelas from either type
-                          final int idKelas = kelas is KelasModel 
-                              ? kelas.idKelas 
-                              : (kelas as Map<String, dynamic>)['id_kelas'] as int;
-                          _scanKelas(idKelas);
-                        }
+                        if (kelas != null) _scanSelectedKelas();
                       },
                     ),
                   ),
@@ -409,8 +486,9 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
 
       return RefreshIndicator(
         onRefresh: () async {
-          if (_selectedKelas != null) {
-            await _scanKelas(_selectedKelas!.idKelas);
+          final int? idKelas = kelasIdOf(_selectedKelas);
+          if (idKelas != null) {
+            await _scanKelas(idKelas);
           }
         },
         child: ListView.builder(

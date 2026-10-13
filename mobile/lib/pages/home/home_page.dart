@@ -4,12 +4,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:mobile/pages/home/maps_page.dart';
 import 'package:mobile/pages/home/post_page.dart';
 import 'package:mobile/pages/home/settings_page.dart';
+import 'package:mobile/pages/biometrik/biometrik_status_page.dart';
 import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
+import 'package:mobile/pages/home/kelas_hari_ini_card.dart';
 import 'package:mobile/pages/home/notification_list_page.dart';
 
 import '../../controllers/home_controller.dart';
+import '../../models/kelas_hari_ini.dart';
 import '../../controllers/notification_controller.dart';
 import '../../app/routes.dart';
 
@@ -399,9 +402,13 @@ class _HomePageState extends State<HomePage> {
                   scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
                 }
 
+                final kelas = kelasHariIni[index];
                 return Transform.scale(
                   scale: scale,
-                  child: _buildKelasHariIniCard(kelasHariIni[index]),
+                  child: KelasHariIniCard(
+                    kelas: kelas,
+                    onTap: () => _openAbsensiSesi(kelas),
+                  ),
                 );
               },
             ),
@@ -429,187 +436,16 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Widget _buildKelasHariIniCard(dynamic kelasData) {
-    final kelas = kelasData;
-    final matakuliah = kelas.matakuliah;
-    final dosen = kelas.dosen;
-    final hasActiveAbsensi = kelas.hasActiveAbsensi;
-    final activeSesi = kelas.activeSesiAbsensi;
+  /// Opens the attendance page of the active session of [kelas]. The page itself picks the flow:
+  /// a session that requires a face goes through the liveness check, a GPS-only session records the
+  /// attendance with the location alone (no selfie).
+  void _openAbsensiSesi(KelasHariIniModel kelas) {
+    final sesi = kelas.activeSesiAbsensi;
+    if (sesi == null) return;
 
-    final String title = matakuliah != null
-        ? '${matakuliah.namaMatakuliah}'
-        : 'Kelas';
-    final String jadwal = kelas.jadwal ?? 'Jadwal tidak tersedia';
-    final String location = kelas.ruangan ?? 'Ruangan belum ditentukan';
-
-    // Get require_face from active session
-    final bool requireFace = activeSesi?.requireFace ?? false;
-
-    return GestureDetector(
-      onTap: hasActiveAbsensi
-          ? () {
-              // Navigate based on require_face setting
-              final idSesi = activeSesi?.idSesiAbsensi ?? 0;
-              if (requireFace) {
-                // Need face verification
-                Get.to(
-                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
-                  arguments: {'idSesiAbsensi': idSesi},
-                );
-              } else {
-                // GPS only - still use BiometrikAbsenPage for now
-                Get.to(
-                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
-                  arguments: {'idSesiAbsensi': idSesi},
-                );
-              }
-            }
-          : null,
-      child: Card(
-        elevation: 8,
-        shadowColor: Colors.black.withOpacity(0.3),
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Positioned(
-              bottom: -80,
-              right: -80,
-              child: Container(
-                height: 200,
-                width: 200,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.8),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            // Active absensi badge
-            if (hasActiveAbsensi)
-              Positioned(
-                top: 10,
-                left: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        requireFace ? Icons.face : Icons.location_on,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        requireFace ? 'Absen + Selfie' : 'Absen GPS',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'Tap untuk absen →',
-                          style: TextStyle(
-                            color: Color(0xFFE63946),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Positioned(
-              top: 15,
-              right: 15,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.schedule,
-                  color: Color(0xFFE63946),
-                  size: 28,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (hasActiveAbsensi) const SizedBox(height: 50),
-                  Text(
-                    'Dosen: ${dosen.nama}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Colors.black54,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        jadwal,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 14,
-                        color: Colors.black54,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    Get.to(
+      () => BiometrikAbsenPage.forKelas(kelas),
+      arguments: {'idSesiAbsensi': sesi.idSesiAbsensi},
     );
   }
 
@@ -712,7 +548,9 @@ class _HomePageState extends State<HomePage> {
           if (userRole == 'ADMIN') {
             Get.toNamed(AppRoutes.adminBiometrik);
           } else {
-            Get.to(() => const BiometrikAbsenPage());
+            // A student has no session here: show the biometric status instead of a dead-end
+            // attendance page (attendance starts from a class card or the absensi list)
+            Get.to(() => const BiometrikStatusPage());
           }
         } else if (label == 'Absensi') {
           // Role-based navigation for Absensi

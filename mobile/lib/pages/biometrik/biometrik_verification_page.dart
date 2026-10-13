@@ -7,12 +7,56 @@ import 'package:get/get.dart';
 import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
+import '../../models/kelas_hari_ini.dart';
+import '../../services/akademik_service.dart';
 import '../../services/biometrik_service.dart';
+import '../../utils/attendance_error_mapper.dart';
+import '../../utils/attendance_helper.dart';
+import '../../utils/error_helper.dart';
+import '../../utils/kelas_helper.dart';
 
+/// Attendance page of one session. A session that requires a face goes through the liveness check
+/// and POST /biometrik/absen; a GPS-only session (`requireFace: false`) skips the selfie and posts
+/// to POST /akademik/absensi. Both show the location, the distance to the geofence centre (when the
+/// session has coordinates) and keep the start button disabled until a position is known.
 class BiometrikAbsenPage extends StatefulWidget {
   final int? idSesiAbsensi;
 
-  const BiometrikAbsenPage({super.key, this.idSesiAbsensi});
+  /// Needed by the GPS-only endpoint.
+  final int? idKelas;
+  final bool requireFace;
+
+  /// Geofence of the session; the distance is only shown when all three are known.
+  final double? sesiLatitude;
+  final double? sesiLongitude;
+  final int? radiusMeter;
+  final String? kelasTitle;
+
+  const BiometrikAbsenPage({
+    super.key,
+    this.idSesiAbsensi,
+    this.idKelas,
+    this.requireFace = true,
+    this.sesiLatitude,
+    this.sesiLongitude,
+    this.radiusMeter,
+    this.kelasTitle,
+  });
+
+  /// The page for the active attendance session of a "kelas hari ini" item.
+  factory BiometrikAbsenPage.forKelas(KelasHariIniModel kelas, {Key? key}) {
+    final sesi = kelas.activeSesiAbsensi;
+    return BiometrikAbsenPage(
+      key: key,
+      idSesiAbsensi: sesi?.idSesiAbsensi,
+      idKelas: kelas.idKelas,
+      requireFace: sesi?.requireFace ?? true,
+      sesiLatitude: sesi?.latitude,
+      sesiLongitude: sesi?.longitude,
+      radiusMeter: sesi?.radiusMeter,
+      kelasTitle: kelasHariIniTitle(kelas),
+    );
+  }
 
   @override
   State<BiometrikAbsenPage> createState() => _BiometrikAbsenPageState();
@@ -21,6 +65,7 @@ class BiometrikAbsenPage extends StatefulWidget {
 class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     with WidgetsBindingObserver {
   final BiometrikService _biometrikService = BiometrikService();
+  final AkademikService _akademikService = AkademikService();
 
   File? _capturedImage;
   bool _isLoading = false;
@@ -29,6 +74,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   Map<String, dynamic>? _result;
   Position? _currentPosition;
   bool _isGettingLocation = false;
+  LocationIssue? _locationIssue;
+  String? _locationError;
   Future<List<CameraDescription>>? _camerasFuture;
   Future<Position?>? _locationFuture;
   Future<String?>? _livenessTokenFuture;
@@ -42,65 +89,38 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _idSesiAbsensi =
         widget.idSesiAbsensi ?? _readIdSesiAbsensiFromArguments();
     if (_idSesiAbsensi == null) {
       _errorMessage = _missingSessionContextMessage;
     }
-    _camerasFuture = availableCameras();
-    if (_idSesiAbsensi != null) {
-      _prefetchLivenessToken();
+    if (widget.requireFace) {
+      _camerasFuture = availableCameras();
+      if (_idSesiAbsensi != null) {
+        _prefetchLivenessToken();
+      }
     }
     unawaited(_getCurrentLocation());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Map API error messages to user-friendly Indonesian text
-  String _mapErrorMessage(String? message) {
-    if (message == null) return 'Terjadi kesalahan';
-
-    final messageLower = message.toLowerCase();
-
-    // Preserve detailed distance info if present in location errors
-    if (messageLower.contains('lokasi anda di luar area absensi')) {
-      if (messageLower.contains('jarak') || messageLower.contains('radius')) {
-        return message;
-      }
-      return 'Lokasi Anda di luar area absensi. Silakan mendekat ke area kelas.';
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from the system settings: try again. Only for the issues that are fixed there; a plain
+    // "denied" would show the permission prompt again on every resume.
+    if (state == AppLifecycleState.resumed &&
+        _currentPosition == null &&
+        !_isGettingLocation &&
+        (_locationIssue == LocationIssue.serviceDisabled ||
+            _locationIssue == LocationIssue.deniedForever)) {
+      unawaited(_getCurrentLocation());
     }
-
-    final errorMap = {
-      'Layanan pengenalan wajah sedang tidak tersedia':
-          'Layanan sedang sibuk atau tidak tersedia. Silakan coba beberapa saat lagi.',
-      'Face recognition service unavailable':
-          'Layanan pengenalan wajah tidak tersedia. Coba lagi nanti.',
-      'No face detected':
-          'Wajah tidak terdeteksi. Pastikan wajah terlihat jelas.',
-      'Face detection failed': 'Gagal mendeteksi wajah. Coba ambil foto ulang.',
-      'Wajah tidak cocok': 'Wajah tidak cocok dengan data terdaftar.',
-      'Image file is required': 'Silakan ambil foto terlebih dahulu.',
-      'Invalid coordinates': 'Lokasi tidak valid. Aktifkan GPS.',
-      'Anda belum terdaftar biometrik':
-          'Anda belum terdaftar biometrik. Hubungi admin.',
-      'Tidak ada sesi absensi': 'Tidak ada kelas yang sedang berlangsung.',
-      'id_sesi_absensi wajib diisi':
-          'Konteks sesi absensi tidak tersedia. Silakan pilih sesi absensi dari daftar absensi.',
-      'Sesi absensi yang dipilih tidak valid':
-          'Sesi absensi tidak valid, tidak sedang berlangsung, atau Anda tidak terdaftar.',
-      'Anda sudah melakukan absensi':
-          'Anda sudah melakukan absensi pada sesi ini.',
-    };
-
-    for (final entry in errorMap.entries) {
-      if (messageLower.contains(entry.key.toLowerCase())) {
-        return entry.value;
-      }
-    }
-    return message;
   }
 
   String get _missingSessionContextMessage =>
@@ -195,7 +215,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   Future<Position?> _getCurrentLocation() async {
     if (_locationFuture != null) return _locationFuture!;
 
-    setState(() => _isGettingLocation = true);
+    setState(() {
+      _isGettingLocation = true;
+      _locationIssue = null;
+      _locationError = null;
+    });
     _locationFuture = _resolveCurrentLocation();
 
     try {
@@ -219,9 +243,13 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       }
 
       setState(() {
-        _errorMessage = _idSesiAbsensi == null
-            ? _missingSessionContextMessage
-            : 'Gagal mendapatkan lokasi: ${e.toString()}';
+        if (e is LocationIssueException) {
+          _locationIssue = e.issue;
+          _locationError = locationIssueMessage(e.issue);
+        } else {
+          _locationError =
+              'Gagal mendapatkan lokasi: ${ErrorHelper.parseError(e)}';
+        }
         _isGettingLocation = false;
       });
       return null;
@@ -231,21 +259,22 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Future<Position?> _resolveCurrentLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Lokasi tidak aktif. Silakan aktifkan GPS.');
+      throw LocationIssueException(LocationIssue.serviceDisabled);
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        throw Exception('Izin lokasi ditolak');
-      }
     }
 
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception('Izin lokasi diblokir. Aktifkan di pengaturan.');
+    final issue = locationIssueFor(
+      serviceEnabled: serviceEnabled,
+      permission: permission,
+    );
+    if (issue != null) {
+      throw LocationIssueException(issue);
     }
 
     final lastKnown = await Geolocator.getLastKnownPosition();
@@ -341,6 +370,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
   Future<void> _startLivenessCheck() async {
     if (!_ensureSessionContext()) return;
+    if (_currentPosition == null) return;
 
     setState(() {
       _errorMessage = null;
@@ -393,7 +423,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Gagal memuat Liveness Check: ${e.toString()}';
+        _errorMessage =
+            'Gagal memuat Liveness Check: ${ErrorHelper.parseError(e)}';
       });
     }
   }
@@ -447,17 +478,72 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
 
       if (!_isSuccess) {
         setState(() {
-          _errorMessage = _mapErrorMessage(result['message']?.toString());
+          _errorMessage = mapAttendanceErrorMessage(
+            result['message']?.toString(),
+          );
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = _mapErrorMessage(
-          e.toString().replaceFirst('Exception: ', ''),
-        );
+        _errorMessage = mapAttendanceErrorMessage(ErrorHelper.parseError(e));
       });
       _prefetchLivenessToken();
+    }
+  }
+
+  /// GPS-only session: no selfie, no liveness token; straight to POST /akademik/absensi.
+  Future<void> _submitGpsAbsen() async {
+    if (!_ensureSessionContext()) return;
+
+    final position = _currentPosition;
+    if (position == null) {
+      setState(() => _errorMessage = 'Tidak dapat mengambil lokasi');
+      return;
+    }
+
+    final idKelas = widget.idKelas;
+    if (idKelas == null) {
+      setState(() => _errorMessage = _missingSessionContextMessage);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _isSuccess = false;
+      _result = null;
+      _errorMessage = null;
+    });
+
+    try {
+      final body = await _akademikService.createAbsensi(
+        idKelas: idKelas,
+        idSesiAbsensi: _idSesiAbsensi!,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        isMockLocation: position.isMocked,
+      );
+      if (!mounted) return;
+
+      final result = normalizeGpsAbsensiResult(body);
+      final bool success = result['status'] == 'success';
+      setState(() {
+        _result = result;
+        _isSuccess = success;
+        _isLoading = false;
+        if (!success) {
+          _errorMessage = mapAttendanceErrorMessage(
+            result['message']?.toString(),
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = mapAttendanceErrorMessage(ErrorHelper.parseError(e));
+      });
     }
   }
 
@@ -486,9 +572,9 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    "Absen Biometrik",
-                    style: TextStyle(
+                  Text(
+                    widget.requireFace ? "Absen Biometrik" : "Absen GPS",
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -513,13 +599,30 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     children: [
+                      if (widget.kelasTitle != null &&
+                          widget.kelasTitle!.isNotEmpty) ...[
+                        Text(
+                          widget.kelasTitle!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
                       // Location status
                       _buildLocationStatus(),
 
                       const SizedBox(height: 20),
 
-                      // Camera preview or captured image
-                      _buildCameraPreview(),
+                      // Camera preview or captured image (face sessions) / GPS panel (GPS-only)
+                      if (widget.requireFace)
+                        _buildCameraPreview()
+                      else
+                        _buildGpsPanel(),
 
                       const SizedBox(height: 24),
 
@@ -548,61 +651,190 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Widget _buildLocationStatus() {
+    final position = _currentPosition;
+    final bool hasPosition = position != null;
+    final geofence = _isGettingLocation
+        ? null
+        : geofenceStatusFor(
+            userLat: position?.latitude,
+            userLng: position?.longitude,
+            sesiLat: widget.sesiLatitude,
+            sesiLng: widget.sesiLongitude,
+            radiusMeter: widget.radiusMeter,
+          );
+
+    final MaterialColor tone = !hasPosition
+        ? Colors.orange
+        : (geofence != null && !geofence.inRange)
+        ? Colors.red
+        : Colors.green;
+
+    final String text = _isGettingLocation
+        ? 'Mendapatkan lokasi…'
+        : position != null
+        ? 'Lokasi: ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}'
+        : (_locationError ?? 'Lokasi tidak tersedia');
+
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: _currentPosition != null
-            ? Colors.green.withOpacity(0.1)
-            : Colors.orange.withOpacity(0.1),
+        color: tone.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _currentPosition != null
-              ? Colors.green.withOpacity(0.3)
-              : Colors.orange.withOpacity(0.3),
-        ),
+        border: Border.all(color: tone.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _isGettingLocation
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  _currentPosition != null
-                      ? Icons.location_on
-                      : Icons.location_off,
-                  color: _currentPosition != null
-                      ? Colors.green
-                      : Colors.orange,
-                  size: 20,
-                ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
+          Row(
+            children: [
               _isGettingLocation
-                  ? 'Mendapatkan lokasi...'
-                  : _currentPosition != null
-                  ? 'Lokasi: ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}'
-                  : 'Lokasi tidak tersedia',
-              style: TextStyle(
-                fontSize: 12,
-                color: _currentPosition != null
-                    ? Colors.green.shade700
-                    : Colors.orange.shade700,
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      hasPosition ? Icons.location_on : Icons.location_off,
+                      color: tone,
+                      size: 20,
+                    ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(fontSize: 12, color: tone.shade700),
+                ),
               ),
+              if (!_isGettingLocation)
+                GestureDetector(
+                  onTap: _getCurrentLocation,
+                  child: Tooltip(
+                    message: 'Perbarui lokasi',
+                    child: Icon(Icons.refresh, color: tone.shade700, size: 20),
+                  ),
+                ),
+            ],
+          ),
+          if (geofence != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              geofence.summary,
+              style: TextStyle(fontSize: 12, color: tone.shade700),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Icon(
+                  geofence.inRange ? Icons.check_circle : Icons.warning_amber,
+                  size: 14,
+                  color: tone.shade700,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    geofence.inRange
+                        ? 'Dalam jangkauan absensi'
+                        : 'Di luar jangkauan absensi. Dekati lokasi kelas.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tone.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          ..._buildLocationIssueAction(),
+        ],
+      ),
+    );
+  }
+
+  /// Button that fixes the location problem: the system settings for a switched-off GPS or a
+  /// permanently denied permission, a new permission request for a plain denial.
+  List<Widget> _buildLocationIssueAction() {
+    if (_currentPosition != null || _isGettingLocation) return const [];
+
+    final String label;
+    final VoidCallback onPressed;
+    switch (_locationIssue) {
+      case LocationIssue.serviceDisabled:
+        label = 'Buka Pengaturan Lokasi';
+        onPressed = () => Geolocator.openLocationSettings();
+      case LocationIssue.deniedForever:
+        label = 'Buka Pengaturan';
+        onPressed = () => Geolocator.openAppSettings();
+      case LocationIssue.denied:
+        label = 'Izinkan Lokasi';
+        onPressed = () => _getCurrentLocation();
+      case null:
+        return const [];
+    }
+
+    return [
+      const SizedBox(height: 8),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.settings, size: 18),
+          label: Text(label),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.orange.shade800,
+            side: BorderSide(color: Colors.orange.shade300),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
           ),
-          if (_currentPosition == null && !_isGettingLocation)
-            GestureDetector(
-              onTap: _getCurrentLocation,
-              child: Icon(
-                Icons.refresh,
-                color: Colors.orange.shade700,
-                size: 20,
-              ),
+        ),
+      ),
+    ];
+  }
+
+  /// Stand-in for the camera preview of a GPS-only session.
+  Widget _buildGpsPanel() {
+    final bool done = _isSuccess;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: done ? Colors.green : primaryRed.withValues(alpha: 0.4),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          if (_isLoading)
+            const SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            )
+          else
+            Icon(
+              done ? Icons.check_circle : Icons.location_on,
+              size: 64,
+              color: done ? Colors.green : Colors.grey.shade400,
             ),
+          const SizedBox(height: 12),
+          Text(
+            _isLoading
+                ? 'Mencatat absensi…'
+                : done
+                ? 'Absensi Berhasil'
+                : 'Sesi ini cukup memakai lokasi GPS, tanpa verifikasi wajah.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: done ? Colors.green.shade700 : Colors.grey,
+              fontSize: 13,
+              fontWeight: done ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
         ],
       ),
     );
@@ -707,61 +939,77 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
   }
 
   Widget _buildCaptureButton() {
+    final bool canStart = canStartAttendance(
+      hasLocation: _currentPosition != null,
+      isGettingLocation: _isGettingLocation,
+      isBusy: _isLoading,
+    );
+
+    // GPS-only session: one tap records the attendance, also the retry after an error
+    if (!widget.requireFace) {
+      return _buildPrimaryButton(
+        icon: Icons.location_on,
+        label: attendanceStartLabel(
+          hasLocation: _currentPosition != null,
+          isGettingLocation: _isGettingLocation,
+          readyLabel: 'Absen Sekarang',
+        ),
+        onPressed: canStart ? _submitGpsAbsen : null,
+      );
+    }
+
     // After an error, show retry button
     if (_errorMessage != null && _capturedImage != null) {
-      return SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: _startLivenessCheck,
-          icon: const Icon(Icons.refresh, color: Colors.white),
-          label: const Text(
-            'Coba Lagi',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryRed,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
+      return _buildPrimaryButton(
+        icon: Icons.refresh,
+        label: 'Coba Lagi',
+        onPressed: canStart ? _startLivenessCheck : null,
       );
     }
 
     // Initial state — start the one-tap flow
     if (_capturedImage == null) {
-      return SizedBox(
-        width: double.infinity,
-        height: 50,
-        child: ElevatedButton.icon(
-          onPressed: _startLivenessCheck,
-          icon: const Icon(Icons.fingerprint, color: Colors.white),
-          label: const Text(
-            'Mulai Absen',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryRed,
-            disabledBackgroundColor: Colors.grey.shade300,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
+      return _buildPrimaryButton(
+        icon: Icons.fingerprint,
+        label: attendanceStartLabel(
+          hasLocation: _currentPosition != null,
+          isGettingLocation: _isGettingLocation,
+          readyLabel: 'Mulai Absen',
         ),
+        onPressed: canStart ? _startLivenessCheck : null,
       );
     }
 
     // Captured but no error (shouldn't normally be visible since auto-submit runs)
     return const SizedBox.shrink();
+  }
+
+  Widget _buildPrimaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryRed,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.grey.shade300,
+          disabledForegroundColor: Colors.grey.shade600,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorMessage() {
@@ -834,6 +1082,11 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
               Icons.access_time,
               'Waktu',
               _formatTime(data['waktu']?.toString()),
+            ),
+            _buildInfoRow(
+              Icons.how_to_reg,
+              'Status',
+              kehadiranStatusLabel(data['status']?.toString()),
             ),
           ],
         ],

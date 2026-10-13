@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
 import '../../utils/error_helper.dart';
+import '../common/error_retry_view.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -55,17 +56,23 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   }
 
   Future<void> _loadSesiDetail() async {
-    setState(() => _isLoading = true);
+    // Clear the previous error first, otherwise a successful retry would still show it
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final data = await _dosenService.getSesiDetail(widget.idSesi);
+      if (!mounted) return;
       setState(() {
         _sesiData = data;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -124,7 +131,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
       }
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -150,7 +157,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
       }
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -201,7 +208,10 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _errorMessage != null
-                        ? Center(child: Text(_errorMessage!))
+                        ? ErrorRetryView(
+                            message: _errorMessage!,
+                            onRetry: _loadSesiDetail,
+                          )
                         : _buildContent(),
               ),
             ),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../models/kelas_hari_ini.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/error_helper.dart';
 import '../biometrik/biometrik_verification_page.dart';
+import '../common/error_retry_view.dart';
 import '../../controllers/anomali_controller.dart';
 
 class AbsensiPage extends StatefulWidget {
@@ -90,7 +93,11 @@ class _AbsensiPageState extends State<AbsensiPage> {
   }
 
   Future<void> _loadHistory() async {
-    setState(() => _isLoading = true);
+    // Clear the previous error first, otherwise a successful retry would still show it
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final data = await _akademikService.getAbsensiKuHistory();
@@ -99,14 +106,16 @@ class _AbsensiPageState extends State<AbsensiPage> {
       } catch (e) {
         debugPrint('Gagal memuat setting anomali: $e');
       }
+      if (!mounted) return;
       setState(() {
         _historyData = data;
         _threshold = _anomaliController.thresholdJarangHadir.value;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -169,21 +178,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 60, color: Colors.red.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Gagal memuat data',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 8),
-            TextButton(onPressed: _loadHistory, child: const Text('Coba Lagi')),
-          ],
-        ),
-      );
+      return ErrorRetryView(message: _errorMessage!, onRetry: _loadHistory);
     }
 
     if (_historyData.isEmpty) {
@@ -596,6 +591,39 @@ class _AbsensiPageState extends State<AbsensiPage> {
   }
 }
 
+/// A history row carries neither `require_face` nor the geofence of its session, so the active
+/// session is looked up among today's classes to open the right flow (GPS-only or face). When it is
+/// not found (e.g. offline) the face flow, the one this button always used, opens.
+Future<void> _openAbsenSesi(int idSesiAbsensi) async {
+  Get.dialog(
+    const Center(child: CircularProgressIndicator()),
+    barrierDismissible: false,
+  );
+
+  KelasHariIniModel? found;
+  try {
+    final (kelasList, _) = await AkademikService().getKelasHariIni();
+    for (final kelas in kelasList) {
+      if (kelas.activeSesiAbsensi?.idSesiAbsensi == idSesiAbsensi) {
+        found = kelas;
+        break;
+      }
+    }
+  } catch (e) {
+    debugPrint('Gagal mencari sesi absensi: $e');
+  }
+
+  Get.back(); // close the loading dialog
+
+  final KelasHariIniModel? selected = found;
+  Get.to(
+    () => selected != null
+        ? BiometrikAbsenPage.forKelas(selected)
+        : BiometrikAbsenPage(idSesiAbsensi: idSesiAbsensi),
+    arguments: {'id_sesi_absensi': idSesiAbsensi},
+  );
+}
+
 class AbsensiDetailPage extends StatelessWidget {
   final String kelasName;
   final int idKelas;
@@ -843,12 +871,7 @@ class AbsensiDetailPage extends StatelessWidget {
         SizedBox(
           height: 32,
           child: OutlinedButton.icon(
-            onPressed: () {
-              Get.to(
-                () => BiometrikAbsenPage(idSesiAbsensi: selectedSesiId),
-                arguments: {'id_sesi_absensi': selectedSesiId},
-              );
-            },
+            onPressed: () => _openAbsenSesi(selectedSesiId),
             icon: const Icon(Icons.face_retouching_natural, size: 16),
             label: const Text('Absen'),
             style: OutlinedButton.styleFrom(
