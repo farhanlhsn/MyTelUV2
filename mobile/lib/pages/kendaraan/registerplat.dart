@@ -113,7 +113,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
     try {
       // Call API untuk register kendaraan
       await KendaraanService.registerKendaraan(
-        platNomor: platController.text.trim(),
+        platNomor: Validators.normalizePlat(platController.text),
         namaKendaraan: namaKendaraanController.text.trim(),
         fotoKendaraanPaths: [
           _depanImagePath!,

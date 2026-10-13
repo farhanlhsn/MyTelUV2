@@ -72,7 +72,7 @@ class AccountController extends GetxController {
   Future<void> saveProfile() async {
     if (nameController.text.trim().isEmpty) {
       Get.snackbar(
-        "Error",
+        "Gagal",
         "Nama tidak boleh kosong",
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red,
@@ -104,7 +104,7 @@ class AccountController extends GetxController {
       }
     } catch (e) {
       Get.snackbar(
-        "Error",
+        "Gagal",
         e.toString().replaceAll('Exception: ', ''),
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red,
@@ -129,7 +129,7 @@ class AccountController extends GetxController {
       );
     } else {
       Get.snackbar(
-        "Error",
+        "Gagal",
         result.message,
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red,

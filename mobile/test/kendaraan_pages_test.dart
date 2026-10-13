@@ -105,6 +105,20 @@ void main() {
       verifyZeroInteractions(dio);
     });
 
+    testWidgets('accepts a plate typed with extra spaces', (tester) async {
+      await pumpPage(tester, const RegisterPlatPage());
+
+      await tester.enterText(field('Nama Kendaraan'), 'Honda Vario');
+      await tester.enterText(field('Nomor Plat'), 'b  1234   ab');
+      await submit(tester);
+
+      expect(
+        find.text('Format plat nomor tidak valid. Contoh: D 1234 ABC'),
+        findsNothing,
+      );
+      expect(find.text('Plat nomor wajib diisi'), findsNothing);
+    });
+
     testWidgets('rejects a malformed plate with an example', (tester) async {
       await pumpPage(tester, const RegisterPlatPage());
 

@@ -414,7 +414,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               obscureText: obscurePassword,
               decoration: InputDecoration(
                 labelText: 'Password Baru *',
-                hintText: 'Minimal 8 karakter, huruf dan angka',
+                hintText: 'Minimal 8 karakter',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -429,7 +429,8 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                   },
                 ),
               ),
-              validator: Validators.password,
+              // The server's admin reset only checks the length (min 8).
+              validator: Validators.passwordLength,
             ),
           ),
           actions: [

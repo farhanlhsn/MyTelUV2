@@ -54,6 +54,19 @@ void main() {
     });
   });
 
+  group('Validators.passwordLength (admin reset: the server only checks the length)', () {
+    test('requires a value', () {
+      expect(Validators.passwordLength(null), 'Password wajib diisi');
+      expect(Validators.passwordLength(''), 'Password wajib diisi');
+    });
+
+    test('needs at least 8 characters, nothing else', () {
+      expect(Validators.passwordLength('abc1234'), 'Password minimal 8 karakter');
+      expect(Validators.passwordLength('12345678'), isNull);
+      expect(Validators.passwordLength('abcdefgh'), isNull);
+    });
+  });
+
   group('Validators.confirmPassword', () {
     test('requires a value', () {
       expect(

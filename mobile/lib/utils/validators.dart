@@ -2,13 +2,15 @@
 ///
 /// Every validator has the `FormFieldValidator<String>` shape (returns an Indonesian error
 /// message, or null when the value is acceptable) so it can be passed straight to a
-/// `TextFormField`. The rules mirror the backend Zod schemas, so a value that passes here is not
-/// bounced by the server.
+/// `TextFormField`. The rules follow the backend Zod schemas where one exists (username, password,
+/// NIM / NIP, email), so a value that passes here is accepted by the server; where the server only
+/// requires the length (admin reset password) there is a separate validator, and the plate check is
+/// deliberately stricter than the server, which only normalises the plate.
 class Validators {
   Validators._();
 
   /// Indonesian plate: 1-2 region letters, 1-4 digits, 0-3 suffix letters, optional single spaces.
-  /// Matched against the trimmed value; the input field uppercases while typing.
+  /// Matched against [normalizePlat] of the value; the input field uppercases while typing.
   static final RegExp _platPattern = RegExp(
     r'^[A-Z]{1,2}\s?\d{1,4}\s?[A-Z]{0,3}$',
   );
@@ -28,8 +30,14 @@ class Validators {
   static const int minDurasiMenit = 1;
   static const int maxDurasiMenit = 240;
 
+  /// Trims the plate and collapses every run of whitespace inside it to one space (the letters are
+  /// left as typed). The form validates and submits this form.
+  static String normalizePlat(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   static String? platNomor(String? value) {
-    final String plat = value?.trim() ?? '';
+    final String plat = normalizePlat(value ?? '');
     if (plat.isEmpty) return 'Plat nomor wajib diisi';
     if (!_platPattern.hasMatch(plat)) {
       return 'Format plat nomor tidak valid. Contoh: D 1234 ABC';
@@ -61,7 +69,18 @@ class Validators {
     return null;
   }
 
-  /// At least 8 characters with a letter and a digit (same rule as the server).
+  /// Only the length rule (min 8): for the admin reset-password form, where the server checks
+  /// nothing else.
+  static String? passwordLength(String? value) {
+    if (value == null || value.isEmpty) return 'Password wajib diisi';
+    if (value.length < minPasswordLength) {
+      return 'Password minimal $minPasswordLength karakter';
+    }
+    return null;
+  }
+
+  /// At least 8 characters with a letter and a digit (same rule as the server's register, change
+  /// and reset-with-token schemas).
   static String? password(String? value) {
     if (value == null || value.isEmpty) return 'Password wajib diisi';
     if (value.length < minPasswordLength) {

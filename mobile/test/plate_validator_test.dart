@@ -23,6 +23,12 @@ void main() {
       expect(Validators.platNomor('  B 1234 ABC  '), isNull);
     });
 
+    test('collapses runs of whitespace inside the plate', () {
+      expect(Validators.platNomor('B  1234 AB'), isNull);
+      expect(Validators.platNomor('B   1234    ABC'), isNull);
+      expect(Validators.platNomor(' B\t1234  AB '), isNull);
+    });
+
     test('rejects an empty or blank plate as required', () {
       expect(Validators.platNomor(null), 'Plat nomor wajib diisi');
       expect(Validators.platNomor(''), 'Plat nomor wajib diisi');
@@ -37,8 +43,8 @@ void main() {
         'BBB 1234 A', // three region letters
         'B 12345 A', // five digits
         'B 1234 ABCD', // four suffix letters
-        'B-1234-AB', // separators other than a single space
-        'B  1234 AB', // double space
+        'B-1234-AB', // separators other than whitespace
+        'B 12 34 AB', // whitespace inside the digits
         'B 12A4 AB', // letter inside the digits
       ]) {
         expect(Validators.platNomor(plate), message, reason: plate);
@@ -50,6 +56,14 @@ void main() {
         Validators.platNomor('b 1234 abc'),
         'Format plat nomor tidak valid. Contoh: D 1234 ABC',
       );
+    });
+  });
+
+  group('Validators.normalizePlat', () {
+    test('trims and collapses whitespace to single spaces, keeping the letters as typed', () {
+      expect(Validators.normalizePlat('  B   1234\tAB  '), 'B 1234 AB');
+      expect(Validators.normalizePlat('B1234AB'), 'B1234AB');
+      expect(Validators.normalizePlat(''), '');
     });
   });
 
