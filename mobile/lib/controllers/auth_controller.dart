@@ -9,6 +9,9 @@ import '../models/user.dart';
 import '../utils/error_helper.dart';
 import 'package:mobile/utils/logger.dart';
 import '../app/auth_middleware.dart';
+import 'auth_result.dart';
+
+export 'auth_result.dart';
 
 class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
@@ -92,15 +95,16 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<bool> register(
+  /// Public registration: the server always creates a MAHASISWA.
+  Future<AuthResult> register(
     String username,
     String password,
-    String nama,
-    String role,
-    {String? nimNip}
-  ) async {
-    if (username.isEmpty || password.isEmpty || nama.isEmpty || role.isEmpty) {
-      return false;
+    String nama, {
+    String? nimNip,
+    String? email,
+  }) async {
+    if (username.isEmpty || password.isEmpty || nama.isEmpty) {
+      return const AuthResult.failure('Nama, username, dan password wajib diisi');
     }
     isLoading.value = true;
     try {
@@ -108,22 +112,19 @@ class AuthController extends GetxController {
         username: username,
         password: password,
         nama: nama,
-        role: role,
         nimNip: nimNip,
+        email: email,
       );
 
       if (result['status'] == 'success') {
-        return true;
+        return AuthResult.success(result['message']?.toString() ?? 'Akun berhasil dibuat');
       }
-      return false;
-    } on DioException catch (e) {
-      debugLog('❌ Register failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Registrasi Gagal');
-      return false;
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Registrasi gagal. Silakan coba lagi.',
+      );
     } catch (e) {
-      debugLog('❌ Register unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Registrasi Gagal');
-      return false;
+      debugLog('❌ Register failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
@@ -161,44 +162,56 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
-  Future<bool> forgotPassword(String username) async {
-    if (username.isEmpty) return false;
+
+  Future<AuthResult> forgotPassword(String username) async {
+    if (username.isEmpty) {
+      return const AuthResult.failure('Username atau email wajib diisi');
+    }
     isLoading.value = true;
     try {
       final result = await _authService.forgotPassword(username);
-      return result['status'] == 'success';
-    } on DioException catch (e) {
-      debugLog('❌ Forgot password failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Gagal Kirim Link');
-      return false;
+      if (result['status'] == 'success') {
+        return AuthResult.success(result['message']?.toString() ?? '');
+      }
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Terjadi kesalahan saat mengirim permintaan reset.',
+      );
     } catch (e) {
-      debugLog('❌ Forgot password unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Gagal Kirim Link');
-      return false;
+      debugLog('❌ Forgot password failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
   }
 
-  Future<bool> resetPassword(String token, String newPassword) async {
-    if (token.isEmpty || newPassword.isEmpty) return false;
+  Future<AuthResult> resetPassword(String token, String newPassword) async {
+    if (token.isEmpty || newPassword.isEmpty) {
+      return const AuthResult.failure('Token dan password baru wajib diisi');
+    }
     isLoading.value = true;
     try {
       final result = await _authService.resetPassword(
-        token: token, 
-        newPassword: newPassword
+        token: token,
+        newPassword: newPassword,
       );
-      return result['status'] == 'success';
-    } on DioException catch (e) {
-      debugLog('❌ Reset password failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Reset Password Gagal');
-      return false;
+      if (result['status'] == 'success') {
+        return AuthResult.success(result['message']?.toString() ?? '');
+      }
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Reset password gagal. Silakan coba lagi.',
+      );
     } catch (e) {
-      debugLog('❌ Reset password unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Reset Password Gagal');
-      return false;
+      debugLog('❌ Reset password failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
+  }
+
+  AuthResult _failureOf(Object error) {
+    return AuthResult.failure(
+      ErrorHelper.parseError(error),
+      isConnectionError: ErrorHelper.isConnectionError(error),
+    );
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
-import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
+import 'auth_feedback.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -14,60 +16,128 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  static const Color _primaryRed = Color(0xFFE63946);
+
   final AuthController _authController = Get.find<AuthController>();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _namaController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _nimController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _nimNipController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
+  late final TapGestureRecognizer _termsTap = TapGestureRecognizer()
+    ..onTap = _showTermsDialog;
+  late final TapGestureRecognizer _loginTap = TapGestureRecognizer()
+    ..onTap = () => Get.back();
 
   bool _isPasswordObscured = true;
-  String? _selectedRole;
-  final List<String> _roles = ['MAHASISWA', 'DOSEN'];
+  bool _isConfirmObscured = true;
   bool _isChecked = false;
+  bool _showTermsError = false;
 
   @override
   void dispose() {
     _namaController.dispose();
     _usernameController.dispose();
+    _emailController.dispose();
+    _nimController.dispose();
     _passwordController.dispose();
-    _nimNipController.dispose();
+    _confirmPasswordController.dispose();
+    _termsTap.dispose();
+    _loginTap.dispose();
     super.dispose();
   }
 
-  bool get _isFormValid {
-    return _formKey.currentState?.validate() == true &&
-        _selectedRole != null &&
-        _isChecked;
-  }
-
   Future<void> _handleRegister() async {
-    if (!_isFormValid) {
-      ErrorHelper.showError(
-        'Mohon lengkapi semua field dan setujui syarat & ketentuan',
-        title: 'Form Tidak Lengkap',
-      );
-      return;
-    }
+    FocusScope.of(context).unfocus();
 
-    final bool success = await _authController.register(
+    final bool formValid = _formKey.currentState?.validate() ?? false;
+    if (!_isChecked) {
+      setState(() => _showTermsError = true);
+    }
+    if (!formValid || !_isChecked) return;
+
+    // Public registration always creates a MAHASISWA, the server decides the role.
+    final AuthResult result = await _authController.register(
       _usernameController.text.trim(),
       _passwordController.text,
       _namaController.text.trim(),
-      _selectedRole!,
-      nimNip: _nimNipController.text.trim(),
+      nimNip: _nimController.text.trim(),
+      email: _emailController.text.trim(),
     );
+    if (!mounted) return;
 
-    if (!success) return;
+    if (result.success) {
+      Get.offAllNamed(AppRoutes.registerSuccess);
+      return;
+    }
+    showAuthFailure(result, title: 'Registrasi Gagal', onRetry: _handleRegister);
+  }
 
-    // Berhasil register - navigate ke success page
-    Get.offAllNamed(AppRoutes.registerSuccess);
+  void _showTermsDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Syarat dan Ketentuan',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const SingleChildScrollView(
+          child: Text(
+            '1. Akun ini hanya untuk Anda sendiri. Jaga kerahasiaan password '
+            'dan jangan membagikannya kepada siapa pun.\n\n'
+            '2. Data yang Anda isi (nama, username, NIM, dan email) harus benar '
+            'dan dapat dipertanggungjawabkan.\n\n'
+            '3. Data pribadi, lokasi, dan data biometrik wajah Anda hanya '
+            'digunakan untuk layanan kampus di aplikasi ini, seperti presensi '
+            'dan pengelolaan kendaraan.\n\n'
+            '4. Penyalahgunaan aplikasi, misalnya presensi atas nama orang lain '
+            'atau data palsu, dapat menyebabkan akun dinonaktifkan.\n\n'
+            '5. Hubungi admin jika Anda perlu mengubah atau menghapus data akun.',
+            style: TextStyle(height: 1.4),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _decoration({
+    required String label,
+    required IconData icon,
+    String? hint,
+    String? helper,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+      labelText: label,
+      hintText: hint,
+      helperText: helper,
+      helperMaxLines: 2,
+      errorMaxLines: 3,
+      labelStyle: const TextStyle(
+        color: Colors.grey,
+        fontWeight: FontWeight.w600,
+      ),
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: _primaryRed,
       body: SafeArea(
         child: Column(
           children: [
@@ -77,6 +147,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Row(
                 children: [
                   IconButton(
+                    tooltip: 'Kembali',
                     icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
                     onPressed: () {
                       Get.back();
@@ -113,19 +184,20 @@ class _RegisterPageState extends State<RegisterPage> {
                   child: SingleChildScrollView(
                     child: Form(
                       key: _formKey,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Selamat bergabung,',
                             style: TextStyle(
-                              color: Color(0xFFE63946),
+                              color: _primaryRed,
                               fontWeight: FontWeight.bold,
                               fontSize: 24,
                             ),
                           ),
                           const Text(
-                            'Halo, buat akun baru Anda',
+                            'Halo, buat akun mahasiswa Anda',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 20),
@@ -149,51 +221,62 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Nama Field
                           TextFormField(
                             controller: _namaController,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              labelText: 'Nama Lengkap',
-                              labelStyle: const TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              prefixIcon: const Icon(Icons.person_outline),
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            decoration: _decoration(
+                              label: 'Nama Lengkap',
+                              icon: Icons.person_outline,
                             ),
-                            validator: (String? value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Nama wajib diisi';
-                              }
-                              return null;
-                            },
+                            validator: Validators.nama,
                           ),
                           const SizedBox(height: 20),
 
                           // Username Field
                           TextFormField(
                             controller: _usernameController,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              labelText: 'Username',
-                              labelStyle: const TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              prefixIcon: const Icon(
-                                Icons.account_circle_outlined,
-                              ),
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                            decoration: _decoration(
+                              label: 'Username',
+                              icon: Icons.account_circle_outlined,
+                              helper:
+                                  'Diawali huruf; huruf, angka, dan underscore',
                             ),
-                            validator: (String? value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Username wajib diisi';
-                              }
-                              if (value.length < 3) {
-                                return 'Username minimal 3 karakter';
-                              }
-                              return null;
-                            },
+                            validator: Validators.username,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Email Field (opsional)
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                            decoration: _decoration(
+                              label: 'Email (opsional)',
+                              icon: Icons.email_outlined,
+                              helper:
+                                  'Dipakai untuk reset password. Tanpa email, hubungi admin saat lupa password.',
+                            ),
+                            validator: Validators.email,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // NIM Field (opsional)
+                          TextFormField(
+                            controller: _nimController,
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: _decoration(
+                              label: 'NIM (opsional)',
+                              icon: Icons.numbers_outlined,
+                              hint: 'Masukkan 11-12 digit angka',
+                            ),
+                            validator: (String? value) =>
+                                Validators.nimNip(value),
                           ),
                           const SizedBox(height: 20),
 
@@ -201,17 +284,15 @@ class _RegisterPageState extends State<RegisterPage> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _isPasswordObscured,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              labelText: 'Password',
-                              labelStyle: const TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              prefixIcon: const Icon(Icons.lock_outline),
+                            textInputAction: TextInputAction.next,
+                            decoration: _decoration(
+                              label: 'Password',
+                              icon: Icons.lock_outline,
+                              helper: 'Minimal 8 karakter, huruf dan angka',
                               suffixIcon: IconButton(
+                                tooltip: _isPasswordObscured
+                                    ? 'Tampilkan password'
+                                    : 'Sembunyikan password',
                                 icon: Icon(
                                   _isPasswordObscured
                                       ? Icons.visibility_off
@@ -225,79 +306,40 @@ class _RegisterPageState extends State<RegisterPage> {
                                 },
                               ),
                             ),
-                            validator: (String? value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Password wajib diisi';
-                              }
-                              if (value.length < 6) {
-                                return 'Password minimal 6 karakter';
-                              }
-                              return null;
-                            },
+                            validator: Validators.password,
                           ),
                           const SizedBox(height: 20),
 
-                          // Role Dropdown
-                          DropdownButtonFormField<String>(
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              labelText: 'Role/Peran',
-                              labelStyle: const TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              prefixIcon: const Icon(Icons.badge_outlined),
-                            ),
-                            value: _selectedRole,
-                            hint: const Text('Pilih role Anda...'),
-                            isExpanded: true,
-                            items: _roles.map((String role) {
-                              return DropdownMenuItem<String>(
-                                value: role,
-                                child: Text(role),
-                              );
-                            }).toList(),
-                            onChanged: (String? newValue) {
-                              setState(() {
-                                _selectedRole = newValue;
-                              });
-                            },
-                            validator: (String? value) {
-                              if (value == null) {
-                                return 'Role wajib dipilih';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // NIM/NIP Field
+                          // Konfirmasi Password Field
                           TextFormField(
-                            controller: _nimNipController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(15),
+                            controller: _confirmPasswordController,
+                            obscureText: _isConfirmObscured,
+                            textInputAction: TextInputAction.done,
+                            decoration: _decoration(
+                              label: 'Konfirmasi Password',
+                              icon: Icons.lock_reset_outlined,
+                              suffixIcon: IconButton(
+                                tooltip: _isConfirmObscured
+                                    ? 'Tampilkan password'
+                                    : 'Sembunyikan password',
+                                icon: Icon(
+                                  _isConfirmObscured
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.grey,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isConfirmObscured = !_isConfirmObscured;
+                                  });
+                                },
                               ),
-                              labelText: 'NIM/NIP',
-                              hintText: 'Masukkan 11-12 digit angka',
-                              labelStyle: const TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              prefixIcon: const Icon(Icons.numbers_outlined),
                             ),
-                            validator: (String? value) {
-                              if (value != null && value.isNotEmpty) {
-                                if (!RegExp(r'^\d{11,12}$').hasMatch(value)) {
-                                  return 'NIM/NIP harus 11 atau 12 digit angka';
-                                }
-                              }
-                              // Biarkan null (valid) jika kosong, opsional
-                              return null;
-                            },
+                            validator: (String? value) =>
+                                Validators.confirmPassword(
+                                  value,
+                                  _passwordController.text,
+                                ),
                           ),
                           const SizedBox(height: 20),
 
@@ -307,37 +349,31 @@ class _RegisterPageState extends State<RegisterPage> {
                             children: [
                               Checkbox(
                                 value: _isChecked,
-                                activeColor: const Color(0xFFE63946),
+                                activeColor: _primaryRed,
                                 onChanged: (bool? newValue) {
                                   setState(() {
-                                    _isChecked = newValue!;
+                                    _isChecked = newValue ?? false;
+                                    if (_isChecked) _showTermsError = false;
                                   });
                                 },
                               ),
                               Expanded(
                                 child: Padding(
                                   padding: const EdgeInsets.only(top: 12),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      children: <TextSpan>[
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: <InlineSpan>[
                                         const TextSpan(
                                           text:
                                               'Dengan membuat akun, Anda menyetujui ',
-                                          style: TextStyle(color: Colors.black),
                                         ),
                                         TextSpan(
                                           text: 'Syarat dan Ketentuan',
                                           style: const TextStyle(
-                                            color: Color(0xFFE63946),
+                                            color: _primaryRed,
                                             fontWeight: FontWeight.bold,
                                           ),
-                                          recognizer: TapGestureRecognizer()
-                                            ..onTap = () {
-                                              // TODO: Navigate to terms page
-                                              ErrorHelper.showInfo(
-                                                'Halaman Syarat dan Ketentuan',
-                                              );
-                                            },
+                                          recognizer: _termsTap,
                                         ),
                                       ],
                                     ),
@@ -346,6 +382,17 @@ class _RegisterPageState extends State<RegisterPage> {
                               ),
                             ],
                           ),
+                          if (_showTermsError)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 12, top: 4),
+                              child: Text(
+                                'Anda harus menyetujui Syarat dan Ketentuan',
+                                style: TextStyle(
+                                  color: Color(0xFFB3261E),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 10),
 
                           // Register Button
@@ -358,7 +405,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               child: ElevatedButton(
                                 onPressed: isLoading ? null : _handleRegister,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE63946),
+                                  backgroundColor: _primaryRed,
                                   disabledBackgroundColor: const Color(
                                     0xFFFAA0A0,
                                   ),
@@ -393,24 +440,20 @@ class _RegisterPageState extends State<RegisterPage> {
 
                           // Login Link
                           Center(
-                            child: RichText(
-                              text: TextSpan(
+                            child: Text.rich(
+                              TextSpan(
                                 style: const TextStyle(
-                                  color: Colors.black,
                                   fontWeight: FontWeight.w600,
                                 ),
-                                children: <TextSpan>[
+                                children: <InlineSpan>[
                                   const TextSpan(text: 'Sudah punya akun? '),
                                   TextSpan(
                                     text: 'Masuk',
                                     style: const TextStyle(
-                                      color: Color(0xFFE63946),
+                                      color: _primaryRed,
                                       fontWeight: FontWeight.bold,
                                     ),
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () {
-                                        Get.back();
-                                      },
+                                    recognizer: _loginTap,
                                   ),
                                 ],
                               ),

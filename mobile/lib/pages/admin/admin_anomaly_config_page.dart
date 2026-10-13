@@ -37,7 +37,6 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   Future<void> _saveSettings() async {
     final bool success = await _controller.updateAnomalySettings(
       _localJarangHadir.round(),
-      _controller.thresholdKehadiranGanda.value,
     );
     if (success) {
       Get.back();

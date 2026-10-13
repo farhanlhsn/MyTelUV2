@@ -2,14 +2,27 @@ import 'package:mobile/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../app/auth_middleware.dart';
 import '../services/auth_service.dart';
+import 'auth_result.dart';
+import '../utils/error_helper.dart';
+import '../utils/validators.dart';
 import 'package:mobile/utils/logger.dart';
 
 
 
 class AccountController extends GetxController {
-  final AuthService _authService = AuthService();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final AuthService _authService;
+  final FlutterSecureStorage _secureStorage;
+  final Future<void> Function() _reloadCredentials;
+
+  AccountController({
+    AuthService? authService,
+    FlutterSecureStorage? secureStorage,
+    Future<void> Function()? reloadCredentials,
+  }) : _authService = authService ?? AuthService(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _reloadCredentials = reloadCredentials ?? AuthMiddleware.loadCredentials;
   
   // State untuk loading
   var isLoading = false.obs;
@@ -104,37 +117,44 @@ class AccountController extends GetxController {
 
   // Fungsi Ganti Password - Now using real API
   Future<void> changePassword() async {
-    if (oldPasswordController.text.isEmpty || newPasswordController.text.isEmpty) {
+    final AuthResult result = await submitPasswordChange();
+
+    if (result.success) {
+      Get.snackbar(
+        "Berhasil",
+        result.message,
+        backgroundColor: Colors.green.shade100,
+        colorText: Colors.green.shade900,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } else {
       Get.snackbar(
         "Error",
-        "Password lama dan baru harus diisi",
+        result.message,
         backgroundColor: Colors.red.shade100,
         colorText: Colors.red,
         snackPosition: SnackPosition.BOTTOM,
       );
-      return;
+    }
+  }
+
+  /// Validates the form, changes the password and keeps this device logged in. Returns the
+  /// outcome instead of showing it, so [changePassword] owns the feedback.
+  ///
+  /// The server revokes every refresh token of the user and answers with a fresh token pair; it
+  /// is saved here (same storage keys as login) or the next token refresh would log this device out.
+  Future<AuthResult> submitPasswordChange() async {
+    if (oldPasswordController.text.isEmpty || newPasswordController.text.isEmpty) {
+      return const AuthResult.failure('Password lama dan baru harus diisi');
     }
 
     if (newPasswordController.text != confirmPasswordController.text) {
-      Get.snackbar(
-        "Error",
-        "Konfirmasi password tidak cocok",
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
+      return const AuthResult.failure('Konfirmasi password tidak cocok');
     }
 
-    if (newPasswordController.text.length < 6) {
-      Get.snackbar(
-        "Error",
-        "Password baru minimal 6 karakter",
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
+    final String? passwordError = Validators.password(newPasswordController.text);
+    if (passwordError != null) {
+      return AuthResult.failure(passwordError);
     }
 
     isLoading.value = true;
@@ -145,32 +165,39 @@ class AccountController extends GetxController {
         newPassword: newPasswordController.text,
       );
 
-      if (result['status'] == 'success') {
-        // Reset field password setelah berhasil
-        oldPasswordController.clear();
-        newPasswordController.clear();
-        confirmPasswordController.clear();
-
-        Get.snackbar(
-          "Berhasil",
-          "Password berhasil diubah",
-          backgroundColor: Colors.green.shade100,
-          colorText: Colors.green.shade900,
-          snackPosition: SnackPosition.BOTTOM,
+      if (result['status'] != 'success') {
+        return AuthResult.failure(
+          result['message']?.toString() ?? 'Gagal ubah password',
         );
-      } else {
-        throw Exception(result['message'] ?? 'Gagal ubah password');
       }
+
+      await _storeRefreshedSession(result['data']);
+
+      // Reset field password setelah berhasil
+      oldPasswordController.clear();
+      newPasswordController.clear();
+      confirmPasswordController.clear();
+
+      return const AuthResult.success('Password berhasil diubah');
     } catch (e) {
-      Get.snackbar(
-        "Error",
-        e.toString().replaceAll('Exception: ', ''),
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red,
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      return AuthResult.failure(ErrorHelper.parseError(e));
     } finally {
       isLoading.value = false;
     }
+  }
+
+  /// Saves the token pair the server returns after a password change (same keys as login).
+  Future<void> _storeRefreshedSession(dynamic data) async {
+    if (data is! Map) return;
+    final String token = data['token'] as String? ?? '';
+    final String refreshToken = data['refresh_token'] as String? ?? '';
+    if (token.isEmpty) return;
+
+    await _secureStorage.write(key: 'token', value: token);
+    if (refreshToken.isNotEmpty) {
+      await _secureStorage.write(key: 'refresh_token', value: refreshToken);
+    }
+    // Route guard reads the token expiry from a cache that still holds the old token.
+    await _reloadCredentials();
   }
 }

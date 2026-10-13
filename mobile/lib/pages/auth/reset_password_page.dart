@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
+import 'auth_feedback.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
@@ -16,34 +19,45 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   bool _isPasswordObscured = true;
+  bool _isConfirmObscured = true;
 
   @override
   void dispose() {
     _tokenController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleResetPassword() async {
+    FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() != true) return;
 
-    final success = await _authController.resetPassword(
+    final AuthResult result = await _authController.resetPassword(
       _tokenController.text.trim(),
       _passwordController.text,
     );
-    
-    if (success) {
-      Get.snackbar(
-        'Berhasil', 
+    if (!mounted) return;
+
+    if (result.success) {
+      // Navigate first: the toast is only a courtesy and must never keep the user on this page.
+      Get.offAllNamed(AppRoutes.login);
+      ErrorHelper.showSuccess(
         'Password Anda berhasil diubah. Silakan login dengan password baru.',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
       );
-      Get.offAllNamed('/login');
-    } else {
-      ErrorHelper.showError('Token tidak valid atau sudah kadaluwarsa.');
+      return;
     }
+
+    // The message tells an invalid / expired token (server said no) apart from a dead
+    // connection (the request never arrived); the controller shows nothing itself.
+    showAuthFailure(
+      result,
+      title: 'Reset Password Gagal',
+      onRetry: _handleResetPassword,
+    );
   }
 
   @override
@@ -55,10 +69,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(25.0),
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -78,6 +93,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 const SizedBox(height: 30),
                 TextFormField(
                   controller: _tokenController,
+                  autocorrect: false,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
@@ -86,7 +103,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     prefixIcon: const Icon(Icons.key),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'Token wajib diisi';
                     }
                     return null;
@@ -96,14 +113,23 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _isPasswordObscured,
+                  textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
                     labelText: 'Password Baru',
+                    helperText: 'Minimal 8 karakter, huruf dan angka',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_isPasswordObscured ? Icons.visibility_off : Icons.visibility),
+                      tooltip: _isPasswordObscured
+                          ? 'Tampilkan password'
+                          : 'Sembunyikan password',
+                      icon: Icon(
+                        _isPasswordObscured
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
                       onPressed: () {
                         setState(() {
                           _isPasswordObscured = !_isPasswordObscured;
@@ -111,15 +137,39 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       },
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Password wajib diisi';
-                    }
-                    if (value.length < 6) {
-                      return 'Minimal 6 karakter';
-                    }
-                    return null;
-                  },
+                  validator: Validators.password,
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _isConfirmObscured,
+                  textInputAction: TextInputAction.done,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    labelText: 'Konfirmasi Password Baru',
+                    prefixIcon: const Icon(Icons.lock_reset_outlined),
+                    suffixIcon: IconButton(
+                      tooltip: _isConfirmObscured
+                          ? 'Tampilkan password'
+                          : 'Sembunyikan password',
+                      icon: Icon(
+                        _isConfirmObscured
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isConfirmObscured = !_isConfirmObscured;
+                        });
+                      },
+                    ),
+                  ),
+                  validator: (value) => Validators.confirmPassword(
+                    value,
+                    _passwordController.text,
+                  ),
                 ),
                 const SizedBox(height: 30),
                 Obx(() {
@@ -127,7 +177,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _authController.isLoading.value ? null : _handleResetPassword,
+                      onPressed: _authController.isLoading.value
+                          ? null
+                          : _handleResetPassword,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE63946),
                         shape: RoundedRectangleBorder(
@@ -138,7 +190,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               'Ganti Password',
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                     ),
                   );

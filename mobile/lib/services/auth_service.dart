@@ -7,7 +7,9 @@ import 'package:mobile/utils/logger.dart';
 
 
 class AuthService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  AuthService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   Future<Map<String, dynamic>> login({
     required String username,
@@ -44,21 +46,24 @@ class AuthService {
     }
   }
 
+  /// Public registration. The server always creates a MAHASISWA, so no role is sent.
   Future<Map<String, dynamic>> register({
     required String username,
     required String password,
     required String nama,
-    required String role,
     String? nimNip,
+    String? email,
   }) async {
     final Map<String, dynamic> data = {
       'username': username,
       'password': password,
       'nama': nama,
-      'role': role,
     };
     if (nimNip != null && nimNip.isNotEmpty) {
       data['nim_nip'] = nimNip;
+    }
+    if (email != null && email.isNotEmpty) {
+      data['email'] = email;
     }
 
     final Response<dynamic> response = await _dio.post<dynamic>(

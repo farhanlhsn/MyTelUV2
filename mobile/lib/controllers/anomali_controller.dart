@@ -18,7 +18,6 @@ class AnomaliController extends GetxController {
   final RxBool lastScanFailed = false.obs;
 
   final RxInt thresholdJarangHadir = 50.obs;
-  final RxInt thresholdKehadiranGanda = 10.obs;
 
   Future<void> getAnomalySettings() async {
     isLoading.value = true;
@@ -31,7 +30,6 @@ class AnomaliController extends GetxController {
         final body = response.data as Map<String, dynamic>? ?? {};
         final data = body['data'] as Map<String, dynamic>? ?? {};
         thresholdJarangHadir.value = data['threshold_jarang_hadir'] as int? ?? 50;
-        thresholdKehadiranGanda.value = data['threshold_kehadiran_ganda'] as int? ?? 10;
       }
     } on DioException catch (e) {
       debugLog('Error getAnomalySettings: $e');
@@ -41,20 +39,20 @@ class AnomaliController extends GetxController {
     }
   }
 
-  Future<bool> updateAnomalySettings(int jarangHadir, int ganda) async {
+  /// Only the "jarang hadir" threshold is configurable; the server no longer uses a
+  /// double-attendance threshold, so it is neither shown nor sent.
+  Future<bool> updateAnomalySettings(int jarangHadir) async {
     isLoading.value = true;
     try {
       final Response<dynamic> response = await ApiClient.dio.put<dynamic>(
         '/api/v1/anomali/settings',
         data: {
           'threshold_jarang_hadir': jarangHadir,
-          'threshold_kehadiran_ganda': ganda,
         },
       );
 
       if (response.statusCode == 200) {
         thresholdJarangHadir.value = jarangHadir;
-        thresholdKehadiranGanda.value = ganda;
         return true;
       }
       return false;

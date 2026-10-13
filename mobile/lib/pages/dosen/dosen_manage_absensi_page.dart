@@ -2,9 +2,12 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
 import '../common/error_retry_view.dart';
 import '../common/geofence_picker_page.dart';
 import 'dosen_sesi_detail_page.dart';
@@ -116,12 +119,23 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     final matakuliah = kelas['matakuliah'] as Map<String, dynamic>?;
     final namaMk = matakuliah?['nama_matakuliah'] ?? '';
 
-    int durasiMenit = 30;
+    final durasiController = TextEditingController(text: '30');
     bool requireFace = false;
     double? selectedLat;
     double? selectedLng;
     int selectedRadius = 100;
     String? locationName;
+
+    // Why the "Buka Absensi" button is disabled (null = it can be pressed).
+    String? disabledReason() {
+      if (selectedLat == null) {
+        return 'Pilih lokasi geofence terlebih dahulu untuk membuka sesi.';
+      }
+      if (Validators.durasiMenit(durasiController.text) != null) {
+        return 'Perbaiki durasi (1-240 menit) untuk membuka sesi.';
+      }
+      return null;
+    }
 
     showDialog(
       context: context,
@@ -134,10 +148,16 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
               children: [
                 // Durasi
                 TextFormField(
-                  initialValue: durasiMenit.toString(),
-                  decoration: const InputDecoration(labelText: 'Durasi (menit)'),
+                  controller: durasiController,
+                  decoration: const InputDecoration(
+                    labelText: 'Durasi (menit)',
+                    helperText: 'Antara 1 dan 240 menit',
+                  ),
                   keyboardType: TextInputType.number,
-                  onChanged: (v) => durasiMenit = int.tryParse(v) ?? 30,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: Validators.durasiMenit,
+                  onChanged: (_) => setDialogState(() {}),
                 ),
                 const SizedBox(height: 16),
 
@@ -193,6 +213,16 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                   activeColor: primaryRed,
                   contentPadding: EdgeInsets.zero,
                 ),
+
+                // Tell the user why the button below is greyed out
+                if (disabledReason() != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      disabledReason()!,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -202,11 +232,11 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              onPressed: selectedLat == null
+              onPressed: disabledReason() != null
                   ? null
                   : () => _openAbsensi(
                         idKelas: idKelas,
-                        durasiMenit: durasiMenit,
+                        durasiMenit: int.parse(durasiController.text.trim()),
                         latitude: selectedLat!,
                         longitude: selectedLng!,
                         radiusMeter: selectedRadius,
@@ -250,7 +280,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
       if (result['status'] == 'success') {
         ErrorHelper.showSuccess(
-          'Sesi absensi dibuka sampai ${selesai.hour}:${selesai.minute.toString().padLeft(2, '0')}',
+          'Sesi absensi dibuka sampai ${formatWibTime(selesai)} WIB',
         );
         // Refresh sesi list
         _loadSesiForKelas(idKelas);
@@ -623,9 +653,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    mulai != null
-                        ? '${mulai.day}/${mulai.month}/${mulai.year} ${mulai.hour.toString().padLeft(2, '0')}:${mulai.minute.toString().padLeft(2, '0')}'
-                        : '-',
+                    mulai != null ? formatWibDateTime(mulai) : '-',
                     style: const TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 13,

@@ -98,16 +98,16 @@ class MockAuthService extends _i1.Mock implements _i3.AuthService {
     required String? username,
     required String? password,
     required String? nama,
-    required String? role,
     String? nimNip,
+    String? email,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#register, [], {
               #username: username,
               #password: password,
               #nama: nama,
-              #role: role,
               #nimNip: nimNip,
+              #email: email,
             }),
             returnValue: _i4.Future<Map<String, dynamic>>.value(
               <String, dynamic>{},
