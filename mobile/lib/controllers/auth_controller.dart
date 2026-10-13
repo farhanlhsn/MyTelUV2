@@ -7,6 +7,8 @@ import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../models/user.dart';
 import '../utils/error_helper.dart';
+import '../utils/jadwal_cache.dart';
+import '../utils/user_scoped_controllers.dart';
 import 'package:mobile/utils/logger.dart';
 import '../app/auth_middleware.dart';
 import 'auth_result.dart';
@@ -20,6 +22,7 @@ class AuthController extends GetxController {
   final Future<void> Function() _registerNotificationToken;
   final Future<void> Function() _unregisterNotificationToken;
   final Future<void> Function(int? idUser) _clearNotificationInbox;
+  final Future<void> Function() _clearScheduleCache;
 
   AuthController({
     AuthService? authService, 
@@ -27,11 +30,13 @@ class AuthController extends GetxController {
     Future<void> Function()? registerNotificationToken,
     Future<void> Function()? unregisterNotificationToken,
     Future<void> Function(int? idUser)? clearNotificationInbox,
+    Future<void> Function()? clearScheduleCache,
   }) : _authService = authService ?? AuthService(),
        _secureStorage = secureStorage ?? const FlutterSecureStorage(),
        _registerNotificationToken = registerNotificationToken ?? NotificationService.registerToken,
        _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken,
-       _clearNotificationInbox = clearNotificationInbox ?? NotificationService.clearInbox;
+       _clearNotificationInbox = clearNotificationInbox ?? NotificationService.clearInbox,
+       _clearScheduleCache = clearScheduleCache ?? JadwalCache.clear;
 
   Future<bool> login(String username, String password) async {
     if (username.isEmpty || password.isEmpty) {
@@ -161,6 +166,16 @@ class AuthController extends GetxController {
 
       // The notification inbox is local to this phone: it must not outlive the session
       await _clearNotificationInbox(idUser);
+
+      // Whoever logs in next on this phone must not see this user's Home, scans or profile, nor
+      // their saved schedule (the offline copy). The user is logged out already: a cache that cannot
+      // be cleared must not turn this into a failed logout.
+      await deleteUserScopedControllers();
+      try {
+        await _clearScheduleCache();
+      } catch (e) {
+        debugLog('Failed to clear the saved schedule: $e');
+      }
 
       return true;
     } catch (e) {

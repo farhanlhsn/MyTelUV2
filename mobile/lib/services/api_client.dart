@@ -7,9 +7,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:mobile/app/auth_middleware.dart';
 import 'package:mobile/controllers/notification_controller.dart';
+import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/jadwal_cache.dart';
 import 'package:mobile/utils/logger.dart';
 import 'package:mobile/utils/notification_inbox.dart';
 import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/user_scoped_controllers.dart';
 
 /// Environment configuration for API URLs.
 ///
@@ -78,6 +81,10 @@ enum _RefreshResult {
 
 class ApiClient {
   static final String baseUrl = AppConfig.baseUrl;
+
+  /// The same for the client and for the call that refreshes the token: a refresh that hangs
+  /// would hold every request that waits on it.
+  static const Duration _timeout = Duration(seconds: 30);
   static FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   static Dio? _dioInstance;
@@ -143,9 +150,9 @@ class ApiClient {
       _dioInstance = Dio(
         BaseOptions(
           baseUrl: baseUrl,
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 30),
-          sendTimeout: const Duration(seconds: 30),
+          connectTimeout: _timeout,
+          receiveTimeout: _timeout,
+          sendTimeout: _timeout,
           headers: <String, dynamic>{'Content-Type': 'application/json'},
         ),
       );
@@ -214,10 +221,18 @@ class ApiClient {
 
               if (refresh == _RefreshResult.unavailable) {
                 // The refresh could not be asked (timeout, no connection, server error): the session
-                // may well be fine, so nothing is wiped and nobody is logged out. The caller gets
-                // the error of its own request and can try again.
+                // may well be fine, so nothing is wiped and nobody is logged out. The caller's
+                // request fails with a network-style error that says so: the 401 it got ("Token
+                // tidak valid") would read like a session that ended.
                 debugLog('Token refresh unavailable, keeping the session');
-                return handler.next(error);
+                return handler.next(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.connectionError,
+                    error: const SessionRefreshUnavailable(),
+                    message: SessionRefreshUnavailable.message,
+                  ),
+                );
               }
 
               if (!_sessionEnding) {
@@ -269,7 +284,14 @@ class ApiClient {
       }
 
       debugLog('Attempting to refresh token...');
-      final Dio refreshDio = Dio(BaseOptions(baseUrl: AppConfig.baseUrl));
+      final Dio refreshDio = Dio(
+        BaseOptions(
+          baseUrl: AppConfig.baseUrl,
+          connectTimeout: _timeout,
+          receiveTimeout: _timeout,
+          sendTimeout: _timeout,
+        ),
+      );
       if (httpAdapterOverride != null) {
         refreshDio.httpClientAdapter = httpAdapterOverride!;
       }
@@ -325,7 +347,8 @@ class ApiClient {
   }
 
   /// The session is gone: wipes what belongs to it on this phone, the route middleware's copy of it,
-  /// the notification inbox of that user and, last, the stored login. Every step has its own try, so
+  /// the notification inbox of that user, the controllers that hold their data, the saved
+  /// schedule and, last, the stored login. Every step has its own try, so
   /// one that fails does not skip the others, and the caller still gets to the login page.
   static Future<void> _endSession() async {
     // Whose inbox to clear: read while the storage still has it (never throws)
@@ -340,6 +363,9 @@ class ApiClient {
         Get.find<NotificationController>().reset();
       }
     });
+    // Home, anomaly scan, profile...: the next login must not see this user's copy of them
+    await _guardStep('user controllers', deleteUserScopedControllers);
+    await _guardStep('saved schedule', JadwalCache.clear);
     await _guardStep('secure storage', () => _secureStorage.deleteAll());
   }
 

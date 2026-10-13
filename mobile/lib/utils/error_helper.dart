@@ -4,6 +4,20 @@ import 'package:dio/dio.dart';
 import './app_theme.dart';
 import './server_messages.dart';
 
+/// The access token ran out and the server could not be asked for a new one (timeout, no connection,
+/// 5xx, 429): nothing is known about the session, which may well be fine. Carried as the `error` of
+/// the DioException a request fails with, so the user reads "try again" instead of the server's 401
+/// text ("Token tidak valid"), which sounds like a session that ended.
+class SessionRefreshUnavailable implements Exception {
+  const SessionRefreshUnavailable();
+
+  static const String message =
+      'Tidak dapat memperbarui sesi. Periksa koneksi lalu coba lagi.';
+
+  @override
+  String toString() => message;
+}
+
 /// Utility class untuk menangani error secara konsisten di seluruh aplikasi
 class ErrorHelper {
   /// Key of the app's ScaffoldMessenger (given to the GetMaterialApp in app.dart). The toasts are
@@ -198,6 +212,10 @@ class ErrorHelper {
 
   /// Parse DioException untuk pesan yang lebih user-friendly
   static String _parseDioError(DioException error) {
+    if (error.error is SessionRefreshUnavailable) {
+      return SessionRefreshUnavailable.message;
+    }
+
     // Handle berdasarkan tipe error
     switch (error.type) {
       case DioExceptionType.connectionTimeout:

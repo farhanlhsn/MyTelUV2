@@ -6,14 +6,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:mobile/app/auth_middleware.dart';
+import 'package:mobile/controllers/home_controller.dart';
 import 'package:mobile/controllers/notification_controller.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/jadwal_cache.dart';
 import 'package:mobile/utils/notification_inbox.dart';
 import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_controller_test.mocks.dart';
 import 'support/stub_http_adapter.dart';
+import 'support/user_scoped_controllers.dart';
 
 /// A token shaped like the server's JWT: only the `exp` claim matters to the middleware cache.
 String _jwtExpiringAt(DateTime expiry) {
@@ -492,17 +496,30 @@ void main() {
           NotificationInbox.notificationsKey(7): '[]',
         });
         AuthMiddleware.cachedToken = 'access-old';
+        putUserScopedControllers();
         final adapter = _ScriptedAdapter(<Object>[(401, unauthorized), outage.value]);
         final dio = clientWith(adapter);
 
         final Object? error = await failureOf(dio).timeout(const Duration(seconds: 2));
 
-        // the request of the caller fails with the answer it got, to be shown like any error
+        // The caller must not read the server's 401 text ("Token tidak valid" sounds like a session
+        // that ended): the failure is a network-style one that says the session could not be
+        // renewed right now, and nothing of the 401 is attached to it
         expect(
           error,
-          isA<DioException>().having((e) => e.response?.statusCode, 'status', 401),
+          isA<DioException>()
+              .having((e) => e.type, 'type', DioExceptionType.connectionError)
+              .having((e) => e.response, 'response', isNull),
           reason: outage.key,
         );
+        expect(
+          ErrorHelper.parseError(error),
+          'Tidak dapat memperbarui sesi. Periksa koneksi lalu coba lagi.',
+          reason: outage.key,
+        );
+        expect(ErrorHelper.isConnectionError(error), isTrue, reason: outage.key);
+        // the user is still logged in: what holds their data stays
+        expect(registeredUserScopedControllers(), hasLength(4), reason: outage.key);
         expect(adapter.requests.map((r) => r.path), <String>[
           '/api/v1/akademik/kelas',
           '/api/v1/auth/refresh',
@@ -524,7 +541,32 @@ void main() {
       final Object? error = await failureOf(dio).timeout(const Duration(seconds: 2));
 
       expect(error, isA<DioException>());
+      expect(
+        ErrorHelper.parseError(error),
+        'Tidak dapat memperbarui sesi. Periksa koneksi lalu coba lagi.',
+      );
       expectSessionKept();
+    });
+
+    test('the refresh call has the same timeouts as the main client', () async {
+      final adapter = _ScriptedAdapter(<Object>[
+        (401, unauthorized), // GET /kelas
+        (200, refreshOk), // POST /auth/refresh
+        (200, <String, dynamic>{'status': 'success', 'data': <dynamic>[]}), // the retry
+      ]);
+      final dio = clientWith(adapter);
+
+      await dio.get<dynamic>('/api/v1/akademik/kelas');
+
+      final RequestOptions refresh = adapter.requests.firstWhere(
+        (RequestOptions r) => r.path.endsWith('/auth/refresh'),
+      );
+      expect(refresh.connectTimeout, const Duration(seconds: 30));
+      expect(refresh.receiveTimeout, const Duration(seconds: 30));
+      expect(refresh.sendTimeout, const Duration(seconds: 30));
+      expect(refresh.connectTimeout, dio.options.connectTimeout);
+      expect(refresh.receiveTimeout, dio.options.receiveTimeout);
+      expect(refresh.sendTimeout, dio.options.sendTimeout);
     });
 
     test('the next request can still refresh and succeed', () async {
@@ -683,6 +725,48 @@ void main() {
       verify(storage.deleteAll()).called(1);
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey(NotificationInbox.notificationsKey(7)), isFalse);
+      expect(sessionExpiredCalls, 1);
+    });
+
+    test('the controllers that hold user data are deleted: the next login starts clean', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+      putUserScopedControllers();
+      expect(registeredUserScopedControllers(), hasLength(4), reason: 'precondition');
+
+      await expireSession();
+
+      expect(registeredUserScopedControllers(), isEmpty);
+      verify(storage.deleteAll()).called(1);
+    });
+
+    test('the saved schedule goes too: the next login must not get it offline', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        JadwalCacheKeys.kelasHariIni: '[]',
+        JadwalCacheKeys.kelasHariIniTs: '2026-10-14T01:00:00.000',
+        JadwalCacheKeys.jadwalMingguan: '{}',
+        JadwalCacheKeys.jadwalMingguanTs: '2026-10-14T01:00:00.000',
+      });
+
+      await expireSession();
+
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getKeys().where((String k) => k.startsWith('cache_')),
+        isEmpty,
+      );
+      verify(storage.deleteAll()).called(1);
+    });
+
+    test('a controller that breaks on close does not skip the storage wipe', () async {
+      when(storage.read(key: 'id_user')).thenAnswer((_) async => '7');
+      SharedPreferences.setMockInitialValues(inboxes());
+      Get.put<HomeController>(BrokenOnCloseHomeController());
+
+      await expireSession();
+
+      verify(storage.deleteAll()).called(1);
       expect(sessionExpiredCalls, 1);
     });
 

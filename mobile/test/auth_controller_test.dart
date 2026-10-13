@@ -5,10 +5,12 @@ import 'package:mobile/app/auth_middleware.dart';
 import 'package:mobile/controllers/auth_controller.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:get/get.dart';
 
 // Generate mocks
 @GenerateNiceMocks([MockSpec<AuthService>(), MockSpec<FlutterSecureStorage>()])
 import 'auth_controller_test.mocks.dart';
+import 'support/user_scoped_controllers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +18,11 @@ void main() {
   late MockAuthService mockAuthService;
   late MockFlutterSecureStorage mockSecureStorage;
   late List<int?> clearedInboxes;
+  late int scheduleCacheClears;
 
   setUp(() {
     clearedInboxes = <int?>[];
+    scheduleCacheClears = 0;
     mockAuthService = MockAuthService();
     mockSecureStorage = MockFlutterSecureStorage();
     
@@ -29,10 +33,14 @@ void main() {
       registerNotificationToken: () async {},
       unregisterNotificationToken: () async {},
       clearNotificationInbox: (int? idUser) async => clearedInboxes.add(idUser),
+      clearScheduleCache: () async => scheduleCacheClears++,
     );
   });
 
-  tearDown(AuthMiddleware.clearCredentials);
+  tearDown(() {
+    AuthMiddleware.clearCredentials();
+    Get.reset();
+  });
 
   group('AuthController', () {
     test('login success should return true and save token', () async {
@@ -85,6 +93,46 @@ void main() {
       expect(result, true);
       verify(mockSecureStorage.delete(key: 'token')).called(1);
       verify(mockAuthService.logout()).called(1);
+    });
+
+    test('logout deletes the controllers that hold user data, so the next user starts clean', () async {
+      putUserScopedControllers();
+      expect(registeredUserScopedControllers(), hasLength(4), reason: 'precondition');
+
+      final result = await authController.logout();
+
+      expect(result, true);
+      expect(registeredUserScopedControllers(), isEmpty);
+    });
+
+    test('logout clears the saved schedule: the next user must not get it offline', () async {
+      final result = await authController.logout();
+
+      expect(result, true);
+      expect(scheduleCacheClears, 1);
+    });
+
+    test('a schedule cache that cannot be cleared does not fail the logout', () async {
+      final AuthController controller = AuthController(
+        authService: mockAuthService,
+        secureStorage: mockSecureStorage,
+        registerNotificationToken: () async {},
+        unregisterNotificationToken: () async {},
+        clearNotificationInbox: (int? idUser) async {},
+        clearScheduleCache: () async => throw Exception('prefs rusak'),
+      );
+
+      expect(await controller.logout(), true);
+    });
+
+    test('a logout that failed keeps them: the user is still logged in', () async {
+      when(mockAuthService.logout(refreshToken: anyNamed('refreshToken'))).thenThrow(Exception('offline'));
+      putUserScopedControllers();
+
+      final result = await authController.logout();
+
+      expect(result, false);
+      expect(registeredUserScopedControllers(), hasLength(4));
     });
 
     test('logout clears the local notification inbox of the user who logs out', () async {
