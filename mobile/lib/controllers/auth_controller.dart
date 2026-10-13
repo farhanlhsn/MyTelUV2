@@ -71,7 +71,7 @@ class AuthController extends GetxController {
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
-      await AuthMiddleware.loadCredentials();
+      await AuthMiddleware.loadCredentials(storage: _secureStorage);
 
       debugLog(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',

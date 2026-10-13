@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:mobile/app/auth_middleware.dart';
 import 'package:mobile/controllers/auth_controller.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -31,6 +32,8 @@ void main() {
     );
   });
 
+  tearDown(AuthMiddleware.clearCredentials);
+
   group('AuthController', () {
     test('login success should return true and save token', () async {
       // Arrange
@@ -48,7 +51,8 @@ void main() {
 
       when(mockAuthService.login(username: username, password: password))
           .thenAnswer((_) async => mockResponse);
-          
+      when(mockSecureStorage.read(key: 'token')).thenAnswer((_) async => 'mock_token');
+
       // Act
       final result = await authController.login(username, password);
 
@@ -56,6 +60,8 @@ void main() {
       expect(result, true);
       verify(mockSecureStorage.write(key: 'token', value: 'mock_token')).called(1);
       verify(mockSecureStorage.write(key: 'username', value: 'testuser')).called(1);
+      // The route guard reads the session from the same (injected) storage, not from a real plugin
+      expect(AuthMiddleware.cachedToken, 'mock_token');
     });
 
     test('login failure (invalid credentials) should return false', () async {
