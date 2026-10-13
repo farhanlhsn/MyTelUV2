@@ -321,6 +321,7 @@ model Absensi {
   @@index([type_absensi], map: "idx_absensi_type")
   @@index([deletedAt], map: "idx_absensi_deleted")
   @@index([createdAt], map: "idx_absensi_created")
+  @@unique([id_user, id_sesi_absensi], map: "uq_absensi_user_sesi")
   @@map("absensi")
 }
 

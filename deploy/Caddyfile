@@ -1,4 +1,8 @@
 # Docker internal router
+#
+# Only the backend is reachable through this proxy. The Python AI services (face, plate, anomaly)
+# are internal: the backend calls them over the Docker network with X-API-Key, and they are
+# deliberately NOT routed here.
 
 :80 {
     # Enable compression
@@ -9,27 +13,15 @@
         reverse_proxy backend:5050
     }
 
-    # Face Recognition Service
-    handle /face/* {
-        uri strip_prefix /face
-        reverse_proxy face-recognition:5051
+    # Realtime (Socket.IO): WebSocket upgrades are proxied transparently by reverse_proxy
+    handle /socket.io/* {
+        reverse_proxy backend:5050
     }
 
-    # Plate Recognition Service
-    handle /plate/* {
-        uri strip_prefix /plate
-        reverse_proxy plate-recognition:5001
-    }
-
-    # Anomaly Detection Service
-    handle /anomaly/* {
-        uri strip_prefix /anomaly
-        reverse_proxy anomaly-detection:5003
-    }
-
-    # Health check endpoint
+    # Health check endpoint: answered by the backend (503 when the database is down), so the
+    # deploy health check proves the whole chain caddy -> backend -> database, not just caddy
     handle /health {
-        respond "OK" 200
+        reverse_proxy backend:5050
     }
 
     # Default response for root

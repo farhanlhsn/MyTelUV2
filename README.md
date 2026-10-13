@@ -147,6 +147,25 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 Compose production menjalankan backend, face recognition, plate recognition, dan anomaly detection. Backend health check memakai `FACE_API_URL`, `PLATE_API_URL`, dan `ANOMALY_SERVICE_URL`.
 
+### Deploy production
+
+Deploy berjalan otomatis lewat `.github/workflows/deploy-backend.yml` setelah workflow CI sukses di `main` (atau manual lewat `workflow_dispatch`). Urutannya di VPS (`/opt/myteluv2`):
+
+1. `git reset --hard <SHA yang diuji CI>` (bukan `origin/main` terbaru).
+2. `.env` wajib sudah ada di server. Jika tidak ada, deploy gagal (tidak pernah disalin dari `.env.example`).
+3. `docker compose -f docker-compose.prod.yml build`, lalu migrasi database dengan image baru **sebelum** container baru dijalankan:
+   `docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma`
+   Jika migrasi gagal, deploy berhenti dan container lama tetap berjalan.
+4. `docker compose -f docker-compose.prod.yml up -d`.
+5. Health check: `curl -fsS http://127.0.0.1:8880/health` diulang hingga 30 kali tiap 5 detik. Caddy meneruskan `/health` ke backend, yang menjawab `503` bila database tidak tersedia, sehingga deploy dinyatakan gagal.
+
+Catatan penting:
+
+- **`DATABASE_URL` harus URL Postgres langsung** (`postgresql://...`) karena `prisma migrate deploy` membutuhkan koneksi langsung. `backend/prisma/schema.prisma` belum memakai `directUrl`; jika produksi memakai Prisma Accelerate (`prisma://...`), tambahkan `directUrl = env("DIRECT_URL")` pada datasource, isi `DIRECT_URL` dengan URL Postgres langsung di `.env`, dan sesuaikan `backend/prisma.config.ts`.
+- Image backend sengaja tetap membawa Prisma CLI (`npm ci --omit=dev` mempertahankannya karena dependensi opsional `@prisma/client`), dan build gagal bila CLI itu hilang.
+- Caddy (`deploy/Caddyfile`) hanya meneruskan `/api/*`, `/socket.io/*`, dan `/health` ke backend. Layanan AI (face, plate, anomaly) tidak dibuka ke luar; backend memanggilnya lewat jaringan Docker dengan header `X-API-Key`.
+- Log audit backend ditulis ke `AUDIT_LOG_DIR` (default `/app/logs`, volume `myteluv2-backend-logs`). Log container dirotasi (`json-file`, 10 MB x 3 file), setiap service punya batas memori (`mem_limit`), dan semua container memakai `TZ=Asia/Jakarta`.
+
 ## Key API Areas
 
 Auth:

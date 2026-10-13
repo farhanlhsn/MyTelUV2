@@ -1,0 +1,33 @@
+# Build context is ./backend. Keep it small and free of local state / secrets.
+
+# Dependencies and generated code (installed / generated inside the image)
+node_modules
+**/node_modules
+generated
+
+# Tests and coverage
+test
+test-e2e
+coverage
+test-push.js
+
+# AI services have their own images (python-service/*/Dockerfile)
+python-service
+
+# Runtime state and local environment
+.env
+.env.*
+logs
+uploads
+*.log
+
+# macOS metadata / AppleDouble files (exFAT drives) and editor noise
+._*
+**/._*
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# VCS
+.git
+.gitignore

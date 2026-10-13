@@ -1,6 +1,13 @@
 # Docker Compose Production Configuration for MyTelUV2
 # Uses EXISTING Caddy on VPS for reverse proxy
 
+# Rotate container logs so they cannot fill the disk (json-file keeps unbounded logs by default)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Node.js Backend API
   backend:
@@ -12,6 +19,7 @@ services:
       - "5050"
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Jakarta
       - PORT=5050
       - FACE_API_URL=http://face-recognition:5051
       - PYTHON_SERVICE_URL=http://face-recognition:5051
@@ -21,10 +29,13 @@ services:
       - FACE_API_KEY=${FACE_API_KEY}
       - PLATE_API_KEY=${PLATE_API_KEY}
       - ANOMALY_API_KEY=${ANOMALY_API_KEY}
+      # Audit log directory (the backend-logs volume is mounted here)
+      - AUDIT_LOG_DIR=/app/logs
     env_file:
       - .env
     volumes:
       - ./backend/uploads:/app/uploads
+      - backend-logs:/app/logs
     depends_on:
       face-recognition:
         condition: service_healthy
@@ -34,6 +45,8 @@ services:
         condition: service_healthy
     networks:
       - myteluv2-network
+    mem_limit: 512m
+    logging: *default-logging
     restart: unless-stopped
 
   # Face Recognition Service (InsightFace)
@@ -51,12 +64,15 @@ services:
       start_period: 30s
       retries: 3
     environment:
+      - TZ=Asia/Jakarta
       - FACE_API_KEY=${FACE_API_KEY}
     volumes:
       # The service runs as appuser, whose HOME is /home/appuser
       - insightface-models:/home/appuser/.insightface
     networks:
       - myteluv2-network
+    mem_limit: 2g
+    logging: *default-logging
     restart: unless-stopped
 
   # Plate Recognition Service (YOLOv8)
@@ -74,6 +90,7 @@ services:
       start_period: 30s
       retries: 3
     environment:
+      - TZ=Asia/Jakarta
       - NODEJS_BACKEND_URL=http://backend:5050
       - PLATE_API_KEY=${PLATE_API_KEY}
     env_file:
@@ -82,6 +99,8 @@ services:
       - ./backend/python-service/plate_recognition/models:/app/models
     networks:
       - myteluv2-network
+    mem_limit: 1g
+    logging: *default-logging
     restart: unless-stopped
 
   # Anomaly Detection Service (Isolation Forest)
@@ -99,9 +118,12 @@ services:
       start_period: 30s
       retries: 3
     environment:
+      - TZ=Asia/Jakarta
       - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     networks:
       - myteluv2-network
+    mem_limit: 512m
+    logging: *default-logging
     restart: unless-stopped
 
   # Docker Caddy Router
@@ -110,6 +132,8 @@ services:
     container_name: myteluv2-caddy
     ports:
       - "127.0.0.1:8880:80"
+    environment:
+      - TZ=Asia/Jakarta
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile
     depends_on:
@@ -123,6 +147,8 @@ services:
         condition: service_healthy
     networks:
       - myteluv2-network
+    mem_limit: 128m
+    logging: *default-logging
     restart: unless-stopped
 
 networks:
@@ -132,3 +158,5 @@ networks:
 volumes:
   insightface-models:
     name: myteluv2-insightface-models
+  backend-logs:
+    name: myteluv2-backend-logs
