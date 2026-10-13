@@ -62,7 +62,7 @@ router.put(
   editBiometrik,
 );
 
-// Verify & Scan - semua authenticated user bisa akses
+// Verify - semua authenticated user bisa akses (non-ADMIN hanya mencocokkan wajahnya sendiri)
 router.post(
   "/verify",
   protect,
@@ -71,9 +71,11 @@ router.post(
   verifyWajah,
 );
 
+// Scan - ADMIN dan DOSEN saja; DOSEN wajib mengirim id_kelas kelas yang diampu
 router.post(
   "/scan",
   protect,
+  authorize("ADMIN", "DOSEN"),
   biometrikLimiter,
   upload.single("image"),
   scanWajah,

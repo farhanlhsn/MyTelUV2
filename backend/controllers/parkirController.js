@@ -434,8 +434,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 ...form.getHeaders(),
                 'X-API-Key': process.env.PLATE_API_KEY || ''
             };
-            if (req.headers['x-test-mode']) {
-                apiHeaders['X-Test-Mode'] = req.headers['x-test-mode'];
+            // Test mode is decided by the server environment only; a client header is never forwarded
+            if (process.env.TEST_MODE === 'true') {
+                apiHeaders['X-Test-Mode'] = 'true';
             }
 
             const response = await plateApiBreaker.fire(async () => {

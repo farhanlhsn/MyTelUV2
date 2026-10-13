@@ -2,6 +2,14 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+
+// TEST_MODE replaces real face/plate verification with stubs. Refuse to boot with it in production.
+// Runs right after dotenv (TEST_MODE may come from .env) and before any route or listener is loaded.
+if (process.env.NODE_ENV === 'production' && process.env.TEST_MODE === 'true') {
+    console.error('[FATAL] TEST_MODE=true is not allowed when NODE_ENV=production. Refusing to start.');
+    process.exit(1);
+}
+
 const helmet = require('helmet');
 const cors = require('cors');
 const http = require('http');

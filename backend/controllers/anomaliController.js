@@ -215,7 +215,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
 
     if (isAsync) {
         const jobId = `anomaly_kelas_${id_kelas}_${Date.now()}`;
-        globalAnomalyQueue.addJob(jobId, runAnalysisTask);
+        globalAnomalyQueue.addJob(jobId, runAnalysisTask, userId);
         
         return res.status(202).json({
             status: "success",
@@ -371,17 +371,21 @@ exports.updateLaporanAnomali = asyncHandler(async (req, res) => {
 exports.getJobStatus = asyncHandler(async (req, res) => {
     const { jobId } = req.params;
     const job = globalAnomalyQueue.getJobStatus(jobId);
-    
-    if (!job) {
+
+    // Only the user who started the job (or an ADMIN) may read it. Anyone else gets the same 404 as
+    // an unknown id, so job ids cannot be probed and another dosen's analysis result stays private.
+    if (!job || (req.user.role !== 'ADMIN' && job.ownerId !== req.user.id_user)) {
         return res.status(404).json({
             status: "error",
             message: "Pekerjaan analisis tidak ditemukan atau sudah dibersihkan dari memori."
         });
     }
-    
+
+    const { ownerId, ...publicJob } = job;
+
     res.status(200).json({
         status: "success",
-        data: job
+        data: publicJob
     });
 });
 

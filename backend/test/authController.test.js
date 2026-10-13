@@ -23,6 +23,9 @@ jest.mock('../utils/prisma', () => ({
         findUnique: jest.fn(),
         update: jest.fn(),
     },
+    dataBiometrik: {
+        updateMany: jest.fn(),
+    },
     $transaction: jest.fn(),
 }));
 
@@ -915,6 +918,38 @@ describe('Auth Controller Tests', () => {
             await authController.registerFcmToken(req, res);
 
             expect(res.status).toHaveBeenCalledWith(400);
+        });
+    });
+
+    /**
+     * REACTIVATE USER TESTS
+     */
+    describe('reactivateUser', () => {
+        test('reactivates the user but never restores soft-deleted biometric data', async () => {
+            const req = { params: { id_user: '5' }, user: { id_user: 1, nama: 'Admin' }, ip: '127.0.0.1', headers: {} };
+            const res = createMockRes();
+            prisma.user.findUnique.mockResolvedValue({ id_user: 5, nama: 'Budi', deletedAt: new Date() });
+            prisma.user.update.mockResolvedValue({});
+
+            await authController.reactivateUser(req, res);
+
+            expect(prisma.user.update).toHaveBeenCalledWith({
+                where: { id_user: 5 },
+                data: { deletedAt: null }
+            });
+            expect(prisma.dataBiometrik.updateMany).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('returns 404 when the user is not deactivated', async () => {
+            const req = { params: { id_user: '5' }, user: { id_user: 1, nama: 'Admin' }, ip: '127.0.0.1', headers: {} };
+            const res = createMockRes();
+            prisma.user.findUnique.mockResolvedValue({ id_user: 5, nama: 'Budi', deletedAt: null });
+
+            await authController.reactivateUser(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(prisma.user.update).not.toHaveBeenCalled();
         });
     });
 });

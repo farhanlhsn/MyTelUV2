@@ -21,6 +21,7 @@ jest.mock('axios');
 const prisma = require('../utils/prisma');
 const axios = require('axios');
 const anomaliController = require('../controllers/anomaliController');
+const { globalAnomalyQueue } = require('../utils/TaskQueue');
 
 const createMockReq = (body = {}, user = { id_user: 1, role: 'DOSEN' }, params = {}, query = {}, headers = {}) => ({
     body,
@@ -149,6 +150,106 @@ describe('Anomaly Controller Tests', () => {
                 })
             }));
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+    });
+
+    describe('async analysis jobs: ownership', () => {
+        let statusSpy;
+
+        const job = {
+            id: 'anomaly_kelas_1_100',
+            status: 'COMPLETED',
+            progress: 100,
+            ownerId: 5,
+            result: [{ id_user: 10, nama: 'Student A', type_anomali: 'TIDAK_HADIR_BERULANG' }]
+        };
+
+        afterEach(() => {
+            if (statusSpy) statusSpy.mockRestore();
+            statusSpy = undefined;
+        });
+
+        test('analyzeKelasAttendance (async) stores the requesting user as the job owner', async () => {
+            const addJobSpy = jest.spyOn(globalAnomalyQueue, 'addJob').mockImplementation(() => ({}));
+            try {
+                const req = createMockReq({}, { id_user: 1, role: 'DOSEN' }, { id_kelas: 1 }, { async: 'true' });
+                const res = createMockRes();
+
+                prisma.kelas.findUnique.mockResolvedValue({ id_kelas: 1, id_dosen: 1 });
+                prisma.$transaction.mockResolvedValue([[{ mahasiswa: { id_user: 10, nama: 'Student A' } }], [], []]);
+
+                await anomaliController.analyzeKelasAttendance(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(202);
+                expect(addJobSpy).toHaveBeenCalledWith(expect.any(String), expect.any(Function), 1);
+            } finally {
+                addJobSpy.mockRestore();
+            }
+        });
+
+        test('TaskQueue.addJob records the owner on the job', () => {
+            const { TaskQueue } = require('../utils/TaskQueue');
+            const queue = new TaskQueue(1);
+
+            const info = queue.addJob('job-with-owner', async () => 'done', 7);
+
+            expect(info.ownerId).toBe(7);
+            expect(queue.getJobStatus('job-with-owner').ownerId).toBe(7);
+        });
+
+        test('getJobStatus returns the job to its owner without leaking ownerId', async () => {
+            statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue(job);
+            const req = createMockReq({}, { id_user: 5, role: 'DOSEN' }, { jobId: job.id });
+            const res = createMockRes();
+
+            await anomaliController.getJobStatus(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+            const payload = res.json.mock.calls[0][0];
+            expect(payload.data).toMatchObject({ id: job.id, status: 'COMPLETED' });
+            expect(payload.data).not.toHaveProperty('ownerId');
+        });
+
+        test('getJobStatus returns 404 for a different DOSEN', async () => {
+            statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue(job);
+            const req = createMockReq({}, { id_user: 6, role: 'DOSEN' }, { jobId: job.id });
+            const res = createMockRes();
+
+            await anomaliController.getJobStatus(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(JSON.stringify(res.json.mock.calls[0][0])).not.toContain('Student A');
+        });
+
+        test('getJobStatus lets an ADMIN read any job', async () => {
+            statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue(job);
+            const req = createMockReq({}, { id_user: 1, role: 'ADMIN' }, { jobId: job.id });
+            const res = createMockRes();
+
+            await anomaliController.getJobStatus(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('getJobStatus returns 404 for an unknown job', async () => {
+            statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue(null);
+            const req = createMockReq({}, { id_user: 5, role: 'DOSEN' }, { jobId: 'nope' });
+            const res = createMockRes();
+
+            await anomaliController.getJobStatus(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
+
+        test('a job without an owner is only visible to ADMIN', async () => {
+            statusSpy = jest.spyOn(globalAnomalyQueue, 'getJobStatus').mockReturnValue({ ...job, ownerId: null });
+            const dosenRes = createMockRes();
+            await anomaliController.getJobStatus(createMockReq({}, { id_user: 5, role: 'DOSEN' }, { jobId: job.id }), dosenRes);
+            expect(dosenRes.status).toHaveBeenCalledWith(404);
+
+            const adminRes = createMockRes();
+            await anomaliController.getJobStatus(createMockReq({}, { id_user: 1, role: 'ADMIN' }, { jobId: job.id }), adminRes);
+            expect(adminRes.status).toHaveBeenCalledWith(200);
         });
     });
 });

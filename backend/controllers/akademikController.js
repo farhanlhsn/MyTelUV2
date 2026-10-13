@@ -1224,6 +1224,18 @@ exports.getKelasKu = asyncHandler(async (req, res) => {
     });
 });
 
+// True when the mahasiswa has an active (not dropped) enrollment in the kelas
+const isEnrolledInKelas = async (idKelas, idMahasiswa) => {
+    const enrollment = await prisma.pesertaKelas.findFirst({
+        where: {
+            id_kelas: idKelas,
+            id_mahasiswa: idMahasiswa,
+            deletedAt: null
+        }
+    });
+    return !!enrollment;
+};
+
 exports.getPesertaKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
@@ -1247,6 +1259,14 @@ exports.getPesertaKelas = asyncHandler(async (req, res) => {
         return res.status(403).json({
             status: "error",
             message: "You can only view peserta for your own classes"
+        });
+    }
+
+    // A mahasiswa may only see the roster of a class they are enrolled in
+    if (req.user.role === 'MAHASISWA' && !(await isEnrolledInKelas(parseInt(id), req.user.id_user))) {
+        return res.status(403).json({
+            status: "error",
+            message: "Anda tidak terdaftar di kelas ini"
         });
     }
 
@@ -2348,9 +2368,31 @@ exports.createJadwalPengganti = asyncHandler(async (req, res) => {
 exports.getJadwalPenggantiByKelas = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { upcoming } = req.query; // If true, only show future overrides
+    const idKelas = parseInt(id);
+
+    if (!Number.isInteger(idKelas)) {
+        return res.status(400).json({ status: "error", message: "ID kelas tidak valid" });
+    }
+
+    const kelas = await prisma.kelas.findFirst({
+        where: { id_kelas: idKelas, deletedAt: null }
+    });
+
+    if (!kelas) {
+        return res.status(404).json({ status: "error", message: "Kelas tidak ditemukan" });
+    }
+
+    // DOSEN only for their own class, MAHASISWA only when enrolled, ADMIN for any class
+    if (req.user.role === 'DOSEN' && kelas.id_dosen !== req.user.id_user) {
+        return res.status(403).json({ status: "error", message: "Anda hanya bisa melihat jadwal pengganti kelas sendiri" });
+    }
+
+    if (req.user.role === 'MAHASISWA' && !(await isEnrolledInKelas(idKelas, req.user.id_user))) {
+        return res.status(403).json({ status: "error", message: "Anda tidak terdaftar di kelas ini" });
+    }
 
     const where = {
-        id_kelas: parseInt(id),
+        id_kelas: idKelas,
         deletedAt: null
     };
 

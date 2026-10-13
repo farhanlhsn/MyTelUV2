@@ -135,7 +135,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           Authorization: `Bearer ${tokenMhs}`,
-          "X-Test-Mode": "true", // Trigger test mode bypass in python face service
         },
       });
     } catch (err) {
@@ -166,7 +165,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           Authorization: `Bearer ${tokenMhs}`,
-          "X-Test-Mode": "true",
         },
       });
     } catch (err) {
@@ -202,7 +200,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
       headers: {
         ...form.getHeaders(),
         Authorization: `Bearer ${tokenMhs}`,
-        "X-Test-Mode": "true",
       },
     });
 
@@ -228,7 +225,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           "X-Edge-Secret": process.env.EDGE_DEVICE_SECRET || "e2e-testing-edge-device-secret-32-chars",
-          "X-Test-Mode": "true", // Forwarded by backend to plate recognizer
         },
       },
     );

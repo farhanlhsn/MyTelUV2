@@ -565,22 +565,16 @@ exports.reactivateUser = asyncHandler(async (req, res) => {
         return res.status(404).json({ status: "error", message: "User not found or already active" });
     }
     
-    await prisma.$transaction([
-        // Reactivate user
-        prisma.user.update({
-            where: { id_user: parsedId },
-            data: { deletedAt: null }
-        }),
-        // Reactivate associated biometrics
-        prisma.dataBiometrik.updateMany({
-            where: { id_user: parsedId },
-            data: { deletedAt: null }
-        })
-    ]);
-    
+    // Only the account is reactivated. Biometric data that was soft-deleted (on purpose, or when the
+    // account was deactivated) is NOT restored: the admin re-enrolls the face if it is still needed.
+    await prisma.user.update({
+        where: { id_user: parsedId },
+        data: { deletedAt: null }
+    });
+
     // Invalidate embeddings cache
     embeddingCache.invalidateCache();
-    
+
     logAudit({
         action: 'ADMIN_REACTIVATE_USER',
         performedBy: req.user.id_user,

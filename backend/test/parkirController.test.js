@@ -24,7 +24,10 @@ jest.mock('../utils/firebase', () => ({
     sendParkingNotification: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock('axios');
+
 // Import modules
+const axios = require('axios');
 const prisma = require('../utils/prisma');
 const { uploadFile } = require('../utils/r2FileHandler');
 const { sendParkingNotification } = require('../utils/firebase');
@@ -529,3 +532,46 @@ describe('Parkir Controller - exportParkirLogs & manualOverride', () => {
     });
 });
 
+describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode', () => {
+    const originalTestMode = process.env.TEST_MODE;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        process.env.EDGE_DEVICE_SECRET = 'secret123';
+        axios.post.mockReset().mockResolvedValue({ data: { success: false } });
+        prisma.kendaraan.findFirst.mockReset().mockResolvedValue(null);
+    });
+
+    afterEach(() => {
+        if (originalTestMode === undefined) delete process.env.TEST_MODE;
+        else process.env.TEST_MODE = originalTestMode;
+    });
+
+    // The edge device sends no plate_text, so the controller falls back to the plate OCR service.
+    const sendWithClientTestModeHeader = async () => {
+        const req = createMockReq(
+            { parkiran_id: '1', gate_type: 'MASUK' },
+            { 'x-edge-secret': 'secret123', 'x-test-mode': 'true' }
+        );
+        req.files = { image: [{ buffer: Buffer.from('img'), originalname: 'plate.jpg', mimetype: 'image/jpeg', size: 3 }] };
+        await parkirController.processEdgeEntry(req, createMockRes());
+        expect(axios.post).toHaveBeenCalledTimes(1);
+        return axios.post.mock.calls[0][2].headers;
+    };
+
+    test('does not forward the client x-test-mode header to the plate service', async () => {
+        delete process.env.TEST_MODE;
+
+        const headers = await sendWithClientTestModeHeader();
+
+        expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
+    });
+
+    test('sets X-Test-Mode toward the plate service itself when TEST_MODE=true is in the environment', async () => {
+        process.env.TEST_MODE = 'true';
+
+        const headers = await sendWithClientTestModeHeader();
+
+        expect(headers['X-Test-Mode']).toBe('true');
+    });
+});

@@ -11,7 +11,8 @@ jest.mock('../utils/prisma', () => ({
     kelas: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), update: jest.fn() },
     user: { findFirst: jest.fn() },
     semester: { findFirst: jest.fn() },
-    pesertaKelas: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
+    pesertaKelas: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
+    jadwalPengganti: { findMany: jest.fn() },
     $transaction: jest.fn(),
     $queryRaw: jest.fn(),
     $executeRaw: jest.fn(),
@@ -286,6 +287,121 @@ describe('Akademik Controller Tests', () => {
                     status: 'success',
                     message: 'Dropped class successfully'
                 }));
+            });
+        });
+    });
+
+    /**
+     * CLASS DATA OWNERSHIP (IDOR): roster and jadwal pengganti
+     */
+    describe('class roster and jadwal pengganti access', () => {
+        const kelas = { id_kelas: 5, id_dosen: 2 };
+        const mahasiswa = { id_user: 10, role: 'MAHASISWA' };
+        const ownDosen = { id_user: 2, role: 'DOSEN' };
+        const otherDosen = { id_user: 3, role: 'DOSEN' };
+        const admin = { id_user: 1, role: 'ADMIN' };
+
+        beforeEach(() => {
+            prisma.kelas.findFirst.mockReset().mockResolvedValue(kelas);
+            prisma.pesertaKelas.findFirst.mockReset();
+            prisma.pesertaKelas.findMany.mockReset().mockResolvedValue([]);
+            prisma.jadwalPengganti.findMany.mockReset().mockResolvedValue([]);
+        });
+
+        describe('getPesertaKelas', () => {
+            const call = async (user) => {
+                const req = createMockReq({}, user, {}, { id: '5' });
+                const res = createMockRes();
+                await akademikController.getPesertaKelas(req, res);
+                return res;
+            };
+
+            test('MAHASISWA who is not enrolled gets 403 and no roster', async () => {
+                prisma.pesertaKelas.findFirst.mockResolvedValue(null);
+
+                const res = await call(mahasiswa);
+
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
+            });
+
+            test('MAHASISWA enrollment is checked for the active enrollment of that class', async () => {
+                prisma.pesertaKelas.findFirst.mockResolvedValue({ id_peserta_kelas: 1 });
+
+                await call(mahasiswa);
+
+                expect(prisma.pesertaKelas.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+                    where: expect.objectContaining({ id_kelas: 5, id_mahasiswa: 10, deletedAt: null })
+                }));
+            });
+
+            test('enrolled MAHASISWA gets the roster', async () => {
+                prisma.pesertaKelas.findFirst.mockResolvedValue({ id_peserta_kelas: 1 });
+
+                const res = await call(mahasiswa);
+
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(prisma.pesertaKelas.findMany).toHaveBeenCalled();
+            });
+
+            test('DOSEN of another class gets 403', async () => {
+                const res = await call(otherDosen);
+
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
+            });
+
+            test('own DOSEN and ADMIN get the roster', async () => {
+                expect((await call(ownDosen)).status).toHaveBeenCalledWith(200);
+                expect((await call(admin)).status).toHaveBeenCalledWith(200);
+            });
+        });
+
+        describe('getJadwalPenggantiByKelas', () => {
+            const call = async (user) => {
+                const req = createMockReq({}, user, {}, { id: '5' });
+                const res = createMockRes();
+                await akademikController.getJadwalPenggantiByKelas(req, res);
+                return res;
+            };
+
+            test('MAHASISWA who is not enrolled gets 403', async () => {
+                prisma.pesertaKelas.findFirst.mockResolvedValue(null);
+
+                const res = await call(mahasiswa);
+
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(prisma.jadwalPengganti.findMany).not.toHaveBeenCalled();
+            });
+
+            test('enrolled MAHASISWA gets the schedule changes', async () => {
+                prisma.pesertaKelas.findFirst.mockResolvedValue({ id_peserta_kelas: 1 });
+
+                const res = await call(mahasiswa);
+
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(prisma.jadwalPengganti.findMany).toHaveBeenCalled();
+            });
+
+            test('DOSEN of another class gets 403', async () => {
+                const res = await call(otherDosen);
+
+                expect(res.status).toHaveBeenCalledWith(403);
+                expect(prisma.jadwalPengganti.findMany).not.toHaveBeenCalled();
+            });
+
+            test('own DOSEN and ADMIN get the schedule changes', async () => {
+                expect((await call(ownDosen)).status).toHaveBeenCalledWith(200);
+                expect((await call(admin)).status).toHaveBeenCalledWith(200);
+            });
+
+            test('unknown class is 404', async () => {
+                prisma.kelas.findFirst.mockResolvedValue(null);
+
+                const res = await call(admin);
+
+                expect(res.status).toHaveBeenCalledWith(404);
+                expect(prisma.jadwalPengganti.findMany).not.toHaveBeenCalled();
             });
         });
     });

@@ -10,18 +10,20 @@ class TaskQueue {
     this.concurrency = concurrency;
     this.queue = [];
     this.activeWorkers = 0;
-    this.jobs = new Map(); // Store job status: id -> { status, result, error, progress }
+    this.jobs = new Map(); // Store job status: id -> { ownerId, status, result, error, progress }
   }
 
   /**
    * Add a new job to the queue
    * @param {string} jobId Unique identifier for the job
    * @param {Function} taskFn Asynchronous function that executes the task
+   * @param {number|null} ownerId id_user of the user who started the job (only the owner or an ADMIN may read it)
    * @returns {Object} Job status details
    */
-  addJob(jobId, taskFn) {
+  addJob(jobId, taskFn, ownerId = null) {
     const jobInfo = {
       id: jobId,
+      ownerId,
       status: 'QUEUED',
       progress: 0,
       createdAt: new Date().toISOString(),

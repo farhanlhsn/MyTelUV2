@@ -383,8 +383,10 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
                 message: 'Wajah tidak cocok',
-                similarity: 0
+                match: false
             });
+            // The raw score is an oracle for guessing a face, so it is never sent to the client.
+            expect(res.json.mock.calls[0][0]).not.toHaveProperty('similarity');
         });
     });
 
@@ -612,10 +614,11 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Algoritma Pemrograman',
                         ruangan: 'R.101',
                         type: 'HADIR',
-                        similarity: 1
+                        match: true
                     })
                 })
             );
+            expect(res.json.mock.calls[0][0].data).not.toHaveProperty('similarity');
         });
     });
 
@@ -675,10 +678,89 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Basis Data',
                         ruangan: 'R.202',
                         type: 'HADIR',
-                        similarity: 1
+                        match: true
                     })
                 })
             );
+        });
+    });
+
+    /**
+     * ============================================
+     * TEST MODE: only the TEST_MODE env var may bypass the face service
+     * ============================================
+     */
+    describe('Test mode is controlled by env only', () => {
+        const originalTestMode = process.env.TEST_MODE;
+
+        afterEach(() => {
+            if (originalTestMode === undefined) delete process.env.TEST_MODE;
+            else process.env.TEST_MODE = originalTestMode;
+        });
+
+        const storedBiometric = {
+            id_biometrik: 1, id_user: 1, face_embedding: [0, 1, 0], deletedAt: null,
+            user: { id_user: 1, nama: 'Test User', username: 'testuser' }
+        };
+
+        test('TC012 - client x-test-mode header is ignored: the face service is called and a mismatch is rejected', async () => {
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            axios.post.mockResolvedValueOnce({
+                data: { success: true, embedding: [1, 0, 0] }
+            });
+
+            const req = createMockReq({ headers: { 'x-test-mode': 'true' } });
+            const res = createMockRes();
+            const next = jest.fn();
+
+            await biometrikAbsen(req, res, next);
+
+            expect(axios.post).toHaveBeenCalledTimes(1);
+            expect(axios.post.mock.calls[0][0]).toMatch(/\/detect-face$/);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                message: 'Wajah tidak cocok'
+            }));
+            expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
+        });
+
+        test('TC013 - client x-test-mode header is ignored: a failed detection is rejected', async () => {
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            axios.post.mockResolvedValueOnce({
+                data: { success: false, error: 'No face detected' }
+            });
+
+            const req = createMockReq({ headers: { 'x-test-mode': 'true' } });
+            const res = createMockRes();
+
+            await biometrikAbsen(req, res, jest.fn());
+
+            expect(axios.post).toHaveBeenCalledTimes(1);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'No face detected'
+            });
+        });
+
+        test('TC014 - TEST_MODE=true in the environment skips the face service', async () => {
+            process.env.TEST_MODE = 'true';
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([]);
+
+            const req = createMockReq();
+            const res = createMockRes();
+
+            await biometrikAbsen(req, res, jest.fn());
+
+            expect(axios.post).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Anda tidak terdaftar di kelas manapun'
+            });
         });
     });
 

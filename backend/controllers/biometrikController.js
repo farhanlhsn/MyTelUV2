@@ -95,6 +95,36 @@ function cosineSimilarity(vecA, vecB) {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+const confidenceLabel = (similarity) =>
+  similarity > 0.8 ? "high" : similarity > 0.7 ? "medium" : "low";
+
+/**
+ * Match details for a response. The raw similarity score (and the confidence band derived from it)
+ * is only for ADMIN: handing it to anyone else lets them probe how close a photo is to a stored
+ * face (an oracle), so every other caller only learns the boolean `match`.
+ */
+const matchDetails = (isAdmin, similarity) =>
+  isAdmin
+    ? { match: true, similarity, confidence: confidenceLabel(similarity) }
+    : { match: true };
+
+const DUPLICATE_FACE_MESSAGE = "Wajah ini sudah terdaftar untuk pengguna lain";
+
+/**
+ * True when the embedding matches ANOTHER user's active embedding at or above the verification
+ * threshold. Queries the database directly (not the cache) because it guards enrollment.
+ */
+const isFaceRegisteredByOtherUser = async (embedding, userId) => {
+  const others = await prisma.dataBiometrik.findMany({
+    where: { deletedAt: null, id_user: { not: userId } },
+    select: { id_user: true, face_embedding: true },
+  });
+  return others.some(
+    (other) =>
+      cosineSimilarity(embedding, other.face_embedding) >= SIMILARITY_THRESHOLD,
+  );
+};
+
 /**
  * @desc    Request a one-time liveness token for biometric attendance
  * @route   POST /api/biometrik/request-liveness-token
@@ -175,6 +205,16 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
       return res.status(400).json({
         status: "error",
         message: faceResult.error,
+      });
+    }
+
+    // One face, one account: refuse a face that is already registered for someone else
+    if (
+      await isFaceRegisteredByOtherUser(faceResult.embedding, parseInt(id_user))
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message: DUPLICATE_FACE_MESSAGE,
       });
     }
 
@@ -326,6 +366,16 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
       });
     }
 
+    // One face, one account: refuse a face that is already registered for someone else
+    if (
+      await isFaceRegisteredByOtherUser(faceResult.embedding, parseInt(id_user))
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message: DUPLICATE_FACE_MESSAGE,
+      });
+    }
+
     // Upload new photo to R2
     const fileBuffer = req.file.buffer;
     const r2Result = await uploadFile(
@@ -450,6 +500,8 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
       throw new Error(matchResult.error);
     }
 
+    const isAdmin = req.user.role === "ADMIN";
+
     if (matchResult.is_match) {
       const matchedBiometrik = allBiometrics[matchResult.best_match_index];
 
@@ -461,13 +513,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
           nama: matchedBiometrik.user.nama,
           username: matchedBiometrik.user.username,
           role: matchedBiometrik.user.role,
-          similarity: matchResult.similarity,
-          confidence:
-            matchResult.similarity > 0.8
-              ? "high"
-              : matchResult.similarity > 0.7
-                ? "medium"
-                : "low",
+          ...matchDetails(isAdmin, matchResult.similarity),
         },
       });
     } else {
@@ -475,7 +521,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
         status: "success",
         matched: false,
         message: "No matching face found",
-        best_similarity: matchResult.similarity,
+        ...(isAdmin && { best_similarity: matchResult.similarity }),
       });
     }
   } catch (error) {
@@ -487,16 +533,70 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
 /**
  * @desc    Scan multiple faces (CCTV/classroom)
  * @route   POST /api/biometrik/scan
- * @access  Protected
+ * @access  Protected (ADMIN, DOSEN)
+ *          ADMIN may scan against every enrolled face or, with id_kelas, one class.
+ *          DOSEN must pass the id_kelas of a class they teach; only that class's
+ *          active participants are candidates.
  */
 exports.scanWajah = asyncHandler(async (req, res) => {
-  const { id_kelas } = req.body;
+  const isAdmin = req.user.role === "ADMIN";
+  if (!isAdmin && req.user.role !== "DOSEN") {
+    return res.status(403).json({
+      status: "error",
+      message: "Anda tidak memiliki akses untuk memindai wajah",
+    });
+  }
 
   if (!req.file) {
     return res.status(400).json({
       status: "error",
       message: "Image file is required",
     });
+  }
+
+  const rawKelasId = req.body?.id_kelas;
+  const hasKelasId =
+    rawKelasId !== undefined && rawKelasId !== null && rawKelasId !== "";
+  let id_kelas = null;
+  if (hasKelasId) {
+    id_kelas = Number(rawKelasId);
+    if (!Number.isInteger(id_kelas) || id_kelas <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "id_kelas tidak valid",
+      });
+    }
+  } else if (!isAdmin) {
+    return res.status(400).json({
+      status: "error",
+      message: "id_kelas wajib diisi untuk pemindaian oleh dosen",
+    });
+  }
+
+  // Class scope: DOSEN only their own class; the candidates are that class's active participants
+  let classParticipantIds = null;
+  if (id_kelas !== null) {
+    const kelas = await prisma.kelas.findFirst({
+      where: { id_kelas, deletedAt: null },
+    });
+    if (!kelas) {
+      return res.status(404).json({
+        status: "error",
+        message: "Kelas tidak ditemukan",
+      });
+    }
+    if (!isAdmin && kelas.id_dosen !== req.user.id_user) {
+      return res.status(403).json({
+        status: "error",
+        message: "Anda hanya dapat memindai kelas yang Anda ampu",
+      });
+    }
+
+    const peserta = await prisma.pesertaKelas.findMany({
+      where: { id_kelas, deletedAt: null },
+      select: { id_mahasiswa: true },
+    });
+    classParticipantIds = new Set(peserta.map((p) => p.id_mahasiswa));
   }
 
   try {
@@ -516,8 +616,13 @@ exports.scanWajah = asyncHandler(async (req, res) => {
       });
     }
 
-    // Get all active biometric data from cache
-    const allBiometrics = await embeddingCache.getAllEmbeddings();
+    // Active biometric data from cache, narrowed to the class participants when scanning a class
+    let allBiometrics = await embeddingCache.getAllEmbeddings();
+    if (classParticipantIds) {
+      allBiometrics = allBiometrics.filter((b) =>
+        classParticipantIds.has(b.id_user),
+      );
+    }
 
     if (allBiometrics.length === 0) {
       return res.status(200).json({
@@ -527,6 +632,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
           identified_users: 0,
           unidentified_count: facesResult.count,
           users: [],
+          ...(id_kelas !== null && { id_kelas }),
         },
       });
     }
@@ -555,14 +661,8 @@ exports.scanWajah = asyncHandler(async (req, res) => {
           nama: matchedBiometrik.user.nama,
           username: matchedBiometrik.user.username,
           role: matchedBiometrik.user.role,
-          similarity: bestSimilarity,
+          ...matchDetails(isAdmin, bestSimilarity),
           bbox: face.bbox,
-          confidence:
-            bestSimilarity > 0.8
-              ? "high"
-              : bestSimilarity > 0.7
-                ? "medium"
-                : "low",
         });
       }
     }
@@ -574,7 +674,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
         identified_users: identifiedUsers.length,
         unidentified_count: facesResult.count - identifiedUsers.length,
         users: identifiedUsers,
-        ...(id_kelas && { id_kelas: parseInt(id_kelas) }),
+        ...(id_kelas !== null && { id_kelas }),
       },
     });
   } catch (error) {
@@ -663,8 +763,9 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     });
   }
 
-  const isTestMode =
-    req.headers?.["x-test-mode"] === "true" || process.env.TEST_MODE === "true";
+  // Test mode comes from the server environment only. A client header must never switch it on
+  // (the backend refuses to boot with TEST_MODE=true in production).
+  const isTestMode = process.env.TEST_MODE === "true";
 
   try {
     // Get user's biometric data from cache or database
@@ -712,10 +813,11 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     };
 
     if (!matchResult.is_match) {
+      // No similarity in the body: it would tell the caller how close the photo was
       return res.status(400).json({
         status: "error",
         message: "Wajah tidak cocok",
-        similarity: matchResult.similarity,
+        match: false,
       });
     }
 
@@ -931,7 +1033,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         ruangan: activeSesi.kelas.ruangan,
         waktu: absensi.createdAt,
         type: activeSesi.type_absensi,
-        similarity: matchResult.similarity,
+        match: true,
       },
     });
   } catch (error) {
