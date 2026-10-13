@@ -248,6 +248,9 @@ describe('Post Controller Tests', () => {
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ isLiked: true, likeCount: 1 })
             }));
+            // the owner is notified in the background, with the post id for the deep link
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(sendSocialNotification).toHaveBeenCalledWith(2, 'LIKE', 'Alice', 'Hello', 1);
         });
 
         test('should unlike if already liked', async () => {
@@ -370,6 +373,7 @@ describe('Post Controller Tests', () => {
 
             expect(prisma.postComment.create).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(201);
+            expect(sendSocialNotification).toHaveBeenCalledWith(2, 'COMMENT', 'Alice', 'Hello', 1);
         });
     });
 });

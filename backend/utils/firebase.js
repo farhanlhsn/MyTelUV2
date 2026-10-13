@@ -221,8 +221,9 @@ const sendParkingNotification = async (userId, parkingType, vehicleInfo, parkira
  * @param {string} type - 'LIKE' or 'COMMENT'
  * @param {string} actorName - Name of the user performing the action
  * @param {string} postPreview - Preview of the post content
+ * @param {number} [postId] - ID of the post, sent as data.id_post for the app's deep link
  */
-const sendSocialNotification = async (userId, type, actorName, postPreview) => {
+const sendSocialNotification = async (userId, type, actorName, postPreview, postId) => {
     try {
         const title = type === 'LIKE'
             ? `❤️ ${actorName} menyukai postingan Anda`
@@ -238,6 +239,7 @@ const sendSocialNotification = async (userId, type, actorName, postPreview) => {
             type: 'SOCIAL_NOTIFICATION',
             social_type: type,
             actor_name: actorName,
+            ...(postId !== undefined && postId !== null ? { id_post: String(postId) } : {}),
             timestamp: new Date().toISOString()
         };
 

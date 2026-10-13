@@ -441,7 +441,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
             prisma.user.findUnique({ where: { id_user: userId }, select: { nama: true } })
                 .then(user => {
                     if (user) {
-                        sendSocialNotification(post.id_user, 'LIKE', user.nama, post.content)
+                        sendSocialNotification(post.id_user, 'LIKE', user.nama, post.content, post.id_post)
                             .catch(err => console.error('Error triggering like notification:', err.message));
                     }
                 })
@@ -579,7 +579,7 @@ exports.addComment = asyncHandler(async (req, res) => {
 
     // Trigger notification
     if (post.id_user !== userId) {
-        sendSocialNotification(post.id_user, 'COMMENT', comment.user.nama, post.content)
+        sendSocialNotification(post.id_user, 'COMMENT', comment.user.nama, post.content, post.id_post)
             .catch(err => console.error('Error triggering comment notification:', err.message));
     }
 

@@ -99,6 +99,16 @@ describe('utils/firebase', () => {
             expect(mockSend).not.toHaveBeenCalled();
         });
 
+        test.each([['LIKE'], ['COMMENT']])('a %s notification carries the post id for the deep link', async (type) => {
+            prisma.user.findUnique.mockResolvedValue(activeUser());
+
+            await firebase.sendSocialNotification(7, type, 'Budi', 'Halo semua', 42);
+
+            expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ type: 'SOCIAL_NOTIFICATION', social_type: type, id_post: '42' })
+            }));
+        });
+
         test('skips a user without an FCM token', async () => {
             prisma.user.findUnique.mockResolvedValue(activeUser({ fcm_token: null }));
 
