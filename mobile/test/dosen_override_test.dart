@@ -16,12 +16,22 @@ class _FakeDosenService extends Fake implements DosenService {
   Completer<Map<String, dynamic>>? pending;
   int detailCalls = 0;
 
+  /// When on, `getSesiDetail` does not answer by itself: every call adds a completer to
+  /// [gatedDetails] and waits for the test (a slow network, answers arriving in any order).
+  bool gateDetails = false;
+  final List<Completer<Map<String, dynamic>>> gatedDetails = <Completer<Map<String, dynamic>>>[];
+
   _FakeDosenService(this.detail);
 
   @override
-  Future<Map<String, dynamic>> getSesiDetail(int idSesi) async {
+  Future<Map<String, dynamic>> getSesiDetail(int idSesi) {
     detailCalls++;
-    return detail;
+    if (gateDetails) {
+      final Completer<Map<String, dynamic>> completer = Completer<Map<String, dynamic>>();
+      gatedDetails.add(completer);
+      return completer.future;
+    }
+    return Future<Map<String, dynamic>>.value(detail);
   }
 
   @override
@@ -104,6 +114,34 @@ Map<String, dynamic> _detail({bool open = false}) => <String, dynamic>{
     'persentase': '50.0',
   },
 };
+
+/// The session as the server would answer once Budi (10) and Sari (11) have these statuses.
+/// [budiChangedBy] is the `diubah_oleh` the server keeps for Budi's row.
+Map<String, dynamic> _detailWith({
+  required String? budi,
+  required String? sari,
+  int? budiChangedBy,
+}) {
+  Map<String, dynamic> peserta(int idUser, String nama, String? status, int? changedBy) =>
+      <String, dynamic>{
+        'id_user': idUser,
+        'nama': nama,
+        'username': nama.toLowerCase(),
+        'status': status,
+        'hadir': status == 'HADIR' || status == 'TELAT',
+        'keterangan': null,
+        'diubah_oleh': changedBy,
+        'waktu_absen': null,
+      };
+
+  return <String, dynamic>{
+    ..._detail(),
+    'peserta': <Map<String, dynamic>>[
+      peserta(10, 'Budi', budi, budiChangedBy),
+      peserta(11, 'Sari', sari, null),
+    ],
+  };
+}
 
 void main() {
   tearDown(() => Get.reset());
@@ -333,6 +371,107 @@ void main() {
 
       expect(find.byType(OverrideStatusSheet), findsNothing);
       expect(service.overrides, isEmpty);
+    });
+  });
+
+  group('quiet refresh after a save', () {
+    // Opens the sheet of one student, picks a status and presses Simpan
+    Future<void> startSave(WidgetTester tester, int idUser, String status) async {
+      await tester.tap(find.byKey(Key('peserta-$idUser')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('override-status-$status')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('override-save')));
+      await tester.pump();
+    }
+
+    // The server accepts the pending save
+    Future<void> finishSave(WidgetTester tester, _FakeDosenService service, int idUser, String status) async {
+      service.pending!.complete(<String, dynamic>{
+        'id_user': idUser,
+        'status': status,
+        'diubah_oleh': 5,
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    Future<void> letSnackbarsGo(WidgetTester tester) async {
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a late refresh does not undo the row of a save made after it started', (tester) async {
+      final service = _FakeDosenService(_detail());
+      await pumpPage(tester, service);
+      service.gateDetails = true;
+
+      // Budi -> Hadir is saved; its quiet refresh (R1) is still on the way
+      await startSave(tester, 10, 'HADIR');
+      await finishSave(tester, service, 10, 'HADIR');
+      expect(service.gatedDetails, hasLength(1));
+      expect(statusOf(10, 'Hadir'), findsOneWidget);
+
+      // Sari -> Izin is saved while R1 is out: the row shows Izin at once
+      await startSave(tester, 11, 'IZIN');
+      expect(statusOf(11, 'Izin'), findsOneWidget);
+
+      // R1 answers now, with what the server knew before Sari's change
+      service.gatedDetails[0].complete(_detailWith(budi: 'HADIR', sari: 'TELAT'));
+      await tester.pump();
+
+      expect(statusOf(11, 'Izin'), findsOneWidget, reason: 'the stale answer must be dropped');
+      expect(statusOf(11, 'Telat'), findsNothing);
+
+      // Sari's save is accepted; its own refresh (R2) brings the server's view of both
+      await finishSave(tester, service, 11, 'IZIN');
+      expect(service.gatedDetails, hasLength(2));
+      service.gatedDetails[1].complete(_detailWith(budi: 'HADIR', sari: 'IZIN'));
+      await tester.pump();
+
+      expect(statusOf(10, 'Hadir'), findsOneWidget);
+      expect(statusOf(11, 'Izin'), findsOneWidget);
+      await letSnackbarsGo(tester);
+    });
+
+    testWidgets('answers that arrive out of order: the older one is dropped', (tester) async {
+      final service = _FakeDosenService(_detail());
+      await pumpPage(tester, service);
+      service.gateDetails = true;
+
+      await startSave(tester, 10, 'HADIR');
+      await finishSave(tester, service, 10, 'HADIR'); // R1 starts
+      await startSave(tester, 11, 'IZIN');
+      await finishSave(tester, service, 11, 'IZIN'); // R2 starts
+      expect(service.gatedDetails, hasLength(2));
+
+      // R2 (the newer request) answers first, then the old R1 with what was true before Sari's change
+      service.gatedDetails[1].complete(_detailWith(budi: 'HADIR', sari: 'IZIN'));
+      await tester.pump();
+      service.gatedDetails[0].complete(_detailWith(budi: 'HADIR', sari: 'TELAT'));
+      await tester.pump();
+
+      expect(statusOf(11, 'Izin'), findsOneWidget);
+      expect(statusOf(11, 'Telat'), findsNothing);
+      await letSnackbarsGo(tester);
+    });
+
+    testWidgets('a refresh with nothing newer in between is applied (what only the server knows)',
+        (tester) async {
+      final service = _FakeDosenService(_detail());
+      await pumpPage(tester, service);
+      service.gateDetails = true;
+
+      await startSave(tester, 10, 'HADIR');
+      await finishSave(tester, service, 10, 'HADIR');
+      service.gatedDetails[0].complete(
+        _detailWith(budi: 'HADIR', sari: 'TELAT', budiChangedBy: 5),
+      );
+      await tester.pump();
+
+      expect(statusOf(10, 'Hadir'), findsOneWidget);
+      expect(find.text('Diubah manual'), findsOneWidget);
+      await letSnackbarsGo(tester);
     });
   });
 }

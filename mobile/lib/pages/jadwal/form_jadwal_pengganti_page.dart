@@ -82,7 +82,12 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
         } else {
           _jamBerakhirGanti = picked;
         }
-        _jamError = validateJamGanti(_jamMulaiGanti, _jamBerakhirGanti);
+        // The pair is only checked once both are picked: with one still empty there is nothing to
+        // compare yet, and "Pilih jam ..." is for the submit. An error of an earlier submit stays
+        // until the pair is complete.
+        if (_jamMulaiGanti != null && _jamBerakhirGanti != null) {
+          _jamError = validateJamGanti(_jamMulaiGanti, _jamBerakhirGanti);
+        }
       });
     }
   }

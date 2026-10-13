@@ -53,6 +53,15 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   String? _errorMessage;
   Map<String, dynamic>? _sesiData;
 
+  /// Numbers every request for the session data (the full load, the quiet refresh and each save):
+  /// an answer is only applied while no newer request has started since, so a slow, older answer can
+  /// never put back what a later change already replaced.
+  int _requestSeq = 0;
+
+  /// Saves of a status that are waiting for the server. Their rows are already changed on screen,
+  /// so no refresh answer is applied while one is out.
+  int _savesInFlight = 0;
+
   final Color primaryRed = const Color(0xFFE63946);
 
   @override
@@ -63,6 +72,8 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
   }
 
   Future<void> _loadSesiDetail() async {
+    // A quiet refresh that is still out is older than this load
+    _requestSeq++;
     // Clear the previous error first, otherwise a successful retry would still show it
     setState(() {
       _isLoading = true;
@@ -157,6 +168,9 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
     final int idUser = peserta['id_user'] as int;
     final Map<String, dynamic> before = _sesiData!;
 
+    // What a refresh started before this change knows is already out of date
+    _requestSeq++;
+    _savesInFlight++;
     setState(() {
       _sesiData = _withPeserta(idUser, <String, dynamic>{
         ...peserta,
@@ -192,15 +206,23 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
     } catch (e) {
       if (mounted) setState(() => _sesiData = before);
       return ErrorHelper.parseError(e);
+    } finally {
+      _savesInFlight--;
     }
   }
 
   /// Fetches the session again without the spinner, to pick up what only the server works out
-  /// (check-in time, the final percentage). A failure keeps what is on screen.
+  /// (check-in time, the final percentage). A failure keeps what is on screen, and so does an
+  /// answer that is no longer the latest word: another request or a save started after this one.
   Future<void> _refreshQuietly() async {
+    final int seq = ++_requestSeq;
     try {
       final data = await _dosenService.getSesiDetail(widget.idSesi);
       if (!mounted || data.isEmpty) return;
+      if (seq != _requestSeq || _savesInFlight > 0) {
+        debugPrint('Pembaruan sesi yang sudah usang diabaikan');
+        return;
+      }
       setState(() => _sesiData = data);
     } catch (e) {
       debugPrint('Gagal memuat ulang sesi: $e');

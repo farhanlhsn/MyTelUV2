@@ -49,9 +49,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // Fills the first time field that still says "Pilih Jam": mulai first, then berakhir
-  Future<void> pickTime(WidgetTester tester, String hour, String minute) async {
-    await tester.tap(find.text('Pilih Jam').first);
+  // Fills the first time field that still says "Pilih Jam": mulai first, then berakhir. With
+  // [end] the last one: berakhir while mulai is still empty.
+  Future<void> pickTime(
+    WidgetTester tester,
+    String hour,
+    String minute, {
+    bool end = false,
+  }) async {
+    await tester.tap(end ? find.text('Pilih Jam').last : find.text('Pilih Jam').first);
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.keyboard_outlined));
     await tester.pumpAndSettle();
@@ -162,6 +168,82 @@ void main() {
 
     expect(adapter.requests, isEmpty);
     expect(find.text('Pilih jam berakhir'), findsOneWidget);
+  });
+
+  Future<void> openGantiJadwal(WidgetTester tester, StubHttpAdapter adapter) async {
+    await openForm(tester, adapter);
+    await pickTanggalAsli(tester);
+    await chooseGantiJadwal(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pilih Tanggal Baru'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('picking only the start time shows no error yet', (tester) async {
+    final adapter = StubHttpAdapter(400, refused);
+    await openGantiJadwal(tester, adapter);
+
+    await pickTime(tester, '10', '0');
+
+    expect(find.text('10:00'), findsOneWidget);
+    expect(find.text('Pilih jam berakhir'), findsNothing);
+    // the usual hint stays
+    expect(find.text('Kosongkan jika sama dengan jam kelas asli'), findsOneWidget);
+  });
+
+  testWidgets('picking only the end time shows no error yet either', (tester) async {
+    final adapter = StubHttpAdapter(400, refused);
+    await openGantiJadwal(tester, adapter);
+
+    await pickTime(tester, '12', '0', end: true);
+
+    expect(find.text('12:00'), findsOneWidget);
+    expect(find.text('Pilih jam mulai'), findsNothing);
+    expect(find.text('Kosongkan jika sama dengan jam kelas asli'), findsOneWidget);
+  });
+
+  testWidgets('the pair is checked as soon as both are picked, and the error goes when it is fixed',
+      (tester) async {
+    final adapter = StubHttpAdapter(400, refused);
+    await openGantiJadwal(tester, adapter);
+
+    await pickTime(tester, '10', '0');
+    await pickTime(tester, '9', '0');
+    expect(find.text('Jam berakhir harus setelah jam mulai'), findsOneWidget);
+
+    // start moved before the end: fine again
+    await tester.tap(find.text('10:00'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.keyboard_outlined));
+    await tester.pumpAndSettle();
+    final Finder fields = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.at(0), '8');
+    await tester.enterText(fields.at(1), '0');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jam berakhir harus setelah jam mulai'), findsNothing);
+  });
+
+  testWidgets('a missing end time is still refused on submit, and the message stays until it is picked',
+      (tester) async {
+    final adapter = StubHttpAdapter(400, refused);
+    await openGantiJadwal(tester, adapter);
+
+    await pickTime(tester, '10', '0');
+    await tester.enterText(find.byType(TextFormField).last, 'Bentrok seminar');
+    await tester.tap(find.text('Simpan Perubahan'));
+    await tester.pumpAndSettle();
+    expect(adapter.requests, isEmpty);
+    expect(find.text('Pilih jam berakhir'), findsOneWidget);
+
+    await pickTime(tester, '11', '0');
+    expect(find.text('Pilih jam berakhir'), findsNothing);
   });
 
   testWidgets('a 400 of the server is shown as the server wrote it', (tester) async {
