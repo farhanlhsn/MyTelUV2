@@ -491,13 +491,51 @@ def init_recognizer():
             raise e
 
 
+# /health re-attempts a failed model load, at most once per this many seconds (a broken model
+# file must not make every probe re-run an expensive load).
+HEALTH_RETRY_INTERVAL_SECONDS = 30
+_health_retry_lock = threading.Lock()
+# time.monotonic() of the last failed load attempt (boot or /health); None = no failure yet
+_last_load_attempt = None
+
+
+def retry_recognizer_load_if_due():
+    """Re-attempt init_recognizer() for /health while the model is not loaded.
+
+    Rate-limited to one attempt per HEALTH_RETRY_INTERVAL_SECONDS, and never run by two probes at
+    once (a probe that finds the lock taken skips the retry instead of queueing behind a slow load).
+    Never raises: the caller keeps answering 503 if the load fails again.
+    """
+    global _last_load_attempt
+    if not _health_retry_lock.acquire(blocking=False):
+        return
+    try:
+        now = time.monotonic()
+        if (
+            _last_load_attempt is not None
+            and now - _last_load_attempt < HEALTH_RETRY_INTERVAL_SECONDS
+        ):
+            return
+        _last_load_attempt = now
+        app.logger.info("Plate recognizer not loaded; retrying load from /health")
+        try:
+            init_recognizer()
+        except Exception as e:
+            app.logger.error(f"Plate recognizer retry failed: {e}")
+    finally:
+        _health_retry_lock.release()
+
+
 # Load the model when the module is imported (once per gunicorn worker, and also for
-# `python app.py`) so /health reports readiness truthfully. A failure is logged and
-# /health stays 503; the next request that needs the model retries the load.
+# `python app.py`) so /health reports readiness truthfully. A failure is logged and /health
+# answers 503; /health then retries the load itself (retry_recognizer_load_if_due), so a service
+# whose boot-time load failed can recover without a restart. Requests that need the model also
+# call init_recognizer() and retry it.
 try:
     init_recognizer()
 except Exception as e:
     app.logger.error(f"CRITICAL: Failed to eager load plate recognizer: {e}")
+    _last_load_attempt = time.monotonic()
 
 
 @app.before_request
@@ -521,7 +559,13 @@ def check_api_key():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Readiness endpoint: 503 until the OCR model is loaded (always ready in TEST_MODE)."""
+    """Readiness endpoint: 503 until the OCR model is loaded (always ready in TEST_MODE).
+
+    While the model is missing it also re-attempts the load (rate-limited), so a boot-time
+    failure heals on its own once the cause (model file, memory) is fixed.
+    """
+    if not is_test_mode() and recognizer is None:
+        retry_recognizer_load_if_due()
     if not is_test_mode() and recognizer is None:
         return jsonify({
             'status': 'unavailable',

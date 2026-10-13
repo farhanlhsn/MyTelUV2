@@ -1146,7 +1146,10 @@ class TestAIServiceApiKeys(unittest.TestCase):
 
     def test_plate_health_is_503_while_the_model_is_not_loaded(self):
         module = _load_service("plate_recognition")
-        with mock.patch.object(module, "recognizer", None):
+        # init_recognizer is stubbed (it would try to load the real model) and fails to load
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
             resp = self._call(
                 "plate_recognition",
                 "PLATE_API_KEY",
@@ -1155,6 +1158,77 @@ class TestAIServiceApiKeys(unittest.TestCase):
                 test_mode="false",
             )
         self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+        init_recognizer.assert_called_once_with()
+
+    def test_plate_health_retries_a_failed_load_and_recovers(self):
+        module = _load_service("plate_recognition")
+
+        def load_model():
+            module.recognizer = mock.Mock()
+
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(
+            module, "init_recognizer", side_effect=load_model
+        ) as init_recognizer:
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        self.assertEqual(resp.get_json().get("status"), "ok")
+        init_recognizer.assert_called_once_with()
+
+    def test_plate_health_stays_503_when_the_retry_raises(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(
+            module, "init_recognizer", side_effect=RuntimeError("model file corrupt")
+        ):
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+
+    def test_plate_health_retry_is_rate_limited(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
+            for _ in range(3):
+                resp = self._call(
+                    "plate_recognition",
+                    "PLATE_API_KEY",
+                    "/health",
+                    key=self.KEY,
+                    test_mode="false",
+                )
+                self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+        # Three probes right after each other: only the first re-attempts the load
+        self.assertEqual(init_recognizer.call_count, 1)
+
+    def test_plate_health_does_not_retry_in_test_mode(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="true",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        init_recognizer.assert_not_called()
 
     def test_plate_health_is_ok_once_the_model_is_loaded(self):
         module = _load_service("plate_recognition")
