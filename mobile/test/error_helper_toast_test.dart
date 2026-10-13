@@ -185,10 +185,18 @@ void main() {
         .whereType<File>()
         .where((File f) => f.path.endsWith('.dart'));
 
-    test('no Get.snackbar call is left in lib/', () {
+    // Every way into GetX's snackbar queue has the same overlay lookup
+    const List<String> banned = <String>[
+      'Get.snackbar(',
+      'Get.showSnackbar(',
+      'Get.rawSnackbar(',
+    ];
+
+    test('no GetX snackbar call is left in lib/', () {
       final List<String> offenders = <String>[
         for (final File file in sources)
-          if (file.readAsStringSync().contains('Get.snackbar(')) file.path,
+          for (final String call in banned)
+            if (file.readAsStringSync().contains(call)) '${file.path}: $call',
       ];
 
       expect(offenders, isEmpty);

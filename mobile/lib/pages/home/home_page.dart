@@ -14,6 +14,7 @@ import '../../controllers/home_controller.dart';
 import '../../models/kelas_hari_ini.dart';
 import '../../controllers/notification_controller.dart';
 import '../../app/routes.dart';
+import '../../utils/attendance_status.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -194,7 +195,8 @@ class _HomePageState extends State<HomePage> {
           // Only a student has an attendance percentage (the others have no classes to attend)
           final bool showKehadiran =
               _homeController.currentUser.value?.role == 'MAHASISWA';
-          final totalKehadiran = _homeController.totalKehadiranPercentage;
+          // Null until the history is loaded: the line then shows a dash, not a made-up number
+          final double? totalKehadiran = _homeController.totalKehadiranPercentage;
 
           return Row(
             children: [
@@ -245,7 +247,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             if (showKehadiran)
                               Text(
-                                "Kehadiran: ${totalKehadiran.toStringAsFixed(1)}%",
+                                kehadiranLabel(totalKehadiran),
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.8),
                                   fontSize: 10,

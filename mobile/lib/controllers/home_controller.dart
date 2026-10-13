@@ -24,8 +24,9 @@ class HomeController extends GetxController {
   final RxList<PesertaKelasModel> kelasList = <PesertaKelasModel>[].obs;
   final RxList<KelasHariIniModel> kelasHariIniList = <KelasHariIniModel>[].obs;
 
-  /// Attendance of the student over all their classes, in percent (see [loadAbsensi]).
-  final RxDouble kehadiranPercentage = 0.0.obs;
+  /// Attendance of the student over all their classes, in percent (see [loadAbsensi]). Null until
+  /// the history was loaded once: an unknown value is not 0%.
+  final Rxn<double> kehadiranPercentage = Rxn<double>();
   final RxBool isKelasHariIniFromCache = false.obs;
 
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
@@ -133,7 +134,7 @@ class HomeController extends GetxController {
           await _akademikService.getAbsensiKuHistory();
       kehadiranPercentage.value = overallAttendancePercentage(history);
     } catch (e) {
-      // The last percentage stays on screen
+      // The last percentage stays on screen (none yet if this was the first load)
       errorMessage.value = 'Failed to load absensi: ${e.toString()}';
     } finally {
       isLoadingAbsensi.value = false;
@@ -149,8 +150,9 @@ class HomeController extends GetxController {
     return kelasList.first;
   }
 
-  // Attendance percentage over all classes (0 until it is loaded, or when nothing is countable yet)
-  double get totalKehadiranPercentage => kehadiranPercentage.value;
+  // Attendance percentage over all classes: null until the history was loaded, 0 when nothing is
+  // countable yet
+  double? get totalKehadiranPercentage => kehadiranPercentage.value;
 
   // Refresh all data
   Future<void> refreshData() async {

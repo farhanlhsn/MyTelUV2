@@ -170,7 +170,6 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
 
     // What a refresh started before this change knows is already out of date
     _requestSeq++;
-    _savesInFlight++;
     setState(() {
       _sesiData = _withPeserta(idUser, <String, dynamic>{
         ...peserta,
@@ -182,6 +181,7 @@ class _DosenSesiDetailPageState extends State<DosenSesiDetailPage> {
     });
 
     try {
+      _savesInFlight++;
       final Map<String, dynamic> row = await _dosenService.overrideAbsensi(
         idSesi: widget.idSesi,
         idUser: idUser,

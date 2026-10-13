@@ -60,7 +60,7 @@ void main() {
       expect(controller.totalKehadiranPercentage, 80.0);
     });
 
-    test('a student without a countable session is at 0, not 100', () async {
+    test('a loaded student without a countable session is at 0 (known), not 100 and not unknown', () async {
       final adapter = StubHttpAdapter(200, <String, dynamic>{
         'status': 'success',
         'data': <dynamic>[_kelas(totalSesi: 0, hadir: 0)],
@@ -72,10 +72,56 @@ void main() {
       expect(controller.totalKehadiranPercentage, 0.0);
     });
 
-    test('before anything is loaded it is 0', () {
-      final HomeController controller = controllerFor(StubHttpAdapter(200, <String, dynamic>{}));
+    test('a loaded student without any class is at 0 as well', () async {
+      final adapter = StubHttpAdapter(200, <String, dynamic>{
+        'status': 'success',
+        'data': <dynamic>[],
+      });
+      final HomeController controller = controllerFor(adapter);
+
+      await controller.loadAbsensi();
 
       expect(controller.totalKehadiranPercentage, 0.0);
+    });
+
+    test('before anything is loaded it is unknown (null), not 0', () {
+      final HomeController controller = controllerFor(StubHttpAdapter(200, <String, dynamic>{}));
+
+      expect(controller.totalKehadiranPercentage, isNull);
+    });
+
+    test('a first load that fails leaves it unknown and reports the error', () async {
+      final adapter = StubHttpAdapter(500, <String, dynamic>{
+        'status': 'error',
+        'message': 'Terjadi kesalahan',
+      });
+      final HomeController controller = controllerFor(adapter);
+
+      await controller.loadAbsensi();
+
+      expect(controller.totalKehadiranPercentage, isNull);
+      expect(controller.errorMessage.value, isNotEmpty);
+      expect(controller.isLoadingAbsensi.value, isFalse);
+    });
+
+    test('a load that works after a failed one sets it', () async {
+      final adapter = StubHttpAdapter.sequence(<(int, Map<String, dynamic>)>[
+        (500, <String, dynamic>{'status': 'error', 'message': 'Terjadi kesalahan'}),
+        (
+          200,
+          <String, dynamic>{
+            'status': 'success',
+            'data': <dynamic>[_kelas(totalSesi: 4, hadir: 3)],
+          },
+        ),
+      ]);
+      final HomeController controller = controllerFor(adapter);
+
+      await controller.loadAbsensi();
+      expect(controller.totalKehadiranPercentage, isNull);
+      await controller.loadAbsensi();
+
+      expect(controller.totalKehadiranPercentage, 75.0);
     });
 
     test('a failed request keeps the last percentage and reports the error', () async {

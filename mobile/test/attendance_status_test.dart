@@ -266,6 +266,21 @@ void main() {
     });
   });
 
+  group('kehadiranLabel (Home top bar)', () {
+    test('shows the percentage with one decimal', () {
+      expect(kehadiranLabel(83.333), 'Kehadiran: 83.3%');
+      expect(kehadiranLabel(100), 'Kehadiran: 100.0%');
+    });
+
+    test('a loaded 0 is shown as 0.0%', () {
+      expect(kehadiranLabel(0), 'Kehadiran: 0.0%');
+    });
+
+    test('an unknown percentage is a dash, not a number', () {
+      expect(kehadiranLabel(null), 'Kehadiran: -');
+    });
+  });
+
   group('sesiHadirText', () {
     test('present over the sessions that count', () {
       expect(

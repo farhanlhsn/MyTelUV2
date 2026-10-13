@@ -170,6 +170,13 @@ double overallAttendancePercentage(Iterable<Map<String, dynamic>> history) {
   return dihitung > 0 ? hadir / dihitung * 100 : 0;
 }
 
+/// The attendance line of the Home top bar: "Kehadiran: 83.3%", or "Kehadiran: -" while the
+/// percentage is unknown (not loaded yet, or the first load failed), so no number is made up.
+String kehadiranLabel(double? percentage) {
+  if (percentage == null) return 'Kehadiran: -';
+  return 'Kehadiran: ${percentage.toStringAsFixed(1)}%';
+}
+
 /// "3/4 sesi hadir" for the class card of the student history. Izin and sakit are not part of the
 /// denominator (same as the percentage), they are named separately: "3/4 sesi hadir • 2 izin/sakit".
 String sesiHadirText(Map<String, dynamic>? stats) {
