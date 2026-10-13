@@ -18,6 +18,7 @@ jest.mock('../controllers/biometrikController', () => {
         scanWajah: ok,
         biometrikAbsen: ok,
         requestLivenessToken: ok,
+        getMyBiometrikStatus: ok,
     };
 });
 
@@ -59,6 +60,18 @@ describe('POST /biometrik/scan', () => {
 
     test('is allowed for ADMIN', async () => {
         const res = await request(app).post('/biometrik/scan').set(asRole('ADMIN'));
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /biometrik/status', () => {
+    test('is 401 without a token', async () => {
+        const res = await request(app).get('/biometrik/status');
+        expect(res.status).toBe(401);
+    });
+
+    test.each(['MAHASISWA', 'DOSEN', 'ADMIN'])('is allowed for %s', async (role) => {
+        const res = await request(app).get('/biometrik/status').set(asRole(role));
         expect(res.status).toBe(200);
     });
 });

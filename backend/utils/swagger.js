@@ -230,6 +230,13 @@ module.exports = {
         responses: { 200: { description: 'Profile updated' } },
       },
     },
+    '/biometrik/status': {
+      get: {
+        tags: ['Biometrik'],
+        summary: 'Own biometric status (is a face enrolled?)',
+        responses: { 200: { description: 'data: { terdaftar, diperbarui }' } },
+      },
+    },
     '/biometrik/request-liveness-token': {
       post: {
         tags: ['Biometrik'],

@@ -8,6 +8,7 @@ const {
   verifyWajah,
   scanWajah,
   biometrikAbsen,
+  getMyBiometrikStatus,
 } = require("../controllers/biometrikController");
 const { protect, authorize } = require("../middlewares/authMiddleware");
 const { validateRequired } = require("../middlewares/validationMiddleware");
@@ -80,6 +81,9 @@ router.post(
   upload.single("image"),
   scanWajah,
 );
+
+// Own biometric status (is a face enrolled?) - any authenticated user
+router.get("/status", protect, getMyBiometrikStatus);
 
 // Biometric attendance - MAHASISWA absen pakai wajah
 router.post(

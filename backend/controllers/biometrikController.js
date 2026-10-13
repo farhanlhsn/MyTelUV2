@@ -164,6 +164,33 @@ exports.requestLivenessToken = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @desc    Whether the logged-in user has an active face enrolled (self status, no face data returned)
+ * @route   GET /api/biometrik/status
+ * @access  Protected (any role)
+ */
+exports.getMyBiometrikStatus = asyncHandler(async (req, res) => {
+  const biometrik = await prisma.dataBiometrik.findUnique({
+    where: { id_user: req.user.id_user },
+    select: { deletedAt: true, updatedAt: true },
+  });
+
+  // A soft-deleted row counts as not registered
+  const terdaftar = Boolean(biometrik && !biometrik.deletedAt);
+
+  res.status(200).json({
+    status: "success",
+    message: "Status biometrik berhasil diambil",
+    data: {
+      terdaftar,
+      diperbarui:
+        terdaftar && biometrik.updatedAt
+          ? new Date(biometrik.updatedAt).toISOString()
+          : null,
+    },
+  });
+});
+
+/**
  * @desc    Add biometric data (register face)
  * @route   POST /api/biometrik/add
  * @access  Protected

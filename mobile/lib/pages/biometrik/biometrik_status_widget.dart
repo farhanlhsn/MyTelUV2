@@ -3,8 +3,7 @@ import 'package:get/get.dart';
 import 'biometrik_verification_page.dart';
 
 class BiometrikStatusWidget extends StatelessWidget {
-  /// Whether biometric is registered for current user; null when the status is not known
-  /// (the app has no endpoint that tells a student whether a face is enrolled)
+  /// Whether biometric is registered for current user; null while the status is still loading
   final bool? isRegistered;
 
   /// Whether to show action button
@@ -78,7 +77,7 @@ class BiometrikStatusWidget extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   isRegistered == null
-                      ? 'Status pendaftaran wajah diperiksa saat absen'
+                      ? 'Memeriksa status…'
                       : isRegistered!
                       ? 'Wajah sudah terdaftar'
                       : 'Wajah belum terdaftar',

@@ -193,6 +193,7 @@ Auth:
 
 Biometrik:
 
+- `GET /api/v1/biometrik/status` (status biometrik sendiri: `terdaftar`, `diperbarui`)
 - `POST /api/v1/biometrik/request-liveness-token`
 - `POST /api/v1/biometrik/absen`
 - `POST /api/v1/biometrik/verify`
