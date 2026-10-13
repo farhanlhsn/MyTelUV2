@@ -1,7 +1,5 @@
 const validator = require('validator');
 
-const { ZodError } = require('zod');
-
 // Sanitize and validate input data
 exports.sanitizeInput = (req, res, next) => {
     for (let key in req.body) {
@@ -17,19 +15,28 @@ exports.sanitizeInput = (req, res, next) => {
     next();
 };
 
-// Generic Zod Validator Middleware
+// Indonesian fallback for Zod issues whose schema has no custom message
+// (an explicit message on the schema always takes precedence over this map).
+const indonesianErrorMap = (issue, ctx) => {
+    const field = issue.path.length > 0 ? issue.path.join('.') : 'Data';
+    return { message: ctx.data === undefined ? `${field} wajib diisi` : `${field} tidak valid` };
+};
+
+// Generic Zod Validator Middleware.
+// The parsed output replaces req.body, so schemas are authoritative: unknown keys are
+// stripped and transforms (e.g. plate normalisation) are applied.
 exports.validateZod = (schema) => {
     return async (req, res, next) => {
         try {
-            req.body = await schema.parseAsync(req.body);
+            req.body = await schema.parseAsync(req.body, { errorMap: indonesianErrorMap });
             next();
         } catch (error) {
-            if (error instanceof ZodError) {
-                const errorMessages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            // Zod v3 exposes `errors` (alias of `issues`); v4 only exposes `issues`.
+            const issues = error?.issues ?? error?.errors;
+            if (Array.isArray(issues)) {
                 return res.status(400).json({
                     status: "error",
-                    message: "Validation failed",
-                    details: errorMessages
+                    message: issues.map(issue => issue.message).join(', ')
                 });
             }
             next(error);
@@ -117,17 +124,4 @@ exports.validateUsername = (req, res, next) => {
         }
     }
     next();
-};
-
-// Validate schema using Zod
-exports.validateZod = (schema) => (req, res, next) => {
-    try {
-        schema.parse(req.body);
-        next();
-    } catch (error) {
-        return res.status(400).json({
-            status: "error",
-            message: error.errors ? error.errors.map(e => e.message).join(', ') : error.message
-        });
-    }
 };

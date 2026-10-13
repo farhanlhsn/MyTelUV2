@@ -11,8 +11,8 @@
     "dev": "nodemon server.js",
     "test": "jest --coverage",
     "test:unit": "jest --testPathPattern=test/ --coverage",
-    "test:e2e": "jest --testPathPattern=test-e2e/ --runInBand --detectOpenHandles --forceExit",
-    "test:all": "jest --coverage --runInBand --detectOpenHandles --forceExit",
+    "test:e2e": "jest --testPathPattern=test-e2e/ --testPathIgnorePatterns=/node_modules/ --testPathIgnorePatterns=/[.]_ --runInBand --detectOpenHandles --forceExit",
+    "test:all": "npm test && npm run test:e2e",
     "test:watch": "jest --watch",
     "prisma:reset": "npx dotenv -e ../.env -- prisma migrate reset --schema prisma/schema.prisma",
     "prisma:migrate": "npx dotenv -e ../.env -- prisma migrate dev --schema prisma/schema.prisma",
@@ -58,6 +58,11 @@
   },
   "jest": {
     "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/\\._",
+      "/test-e2e/"
+    ],
     "testMatch": [
       "**/test/**/*.test.js",
       "**/test-e2e/**/*.test.js"
