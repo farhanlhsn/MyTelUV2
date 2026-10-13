@@ -178,10 +178,38 @@ void main() {
       );
       // fallback: an unknown (already Indonesian) message is shown as it is
       expect(
-        mapAttendanceErrorMessage('Aktivitas absensi mencurigakan terdeteksi.'),
-        'Aktivitas absensi mencurigakan terdeteksi.',
+        mapAttendanceErrorMessage('Anda tidak terdaftar di kelas manapun'),
+        'Anda tidak terdaftar di kelas manapun',
       );
     });
+
+    test(
+      'suspicious-activity rejection (contains "mock location") is not read as a mock-location one',
+      () {
+        const friendly =
+            'Aktivitas lokasi tidak wajar terdeteksi. Pastikan GPS asli aktif lalu coba lagi.';
+        // full backend string, biometrik and akademik endpoint
+        expect(
+          mapAttendanceErrorMessage(
+            'Aktivitas absensi mencurigakan terdeteksi (mock location / spoofing).',
+          ),
+          friendly,
+        );
+        expect(
+          mapAttendanceErrorMessage(
+            'Exception: Aktivitas absensi mencurigakan terdeteksi (mock location / spoofing).',
+          ),
+          friendly,
+        );
+        // the plain mock-location rejection keeps its own text
+        expect(
+          mapAttendanceErrorMessage(
+            'Mock location / GPS spoofing terdeteksi. Absensi ditolak.',
+          ),
+          'Lokasi palsu (mock location) terdeteksi. Nonaktifkan aplikasi lokasi palsu lalu coba lagi.',
+        );
+      },
+    );
 
     test('matching is case-insensitive and ignores an Exception prefix', () {
       expect(

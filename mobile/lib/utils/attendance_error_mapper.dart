@@ -39,6 +39,12 @@ const List<(String, String)> _attendanceMessages = <(String, String)>[
     'Lokasi tidak valid. Pastikan GPS aktif lalu coba lagi.',
   ),
   (
+    // must stay above 'mock location': the backend text is
+    // "Aktivitas absensi mencurigakan terdeteksi (mock location / spoofing)."
+    'aktivitas absensi mencurigakan',
+    'Aktivitas lokasi tidak wajar terdeteksi. Pastikan GPS asli aktif lalu coba lagi.',
+  ),
+  (
     'mock location',
     'Lokasi palsu (mock location) terdeteksi. Nonaktifkan aplikasi lokasi palsu lalu coba lagi.',
   ),

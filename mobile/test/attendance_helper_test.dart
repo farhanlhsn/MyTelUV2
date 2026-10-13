@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile/utils/attendance_helper.dart';
@@ -265,6 +267,53 @@ void main() {
       final e = LocationIssueException(LocationIssue.deniedForever);
       expect(e.issue, LocationIssue.deniedForever);
       expect(e.toString(), locationIssueMessage(LocationIssue.deniedForever));
+    });
+  });
+
+  group('locationErrorMessage / locationIssueOfError', () {
+    test('a location timeout says the location was not obtained', () {
+      final timeout = TimeoutException(
+        'Future not completed',
+        const Duration(seconds: 20),
+      );
+      expect(
+        locationErrorMessage(timeout),
+        'Lokasi belum didapat. Pastikan GPS aktif dan coba di area terbuka.',
+      );
+      expect(locationIssueOfError(timeout), isNull);
+    });
+
+    test('a LocationIssueException keeps its own message and issue', () {
+      final e = LocationIssueException(LocationIssue.deniedForever);
+      expect(
+        locationErrorMessage(e),
+        locationIssueMessage(LocationIssue.deniedForever),
+      );
+      expect(locationIssueOfError(e), LocationIssue.deniedForever);
+    });
+
+    test('geolocator exceptions are mapped to the matching issue', () {
+      const off = LocationServiceDisabledException();
+      expect(
+        locationErrorMessage(off),
+        locationIssueMessage(LocationIssue.serviceDisabled),
+      );
+      expect(locationIssueOfError(off), LocationIssue.serviceDisabled);
+
+      const denied = PermissionDeniedException('ditolak');
+      expect(
+        locationErrorMessage(denied),
+        locationIssueMessage(LocationIssue.denied),
+      );
+      expect(locationIssueOfError(denied), LocationIssue.denied);
+    });
+
+    test('anything else is wrapped without an Exception: prefix', () {
+      expect(
+        locationErrorMessage(Exception('Sensor rusak')),
+        'Gagal mendapatkan lokasi: Sensor rusak',
+      );
+      expect(locationIssueOfError(Exception('Sensor rusak')), isNull);
     });
   });
 

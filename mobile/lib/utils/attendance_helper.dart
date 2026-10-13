@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:geolocator/geolocator.dart';
+
+import 'error_helper.dart';
 
 /// Pure helpers for the attendance flow (home card, absen page). No widgets, no platform calls,
 /// so they can be unit tested.
@@ -145,6 +148,29 @@ class LocationIssueException implements Exception {
 
   @override
   String toString() => locationIssueMessage(issue);
+}
+
+const String _locationTimeoutMessage =
+    'Lokasi belum didapat. Pastikan GPS aktif dan coba di area terbuka.';
+
+/// The problem behind a failed position request when it is one the user can fix in the
+/// settings or by granting the permission, else null.
+LocationIssue? locationIssueOfError(Object error) {
+  if (error is LocationIssueException) return error.issue;
+  if (error is LocationServiceDisabledException) {
+    return LocationIssue.serviceDisabled;
+  }
+  if (error is PermissionDeniedException) return LocationIssue.denied;
+  return null;
+}
+
+/// Indonesian text for any error of a position request: a timeout (GPS has no fix yet), a
+/// disabled service / denied permission, or something unexpected.
+String locationErrorMessage(Object error) {
+  final issue = locationIssueOfError(error);
+  if (issue != null) return locationIssueMessage(issue);
+  if (error is TimeoutException) return _locationTimeoutMessage;
+  return 'Gagal mendapatkan lokasi: ${ErrorHelper.parseError(error)}';
 }
 
 // ---------------------------------------------------------------------------

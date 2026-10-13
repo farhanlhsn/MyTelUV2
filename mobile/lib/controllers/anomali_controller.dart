@@ -14,6 +14,9 @@ class AnomaliController extends GetxController {
   /// service for POLA_WAKTU is down), so "no anomalies" may be incomplete.
   final RxList<String> warnings = <String>[].obs;
 
+  /// The last scan could not be completed (request failed), as opposed to "no anomalies found".
+  final RxBool lastScanFailed = false.obs;
+
   final RxInt thresholdJarangHadir = 50.obs;
   final RxInt thresholdKehadiranGanda = 10.obs;
 
@@ -73,6 +76,7 @@ class AnomaliController extends GetxController {
     isLoading.value = true;
     message.value = '';
     warnings.clear();
+    lastScanFailed.value = false;
     // a failed scan must not leave the anomalies of the previous class on screen
     anomaliList.clear();
 
@@ -100,6 +104,7 @@ class AnomaliController extends GetxController {
         return true;
       } else {
         message.value = 'Gagal memuat data';
+        lastScanFailed.value = true;
         if (!silent) Get.snackbar("Info", message.value);
         return false;
       }
@@ -112,11 +117,13 @@ class AnomaliController extends GetxController {
       debugLog(
         'Error Anomali: status=${e.response?.statusCode ?? '-'} type=${e.type}',
       );
+      lastScanFailed.value = true;
       if (!silent) Get.snackbar("Error", message.value);
       return false;
     } catch (e) {
       debugLog("Error Anomali: $e");
       message.value = 'Gagal memproses hasil analisis';
+      lastScanFailed.value = true;
       if (!silent) Get.snackbar("Error", message.value);
       return false;
     } finally {

@@ -243,13 +243,8 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
       }
 
       setState(() {
-        if (e is LocationIssueException) {
-          _locationIssue = e.issue;
-          _locationError = locationIssueMessage(e.issue);
-        } else {
-          _locationError =
-              'Gagal mendapatkan lokasi: ${ErrorHelper.parseError(e)}';
-        }
+        _locationIssue = locationIssueOfError(e);
+        _locationError = locationErrorMessage(e);
         _isGettingLocation = false;
       });
       return null;
@@ -451,6 +446,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
           : Future<Position?>.value(_currentPosition);
 
       final position = await locationFuture;
+      if (!mounted) return;
       if (position == null) {
         setState(() {
           _isLoading = false;
@@ -469,6 +465,7 @@ class _BiometrikAbsenPageState extends State<BiometrikAbsenPage>
         livenessToken: token,
         isMockLocation: position.isMocked,
       );
+      if (!mounted) return;
 
       setState(() {
         _result = result;

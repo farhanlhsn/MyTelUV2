@@ -8,6 +8,7 @@ import '../../models/kelas.dart';
 import '../../utils/anomali_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/kelas_helper.dart';
+import '../common/error_retry_view.dart';
 import '../../app/routes.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../app/auth_middleware.dart';
@@ -30,6 +31,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   dynamic _selectedKelas;
   bool _isLoadingKelas = true;
   bool _isScanning = false;
+  bool _lastScanWasAll = false; // what "Coba Lagi" repeats after a failed scan
   String? _userRole;
 
   @override
@@ -48,6 +50,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
       if (_userRole == 'DOSEN') {
         // DOSEN: Get kelas yang diampu
         final kelas = await _dosenService.getKelasDiampu();
+        if (!mounted) return;
         setState(() {
           _kelasList = kelas;
           _isLoadingKelas = false;
@@ -55,6 +58,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
       } else {
         // ADMIN: Get all kelas
         final kelas = await _akademikService.getAllKelas(limit: 100);
+        if (!mounted) return;
         setState(() {
           _kelasList = kelas;
           _isLoadingKelas = false;
@@ -68,6 +72,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
   }
 
   Future<void> _scanKelas(int idKelas) async {
+    _lastScanWasAll = false;
     setState(() => _isScanning = true);
 
     // Langsung await ke analyzeKelas (sekarang return Future)
@@ -90,6 +95,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
       return;
     }
 
+    _lastScanWasAll = true;
     setState(() => _isScanning = true);
     _anomaliController.anomaliList.clear();
 
@@ -124,6 +130,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     // analyzeKelas leaves only the last class in the list: show every class together
     _anomaliController.anomaliList.assignAll(hasil);
     _anomaliController.warnings.assignAll(peringatan);
+    _anomaliController.lastScanFailed.value = gagal > 0;
     final String ringkasan = scanSummaryMessage(
       total: _kelasList.length,
       failed: gagal,
@@ -139,6 +146,14 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
       peringatanText.isEmpty ? ringkasan : '$ringkasan\n$peringatanText',
       duration: const Duration(seconds: 5),
     );
+  }
+
+  void _retryLastScan() {
+    if (_lastScanWasAll || kelasIdOf(_selectedKelas) == null) {
+      _scanAllKelas();
+    } else {
+      _scanSelectedKelas();
+    }
   }
 
   List<AnomaliModel> get _filteredAnomalies {
@@ -445,6 +460,17 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
       }
 
       final anomalies = _filteredAnomalies;
+
+      // A failed scan found nothing because it did not finish, not because all is well
+      if (anomalies.isEmpty && _anomaliController.lastScanFailed.value) {
+        return ErrorRetryView(
+          title: 'Pemindaian anomali gagal',
+          message: _anomaliController.message.value.isEmpty
+              ? 'Pemindaian tidak dapat diselesaikan.'
+              : _anomaliController.message.value,
+          onRetry: _retryLastScan,
+        );
+      }
 
       if (anomalies.isEmpty) {
         return Center(

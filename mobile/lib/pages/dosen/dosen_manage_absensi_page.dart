@@ -80,6 +80,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     try {
       final sesiList = await _dosenService.getSesiAbsensi(idKelas);
+      if (!mounted) return;
       setState(() {
         _sesiMap[idKelas] = sesiList;
         _loadingSesi[idKelas] = false;
