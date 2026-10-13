@@ -423,10 +423,11 @@ exports.changePassword = asyncHandler(async (req, res) => {
         where: { id_user: userId }
     });
 
-    // Verify old password
+    // Verify old password. A wrong current password is a validation failure (400), not 401: the caller
+    // is authenticated, and clients treat 401 as "session expired" (refresh, then log out).
     const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
     if (!isPasswordValid) {
-        return res.status(401).json({
+        return res.status(400).json({
             status: "error",
             message: 'Password lama salah'
         });

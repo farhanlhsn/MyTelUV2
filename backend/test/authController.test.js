@@ -719,7 +719,9 @@ describe('Auth Controller Tests', () => {
 
             await authController.changePassword(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(401);
+            // 400, not 401: a 401 makes clients think the session expired and log the user out
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.status).not.toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
                 message: 'Password lama salah'

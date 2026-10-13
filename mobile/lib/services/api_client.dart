@@ -61,12 +61,55 @@ class AppConfig {
 
 class ApiClient {
   static final String baseUrl = AppConfig.baseUrl;
-  static final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
+  static FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   static Dio? _dioInstance;
   static Completer<bool>? _refreshCompleter;
   static bool _isRedirecting = false;
+
+  /// `RequestOptions.extra` flag set on a request that was replayed after a token refresh.
+  static const String _retriedKey = 'retried';
+
+  /// Endpoints whose 401 means "these credentials / token are wrong" and not "your session
+  /// expired": no refresh, no logout, the error goes to the caller. Matched on the path suffix, so
+  /// `/auth/admin/reset-password` (a normal authenticated call) is not one of them.
+  static const List<String> _authEndpoints = <String>[
+    '/auth/login',
+    '/auth/register',
+    '/auth/password',
+    '/auth/refresh',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+  ];
+
+  static bool _isAuthEndpoint(String path) {
+    final String clean = path.split('?').first;
+    return _authEndpoints.any(clean.endsWith);
+  }
+
+  /// What happens when the session is really gone (refresh failed, or a retried request is still
+  /// refused): the storage is already cleared, this sends the user to the login page.
+  @visibleForTesting
+  static void Function() onSessionExpired = _redirectToLogin;
+
+  /// Test hook: every Dio created here (client and refresh call) uses this adapter.
+  @visibleForTesting
+  static HttpClientAdapter? httpAdapterOverride;
+
+  @visibleForTesting
+  static set secureStorage(FlutterSecureStorage storage) =>
+      _secureStorage = storage;
+
+  /// Test hook: back to the production wiring.
+  @visibleForTesting
+  static void resetForTest() {
+    _secureStorage = const FlutterSecureStorage();
+    onSessionExpired = _redirectToLogin;
+    httpAdapterOverride = null;
+    _dioInstance = null;
+    _refreshCompleter = null;
+    _isRedirecting = false;
+  }
 
   static Dio get dio {
     if (_dioInstance == null) {
@@ -83,6 +126,9 @@ class ApiClient {
           headers: <String, dynamic>{'Content-Type': 'application/json'},
         ),
       );
+      if (httpAdapterOverride != null) {
+        _dioInstance!.httpClientAdapter = httpAdapterOverride!;
+      }
 
       _dioInstance!.interceptors.add(
         InterceptorsWrapper(
@@ -114,21 +160,31 @@ class ApiClient {
               'DioError: ${error.type} status=${error.response?.statusCode ?? '-'} path=${error.requestOptions.path}',
             );
 
-            if (error.response?.statusCode == 401) {
-              final bool refreshed = await _attemptTokenRefresh(
-                error.requestOptions,
-              );
-              if (refreshed) {
-                try {
-                  final String? newToken = await _secureStorage.read(
-                    key: 'token',
-                  );
-                  error.requestOptions.headers['Authorization'] =
-                      'Bearer $newToken';
-                  final retryResponse = await _dioInstance!.fetch(error.requestOptions);
-                  return handler.resolve(retryResponse);
-                } catch (e) {
-                  debugLog('Retry failed after refresh: $e');
+            // A 401 from an auth endpoint is the answer to those credentials (wrong password, bad
+            // token, ...), not an expired session: hand it to the caller, never refresh or log out.
+            if (error.response?.statusCode == 401 &&
+                !_isAuthEndpoint(error.requestOptions.path)) {
+              final RequestOptions options = error.requestOptions;
+
+              // One refresh + one retry per request. A request that already was retried and still
+              // gets 401 goes straight to logout (no second refresh, no loop).
+              if (options.extra[_retriedKey] != true) {
+                final bool refreshed = await _attemptTokenRefresh(options);
+                if (refreshed) {
+                  try {
+                    final String? newToken = await _secureStorage.read(
+                      key: 'token',
+                    );
+                    options.headers['Authorization'] = 'Bearer $newToken';
+                    options.extra[_retriedKey] = true;
+                    final retryResponse = await _dioInstance!.fetch(options);
+                    return handler.resolve(retryResponse);
+                  } catch (e) {
+                    // A 401 of the retry already logged the user out in its own handler; any other
+                    // failure (server error, timeout) is the retry's answer, not a dead session.
+                    debugLog('Retry failed after refresh: $e');
+                    return handler.next(e is DioException ? e : error);
+                  }
                 }
               }
 
@@ -137,7 +193,7 @@ class ApiClient {
               );
               await _secureStorage.deleteAll();
               _dioInstance = null;
-              _redirectToLogin();
+              onSessionExpired();
               return;
             }
 
@@ -174,6 +230,9 @@ class ApiClient {
 
       debugLog('Attempting to refresh token...');
       final Dio refreshDio = Dio(BaseOptions(baseUrl: AppConfig.baseUrl));
+      if (httpAdapterOverride != null) {
+        refreshDio.httpClientAdapter = httpAdapterOverride!;
+      }
 
       final response = await refreshDio.post(
         '/api/v1/auth/refresh',
