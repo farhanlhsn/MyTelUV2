@@ -107,3 +107,19 @@ exports.edgeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Light limiter for the public GET /health (Caddy proxies it to the internet): every call probes the
+// database and three AI services, so it must not be a free amplifier. 60 requests / minute per client IP
+// leaves room for the container healthcheck and the deploy health check, which poll far less often.
+// It has its own counter and is mounted on /health only (the general API limiter does not cover it).
+exports.healthLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: {
+    status: "error",
+    message: 'Terlalu banyak permintaan. Coba lagi sebentar lagi.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

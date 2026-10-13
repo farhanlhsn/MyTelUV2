@@ -18,7 +18,7 @@ const { Server } = require('socket.io');
 const swaggerUi = require('swagger-ui-express');
 
 // Import security middleware
-const { generalLimiter, authLimiter } = require('./middlewares/rateLimiterMiddleware');
+const { generalLimiter, authLimiter, healthLimiter } = require('./middlewares/rateLimiterMiddleware');
 const { sanitizeInput } = require('./middlewares/validationMiddleware');
 const { socketAuth } = require('./middlewares/socketAuthMiddleware');
 const { GENERIC_SERVER_ERROR } = require('./utils/serverError');
@@ -137,8 +137,8 @@ const checkService = async (baseUrl) => {
     }
 };
 
-// Health Check Endpoint
-app.get('/health', async (req, res) => {
+// Health Check Endpoint. Reachable from the internet through Caddy, hence its own light rate limit.
+app.get('/health', healthLimiter, async (req, res) => {
     const urls = serviceUrls();
     const [db, face, plate, anomaly] = await Promise.all([
         checkDatabase(),

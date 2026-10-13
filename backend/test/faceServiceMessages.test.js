@@ -4,7 +4,13 @@
  * python-service/face_recognition/app.py and face_processor.py return.
  */
 
-const { translateFaceServiceError, FACE_SERVICE_FALLBACK_MESSAGE } = require('../utils/faceServiceMessages');
+const {
+    translateFaceServiceError,
+    isFaceServiceInternalError,
+    FACE_SERVICE_FALLBACK_MESSAGE,
+    FACE_MATCH_FAILED_MESSAGE,
+    FACE_SERVICE_FAILURE_MESSAGE,
+} = require('../utils/faceServiceMessages');
 
 describe('translateFaceServiceError', () => {
     test('no face detected', () => {
@@ -66,5 +72,41 @@ describe('translateFaceServiceError', () => {
     test('the fallback is Indonesian', () => {
         expect(FACE_SERVICE_FALLBACK_MESSAGE).toMatch(/Gagal/);
         expect(FACE_SERVICE_FALLBACK_MESSAGE).not.toMatch(/Failed|detected|error/i);
+    });
+
+    test('the match-failure and service-failure messages are Indonesian and distinct', () => {
+        expect(FACE_MATCH_FAILED_MESSAGE).toBe('Gagal mencocokkan wajah. Silakan coba lagi.');
+        expect(FACE_SERVICE_FAILURE_MESSAGE).toMatch(/^Layanan pengenalan wajah/);
+        expect(new Set([FACE_SERVICE_FALLBACK_MESSAGE, FACE_MATCH_FAILED_MESSAGE, FACE_SERVICE_FAILURE_MESSAGE]).size).toBe(3);
+    });
+});
+
+describe('isFaceServiceInternalError', () => {
+    test('is true for the service-side wrappers around an unexpected exception', () => {
+        for (const raw of [
+            'Error processing image: OpenCV(4.9) exception at /tmp/x.cpp',
+            'Server error: division by zero',
+            'Error comparing embeddings: shapes (512,) and (256,)',
+            'Error finding best match: shapes differ',
+            '  error processing image: lower case, padded',
+        ]) {
+            expect(isFaceServiceInternalError(raw)).toBe(true);
+        }
+    });
+
+    test('is false for problems with the user photo and for non-strings', () => {
+        for (const raw of [
+            'No face detected in image',
+            'No faces detected in image',
+            'Multiple faces detected (2). Please provide image with single face.',
+            'Failed to decode image',
+            'Invalid file type. Allowed: jpg, jpeg, png',
+            undefined,
+            null,
+            '',
+            42,
+        ]) {
+            expect(isFaceServiceInternalError(raw)).toBe(false);
+        }
     });
 });

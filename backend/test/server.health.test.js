@@ -174,13 +174,39 @@ describe('GET /health', () => {
         expect(JSON.stringify(res.body)).not.toContain('ECONNREFUSED');
     });
 
-    test('is not rate limited by the API limiter and does not require auth', async () => {
+    test('does not require auth and is not counted by the API limiter (1000 / 15 min)', async () => {
         const { app } = base;
 
-        const res = await request(app).get('/health');
+        const res = await request(app).get('/health').set('X-Forwarded-For', '203.0.113.50');
 
         expect(res.status).toBe(200);
-        expect(res.headers).not.toHaveProperty('ratelimit-limit');
+        // only its own light limiter applies: 60 requests per minute
+        expect(res.headers['ratelimit-limit']).toBe('60');
+    });
+
+    test('is rate limited per client IP: the 61st request in a minute gets 429 and skips the probes', async () => {
+        const { app } = base;
+        const ip = '203.0.113.51';
+
+        let last;
+        for (let i = 0; i < 60; i++) {
+            last = await request(app).get('/health').set('X-Forwarded-For', ip);
+            if (last.status !== 200) break;
+        }
+        expect(last.status).toBe(200);
+        fetchSpy.mockClear();
+        mockPrisma.$queryRaw.mockClear();
+
+        const blocked = await request(app).get('/health').set('X-Forwarded-For', ip);
+
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.status).toBe('error');
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
+
+        // another client is still served
+        const other = await request(app).get('/health').set('X-Forwarded-For', '203.0.113.52');
+        expect(other.status).toBe(200);
     });
 });
 

@@ -6,7 +6,9 @@
  *  - it is shown as a 400 with an Indonesian message (never the English string),
  *  - it does not count against the circuit breaker (a few face-less photos must not take the
  *    face service offline for everybody).
- * Auth / server failures (401, 5xx, network) still throw.
+ * Auth / server failures (401, 5xx, network) still throw, and so do the service's own internal failures
+ * ("Error processing image: <exception>" arrives as the same HTTP 400 shape): they are logged, never
+ * shown to the user, and count against the circuit breaker.
  */
 
 jest.mock('../utils/prisma', () => ({
@@ -39,7 +41,11 @@ jest.mock('form-data', () => function FormDataMock() {
 
 const prisma = require('../utils/prisma');
 const { pythonClient } = require('../utils/pythonClient');
-const { FACE_SERVICE_FALLBACK_MESSAGE } = require('../utils/faceServiceMessages');
+const {
+    FACE_SERVICE_FALLBACK_MESSAGE,
+    FACE_MATCH_FAILED_MESSAGE,
+    FACE_SERVICE_FAILURE_MESSAGE,
+} = require('../utils/faceServiceMessages');
 const {
     addBiometrik,
     editBiometrik,
@@ -68,6 +74,12 @@ const serviceAnswered = (status, data) => Object.assign(new Error(`Request faile
 });
 
 const NO_FACE = { success: false, error: 'No face detected in image' };
+
+// Everything a console spy received, objects included, as one string
+const loggedText = (spy) => spy.mock.calls
+    .flat()
+    .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+    .join(' ');
 
 let logSpy;
 let errorSpy;
@@ -136,7 +148,7 @@ describe('addBiometrik', () => {
     test('an unknown service message falls back to the generic Indonesian message', async () => {
         pythonClient.post.mockRejectedValueOnce(serviceAnswered(400, {
             success: false,
-            error: 'Error processing image: OpenCV exception',
+            error: 'Some message this backend has no translation for',
         }));
         const res = createRes();
 
@@ -144,6 +156,38 @@ describe('addBiometrik', () => {
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ status: 'error', message: FACE_SERVICE_FALLBACK_MESSAGE });
+    });
+
+    test('a rejected input is logged as a warning with the service text', async () => {
+        pythonClient.post.mockRejectedValueOnce(serviceAnswered(400, NO_FACE));
+
+        await addBiometrik(createReq({ body: { id_user: '20' } }), createRes(), jest.fn());
+
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[Biometrik] Face service rejected the input:',
+            'No face detected in image',
+        );
+    });
+
+    test('an internal service failure (HTTP 400 "Error processing image: ...") is thrown, not shown', async () => {
+        pythonClient.post.mockRejectedValueOnce(serviceAnswered(400, {
+            success: false,
+            error: 'Error processing image: onnxruntime session crashed',
+        }));
+        const res = createRes();
+        const next = jest.fn();
+
+        await addBiometrik(createReq({ body: { id_user: '20' } }), res, next);
+
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: FACE_SERVICE_FAILURE_MESSAGE }));
+        // the real cause is logged server side, and not as a harmless rejected input
+        expect(loggedText(errorSpy)).toContain('onnxruntime session crashed');
+        expect(warnSpy).not.toHaveBeenCalledWith(
+            '[Biometrik] Face service rejected the input:',
+            expect.anything(),
+        );
     });
 
     test('face-less photos never open the circuit breaker', async () => {
@@ -216,7 +260,61 @@ describe('verifyWajah', () => {
         await verifyWajah(createReq(), res, next);
 
         expect(res.status).not.toHaveBeenCalled();
-        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: FACE_SERVICE_FALLBACK_MESSAGE }));
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: FACE_MATCH_FAILED_MESSAGE }));
+        expect(next.mock.calls[0][0].message).not.toMatch(/best match|shapes/);
+        expect(loggedText(errorSpy)).toContain('Error finding best match: shapes differ');
+    });
+});
+
+describe('circuit breaker', () => {
+    // The breaker lives in the controller module, so these tests load their own copy of the controller
+    // (and of the mocked client it talks to): tripping it must not affect the other tests.
+    const loadIsolatedController = () => {
+        let controller;
+        let client;
+        jest.isolateModules(() => {
+            client = require('../utils/pythonClient').pythonClient;
+            controller = require('../controllers/biometrikController');
+        });
+        return { controller, client };
+    };
+
+    test('internal service failures count against the breaker; it opens after 5 and stops calling the service', async () => {
+        const { controller, client } = loadIsolatedController();
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            client.post.mockRejectedValueOnce(serviceAnswered(400, {
+                success: false,
+                error: 'Error processing image: model crashed',
+            }));
+            const next = jest.fn();
+            await controller.scanWajah(createReq(), createRes(), next);
+            expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: FACE_SERVICE_FAILURE_MESSAGE }));
+        }
+        expect(client.post).toHaveBeenCalledTimes(5);
+
+        // 6th request: the circuit is open, the service is not called at all
+        const res = createRes();
+        const next = jest.fn();
+        await controller.scanWajah(createReq(), res, next);
+
+        expect(client.post).toHaveBeenCalledTimes(5);
+        expect(res.status).not.toHaveBeenCalled();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({
+            message: expect.stringMatching(/offline secara protektif/),
+        }));
+    });
+
+    test('input rejections never open the breaker', async () => {
+        const { controller, client } = loadIsolatedController();
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            client.post.mockRejectedValueOnce(serviceAnswered(400, NO_FACE));
+            const res = createRes();
+            await controller.scanWajah(createReq(), res, jest.fn());
+            expect(res.status).toHaveBeenCalledWith(400);
+        }
+        expect(client.post).toHaveBeenCalledTimes(8);
     });
 });
 

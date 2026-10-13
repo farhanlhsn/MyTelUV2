@@ -5,6 +5,7 @@ const {
     authLimiter,
     sensitiveLimiter,
     refreshLimiter,
+    healthLimiter,
     authKeyGenerator
 } = require('../middlewares/rateLimiterMiddleware');
 
@@ -262,5 +263,42 @@ describe('generalLimiter', () => {
         const res = await request(app).get('/api/parkir/edge-entry').set('X-Forwarded-For', ip);
         expect(res.status).toBe(200);
         expect(res.headers['ratelimit-limit']).toBeUndefined();
+    });
+});
+
+describe('healthLimiter', () => {
+    // GET /health is proxied to the internet by Caddy and probes the database and three AI services.
+    const probe = (app, ip) => request(app).get('/health').set('X-Forwarded-For', ip);
+
+    test('allows 60 requests per minute per IP, blocks the 61st with 429 in the JSON envelope', async () => {
+        const app = buildApp('/health', healthLimiter);
+        const ip = freshIp();
+
+        let last;
+        for (let i = 0; i < 60; i++) {
+            last = await probe(app, ip);
+            if (last.status !== 200) break;
+        }
+        expect(last.status).toBe(200);
+        expect(last.headers['ratelimit-limit']).toBe('60');
+        expect(last.headers['ratelimit-remaining']).toBe('0');
+
+        const blocked = await probe(app, ip);
+        expect(blocked.status).toBe(429);
+        expect(blocked.body.status).toBe('error');
+        expect(typeof blocked.body.message).toBe('string');
+    });
+
+    test('is keyed by IP: another client IP is unaffected', async () => {
+        const app = buildApp('/health', healthLimiter);
+        const ipA = freshIp();
+        const ipB = freshIp();
+
+        await probe(app, ipA);
+        const a = await probe(app, ipA);
+        const b = await probe(app, ipB);
+
+        expect(a.headers['ratelimit-remaining']).toBe('58');
+        expect(b.headers['ratelimit-remaining']).toBe('59');
     });
 });

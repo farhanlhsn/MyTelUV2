@@ -8,7 +8,12 @@ const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
 const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
 const { pythonClient } = require("../utils/pythonClient");
-const { translateFaceServiceError } = require("../utils/faceServiceMessages");
+const {
+  translateFaceServiceError,
+  isFaceServiceInternalError,
+  FACE_MATCH_FAILED_MESSAGE,
+  FACE_SERVICE_FAILURE_MESSAGE,
+} = require("../utils/faceServiceMessages");
 
 const PYTHON_SERVICE_URL = process.env.FACE_API_URL || "http://localhost:5051";
 const PYTHON_SERVICE_TIMEOUT = parseInt(
@@ -31,6 +36,8 @@ const faceApiBreaker = new CircuitBreaker("FaceAPI", {
  * The service answers HTTP 400 {success:false, error} for input problems (no face, several faces,
  * unreadable image). That is a result for the caller, not an outage, so it is returned instead of
  * thrown: the caller turns it into a 400 and the circuit breaker is not charged with a failure.
+ * The same 400 shape also carries internal failures ("Error processing image: <exception>" from
+ * face_processor.py); those are logged and thrown so the circuit breaker counts them.
  */
 const callPythonService = async (endpoint, formData) => {
   return faceApiBreaker.fire(async () => {
@@ -58,7 +65,15 @@ const callPythonService = async (endpoint, formData) => {
         serviceData &&
         serviceData.success === false
       ) {
-        return serviceData;
+        if (!isFaceServiceInternalError(serviceData.error)) {
+          console.warn(
+            "[Biometrik] Face service rejected the input:",
+            serviceData.error,
+          );
+          return serviceData;
+        }
+        console.error("Python service error:", serviceData);
+        throw new Error(FACE_SERVICE_FAILURE_MESSAGE);
       }
       console.error(
         "Python service error:",
@@ -501,7 +516,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
 
     if (matchResult.error) {
       console.error("[Biometrik] find-match error:", matchResult.error);
-      throw new Error(translateFaceServiceError(matchResult.error));
+      throw new Error(FACE_MATCH_FAILED_MESSAGE);
     }
 
     const isAdmin = req.user.role === "ADMIN";
