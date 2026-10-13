@@ -26,7 +26,7 @@ Endpoints:
 - `POST /compare`
 - `POST /find-match`
 
-Service dapat dilindungi dengan `FACE_API_KEY`; backend mengirim header `X-API-Key`.
+Service dilindungi dengan `FACE_API_KEY`; backend mengirim header `X-API-Key` (lihat "API key" di bawah).
 
 ## Plate Recognition
 
@@ -50,6 +50,10 @@ Model yang dibutuhkan ada di `plate_recognition/models/`:
 - `classes.names`
 
 Set `NODEJS_BACKEND_URL` dan `EDGE_DEVICE_SECRET` agar forwarding ke backend parkir aman.
+`POST /api/parking/process` (dan alias `entry`) meneruskan ke backend dengan secret edge, sehingga hanya
+dilayani jika request membawa `X-API-Key` yang valid (`PLATE_API_KEY` wajib diset, juga saat `TEST_MODE`).
+`GET /health` mengembalikan 503 selama model belum termuat. Container menjalankan service dengan gunicorn
+(`gunicorn.conf.py`).
 
 ## Anomaly Detection
 
@@ -108,9 +112,26 @@ Production compose menjalankan ketiga AI service dan backend menggunakan service
 - `PLATE_API_URL=http://plate-recognition:5001`
 - `ANOMALY_SERVICE_URL=http://anomaly-detection:5003`
 
+## API key
+
+Setiap endpoint (kecuali `/health`) memerlukan header `X-API-Key` yang sama dengan env service:
+`FACE_API_KEY`, `PLATE_API_KEY`, `ANOMALY_API_KEY`. Aturannya fail-closed:
+
+- key belum diset dan bukan `TEST_MODE` -> `503 {"error": "service not configured"}`
+- key diset tetapi header kosong/salah -> `401`
+- key belum diset dan `TEST_MODE=true` -> diizinkan (CI/lokal)
+
+Pembandingan key memakai `hmac.compare_digest`. Backend membangun header ini di
+`backend/utils/pythonServiceHeaders.js`.
+
+Untuk run lokal tanpa Docker: service plate membaca `.env` di root proyek, sedangkan face dan anomaly hanya
+membaca environment proses, jadi ekspor key yang sama dengan backend (atau jalankan dengan `TEST_MODE=true`).
+
 ## Test Mode
 
 Untuk contract/E2E tests, beberapa service mendukung `TEST_MODE=true` agar model berat tidak perlu dimuat.
+Mode ini hanya ditentukan oleh env `TEST_MODE` pada service itu sendiri; header `X-Test-Mode` dari client
+tidak lagi berpengaruh.
 
 ```bash
 set TEST_MODE=true

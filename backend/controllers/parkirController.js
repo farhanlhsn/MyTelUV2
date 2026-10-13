@@ -9,6 +9,7 @@ const axios = require('axios');
 const CircuitBreaker = require('../utils/CircuitBreaker');
 const { logAudit } = require('../utils/auditLogger');
 const { normalizePlate } = require('../utils/plate');
+const { pythonServiceHeaders } = require('../utils/pythonServiceHeaders');
 
 const PLATE_SERVICE_URL = process.env.PLATE_API_URL || 'http://localhost:5001';
 const PLATE_SERVICE_TIMEOUT = parseInt(process.env.PLATE_SERVICE_TIMEOUT || '10000');
@@ -445,14 +446,9 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
                 contentType: plateFile.mimetype || 'image/jpeg'
             });
 
-            const apiHeaders = {
-                ...form.getHeaders(),
-                'X-API-Key': process.env.PLATE_API_KEY || ''
-            };
-            // Test mode is decided by the server environment only; a client header is never forwarded
-            if (process.env.TEST_MODE === 'true') {
-                apiHeaders['X-Test-Mode'] = 'true';
-            }
+            // Test mode is decided by the plate service's own TEST_MODE env; no test-mode header
+            // is sent, and a client header is never forwarded
+            const apiHeaders = pythonServiceHeaders('plate', form.getHeaders());
 
             const response = await plateApiBreaker.fire(async () => {
                 return await axios.post(`${PLATE_SERVICE_URL}/api/recognize-plate`, form, {

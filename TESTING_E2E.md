@@ -279,8 +279,8 @@ Script seed sudah termasuk cleanup otomatis di awal sebelum insert ulang.
 # Environment variable
 export TEST_MODE=true
 
-# Atau per-request via header (untuk backend forwarding)
-X-Test-Mode: true
+# Hanya lewat environment service itu sendiri. Header X-Test-Mode dari client
+# diabaikan (tidak bisa mengaktifkan TEST_MODE).
 ```
 
 ---

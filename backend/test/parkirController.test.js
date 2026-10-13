@@ -1000,6 +1000,7 @@ describe('Parkir Controller - reconcileKapasitas', () => {
 
 describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode', () => {
     const originalTestMode = process.env.TEST_MODE;
+    const originalPlateApiKey = process.env.PLATE_API_KEY;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -1011,6 +1012,8 @@ describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode'
     afterEach(() => {
         if (originalTestMode === undefined) delete process.env.TEST_MODE;
         else process.env.TEST_MODE = originalTestMode;
+        if (originalPlateApiKey === undefined) delete process.env.PLATE_API_KEY;
+        else process.env.PLATE_API_KEY = originalPlateApiKey;
     });
 
     // The edge device sends no plate_text, so the controller falls back to the plate OCR service.
@@ -1033,11 +1036,19 @@ describe('Parkir Controller - processEdgeEntry plate OCR fallback and test mode'
         expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
     });
 
-    test('sets X-Test-Mode toward the plate service itself when TEST_MODE=true is in the environment', async () => {
+    test('sends no X-Test-Mode header even when TEST_MODE=true is in the backend environment (the plate service decides from its own env)', async () => {
         process.env.TEST_MODE = 'true';
 
         const headers = await sendWithClientTestModeHeader();
 
-        expect(headers['X-Test-Mode']).toBe('true');
+        expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
+    });
+
+    test('sends X-API-Key from PLATE_API_KEY to the plate service', async () => {
+        process.env.PLATE_API_KEY = 'plate-secret-key';
+
+        const headers = await sendWithClientTestModeHeader();
+
+        expect(headers['X-API-Key']).toBe('plate-secret-key');
     });
 });

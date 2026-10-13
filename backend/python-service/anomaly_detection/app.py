@@ -1,3 +1,4 @@
+import hmac
 import os
 import traceback
 from flask import Flask, request, jsonify, Response
@@ -7,7 +8,11 @@ from sklearn.ensemble import IsolationForest
 
 app = Flask(__name__)
 
-ANOMALY_API_KEY = os.getenv('ANOMALY_API_KEY', '')
+
+def is_test_mode():
+    """TEST_MODE (CI / local stubs) is decided by the server environment only. Here it just
+    lets the service run without an API key."""
+    return os.getenv('TEST_MODE') == 'true'
 
 OPENAPI_SPEC = {
     'openapi': '3.0.3',
@@ -127,11 +132,24 @@ def swagger_docs(title):
 
 @app.before_request
 def check_api_key():
+    """Fail-closed API key check on every route except / and /health.
+
+    - ANOMALY_API_KEY unset and not TEST_MODE -> 503 (the service is not configured)
+    - ANOMALY_API_KEY unset and TEST_MODE     -> allowed (CI / local stubs)
+    - ANOMALY_API_KEY set                     -> X-API-Key must match (constant-time compare)
+    """
     if request.path in ['/', '/health']:
-        return  # Skip auth untuk health check
-    api_key = request.headers.get('X-API-Key', '')
-    if ANOMALY_API_KEY and api_key != ANOMALY_API_KEY:
+        return None  # Skip auth untuk health check
+    expected = os.getenv('ANOMALY_API_KEY', '')
+    if not expected:
+        if is_test_mode():
+            return None
+        return jsonify({'success': False, 'error': 'service not configured'}), 503
+    provided = request.headers.get('X-API-Key', '')
+    # Compare as bytes: compare_digest raises TypeError on non-ASCII str.
+    if not hmac.compare_digest(provided.encode('utf-8'), expected.encode('utf-8')):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    return None
 
 
 @app.route('/', methods=['GET'])
@@ -350,4 +368,6 @@ def detect_anomalies():
         return jsonify({'success': False, 'error': 'Internal server error. Please check server logs.'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5003, debug=True)
+    # Local development only; the container runs this app under gunicorn (see Dockerfile).
+    # debug=True would expose the Werkzeug debugger (remote code execution), so it stays off.
+    app.run(host='0.0.0.0', port=5003, debug=False)

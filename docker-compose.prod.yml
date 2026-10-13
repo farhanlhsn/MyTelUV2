@@ -17,6 +17,10 @@ services:
       - PYTHON_SERVICE_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
       - ANOMALY_SERVICE_URL=http://anomaly-detection:5003
+      # API keys the backend sends (X-API-Key) to the AI services; each service needs the same value
+      - FACE_API_KEY=${FACE_API_KEY}
+      - PLATE_API_KEY=${PLATE_API_KEY}
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     env_file:
       - .env
     volumes:
@@ -49,7 +53,8 @@ services:
     environment:
       - FACE_API_KEY=${FACE_API_KEY}
     volumes:
-      - insightface-models:/root/.insightface
+      # The service runs as appuser, whose HOME is /home/appuser
+      - insightface-models:/home/appuser/.insightface
     networks:
       - myteluv2-network
     restart: unless-stopped
@@ -70,6 +75,7 @@ services:
       retries: 3
     environment:
       - NODEJS_BACKEND_URL=http://backend:5050
+      - PLATE_API_KEY=${PLATE_API_KEY}
     env_file:
       - .env
     volumes:
@@ -92,6 +98,8 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 3
+    environment:
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     networks:
       - myteluv2-network
     restart: unless-stopped

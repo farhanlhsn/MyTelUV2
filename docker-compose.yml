@@ -16,6 +16,10 @@ services:
       - FACE_API_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
       - ANOMALY_SERVICE_URL=http://anomaly-detection:5003
+      # API keys the backend sends (X-API-Key) to the AI services; each service needs the same value
+      - FACE_API_KEY=${FACE_API_KEY}
+      - PLATE_API_KEY=${PLATE_API_KEY}
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     env_file:
       - .env
     volumes:
@@ -39,9 +43,12 @@ services:
     container_name: myteluv2-face-recognition
     ports:
       - "5051:5051"
+    environment:
+      # Without a key the service answers 503 (fail closed)
+      - FACE_API_KEY=${FACE_API_KEY}
     volumes:
-      # Persist InsightFace models to avoid re-downloading
-      - insightface-models:/root/.insightface
+      # Persist InsightFace models to avoid re-downloading (the service runs as appuser)
+      - insightface-models:/home/appuser/.insightface
     networks:
       - myteluv2-network
     restart: unless-stopped
@@ -54,6 +61,8 @@ services:
     container_name: myteluv2-plate-recognition
     ports:
       - "5001:5001"
+    environment:
+      - PLATE_API_KEY=${PLATE_API_KEY}
     volumes:
       # Persist YOLO models
       - ./backend/python-service/plate_recognition/models:/app/models
@@ -69,6 +78,8 @@ services:
     container_name: myteluv2-anomaly-detection
     ports:
       - "5003:5003"
+    environment:
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5003/health"]
       interval: 30s

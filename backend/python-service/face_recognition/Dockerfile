@@ -30,10 +30,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY *.py ./
 
-# Create models directory (InsightFace will download models here on first run)
-RUN mkdir -p /root/.insightface
-
 RUN useradd -m appuser && chown -R appuser:appuser /app
+
+# InsightFace downloads its models into ~/.insightface of the user running the service. The
+# service runs as appuser, so that is /home/appuser/.insightface (mount the model volume there).
+# Created here, owned by appuser, so a fresh named volume mounted on it is writable.
+RUN mkdir -p /home/appuser/.insightface && chown -R appuser:appuser /home/appuser/.insightface
 USER appuser
 # Expose port
 EXPOSE 5051

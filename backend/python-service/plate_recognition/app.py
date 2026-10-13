@@ -16,6 +16,7 @@ import yaml
 import logging
 from flask import Flask, request, jsonify, Response
 from PIL import Image
+import hmac
 import io
 import os
 import time
@@ -45,7 +46,26 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 # Environment Configuration
 NODEJS_BACKEND_URL = os.getenv('NODEJS_BACKEND_URL', 'http://localhost:3000')
-EDGE_DEVICE_SECRET = os.getenv('EDGE_DEVICE_SECRET', 'your-secret-key')
+# Secret the /api/parking/* routes present to the backend. No placeholder default:
+# while it is empty process_parking() refuses to forward.
+EDGE_DEVICE_SECRET = os.getenv('EDGE_DEVICE_SECRET', '')
+
+
+def is_test_mode():
+    """Test mode (stubbed OCR, no model) is decided by the server environment only.
+    A client header must never be able to switch it on."""
+    return os.getenv('TEST_MODE') == 'true'
+
+
+def has_valid_api_key():
+    """True only when PLATE_API_KEY is configured and the request's X-API-Key matches it.
+    An unset key never matches, not even an empty header."""
+    expected = os.getenv('PLATE_API_KEY', '')
+    if not expected:
+        return False
+    provided = request.headers.get('X-API-Key', '')
+    # Compare as bytes: compare_digest raises TypeError on non-ASCII str.
+    return hmac.compare_digest(provided.encode('utf-8'), expected.encode('utf-8'))
 
 OPENAPI_SPEC = {
     'openapi': '3.0.3',
@@ -76,7 +96,8 @@ OPENAPI_SPEC = {
                 'summary': 'Health check',
                 'security': [],
                 'responses': {
-                    '200': {'description': 'Service is healthy'},
+                    '200': {'description': 'Service is healthy and the model is loaded'},
+                    '503': {'description': 'Model not loaded yet'},
                 },
             },
         },
@@ -439,16 +460,21 @@ MODEL_PATH = Path(__file__).parent / 'models' / 'license_plate_recognition.pt'
 CLASSES_PATH = Path(__file__).parent / 'models' / 'classes.names'
 
 recognizer = None
+_recognizer_lock = threading.Lock()
 
 def init_recognizer():
-    """Initialize recognizer"""
+    """Initialize recognizer (thread-safe: gunicorn serves requests on several threads)"""
     global recognizer
-    if os.getenv('TEST_MODE') == 'true':
+    if is_test_mode():
         print("[INFO] TEST_MODE=true. PlateRecognizer initialization skipped.")
         return
-    if recognizer is None:
+    if recognizer is not None:
+        return
+    with _recognizer_lock:
+        if recognizer is not None:
+            return
         app.logger.info("Initializing plate recognizer...")
-        
+
         # Check if files exist
         if not MODEL_PATH.exists():
             app.logger.error(f"Model file not found at: {MODEL_PATH}")
@@ -456,7 +482,7 @@ def init_recognizer():
         if not CLASSES_PATH.exists():
             app.logger.error(f"Classes file not found at: {CLASSES_PATH}")
             raise FileNotFoundError(f"Classes file not found at: {CLASSES_PATH}")
-            
+
         try:
             recognizer = PlateRecognizer(str(MODEL_PATH), str(CLASSES_PATH))
             app.logger.info("Plate recognizer ready!")
@@ -465,9 +491,43 @@ def init_recognizer():
             raise e
 
 
+# Load the model when the module is imported (once per gunicorn worker, and also for
+# `python app.py`) so /health reports readiness truthfully. A failure is logged and
+# /health stays 503; the next request that needs the model retries the load.
+try:
+    init_recognizer()
+except Exception as e:
+    app.logger.error(f"CRITICAL: Failed to eager load plate recognizer: {e}")
+
+
+@app.before_request
+def check_api_key():
+    """Fail-closed API key check on every route except /health.
+
+    - PLATE_API_KEY unset and not TEST_MODE -> 503 (the service is not configured)
+    - PLATE_API_KEY unset and TEST_MODE     -> allowed (CI / local stubs)
+    - PLATE_API_KEY set                     -> X-API-Key must match (constant-time compare)
+    """
+    if request.path == '/health':
+        return None  # Health probes (container healthcheck) carry no key
+    if not os.getenv('PLATE_API_KEY', ''):
+        if is_test_mode():
+            return None
+        return jsonify({'error': 'service not configured'}), 503
+    if not has_valid_api_key():
+        return jsonify({'error': 'Unauthorized'}), 401
+    return None
+
+
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
+    """Readiness endpoint: 503 until the OCR model is loaded (always ready in TEST_MODE)."""
+    if not is_test_mode() and recognizer is None:
+        return jsonify({
+            'status': 'unavailable',
+            'service': 'plate-recognizer',
+            'error': 'model not loaded'
+        }), 503
     return jsonify({'status': 'ok', 'service': 'plate-recognizer'})
 
 
@@ -494,8 +554,8 @@ def recognize_plate():
     # Validate request has 'image' field before checking TEST_MODE
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided', 'success': False}), 400
-        
-    if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+
+    if is_test_mode():
         return jsonify({
             'success': True,
             'plate_text': 'B1234XYZ',
@@ -549,10 +609,18 @@ def process_parking():
     
     Returns: JSON with gate_action and message
     """
+    # This route forwards to the backend carrying the edge secret, so it only does so for a
+    # caller that presented a valid, configured API key (before_request alone would also let
+    # a TEST_MODE service with no key through).
+    if not has_valid_api_key():
+        return jsonify({'gate_action': 'DENY', 'error': 'Unauthorized'}), 401
+    if not EDGE_DEVICE_SECRET:
+        return jsonify({'gate_action': 'DENY', 'error': 'service not configured'}), 503
+
     init_recognizer()
     start_time = time.time()
-    
-    if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+
+    if is_test_mode():
         parkiran_id = request.form.get('parkiran_id', '1')
         gate_type = request.form.get('gate_type', 'MASUK')
         face_detected = request.form.get('face_detected', 'false')
@@ -698,11 +766,6 @@ def parking_entry():
 
 
 if __name__ == '__main__':
-    # Eager load model on startup to prevent cold-start latency
-    try:
-        init_recognizer()
-    except Exception as e:
-        print(f"CRITICAL: Failed to eager load plate recognizer: {e}")
-        
-    # Run Flask app
+    # Local development only; the container runs this app under gunicorn (see Dockerfile).
+    # The model is already loaded at import time above.
     app.run(host='0.0.0.0', port=5001, debug=False)

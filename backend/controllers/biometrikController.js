@@ -8,6 +8,7 @@ const embeddingCache = require("../utils/embeddingCache");
 const { logAudit, BIOMETRIK_ACTIONS } = require("../utils/auditLogger");
 const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
+const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
 
 const PYTHON_SERVICE_URL = process.env.FACE_API_URL || "http://localhost:5051";
 const PYTHON_SERVICE_TIMEOUT = parseInt(
@@ -47,13 +48,12 @@ const callPythonService = async (endpoint, formData) => {
         `${PYTHON_SERVICE_URL}${endpoint}`,
         formData,
         {
-          headers: {
-            ...(formData.getHeaders
+          headers: pythonServiceHeaders(
+            "face",
+            formData.getHeaders
               ? formData.getHeaders()
-              : { "Content-Type": "application/json" }),
-            "X-API-Key": process.env.FACE_API_KEY || "",
-            ...(process.env.TEST_MODE === "true" && { "X-Test-Mode": "true" })
-          },
+              : { "Content-Type": "application/json" },
+          ),
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
           timeout: PYTHON_SERVICE_TIMEOUT,
@@ -71,7 +71,7 @@ const callPythonService = async (endpoint, formData) => {
         );
       }
       throw new Error(
-        error.response?.data?.error || "Face recognition service unavailable",
+        error.response?.data?.error || "Layanan pengenalan wajah tidak tersedia",
       );
     }
   });
@@ -140,7 +140,7 @@ exports.requestLivenessToken = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Liveness token generated",
+    message: "Token liveness berhasil dibuat",
     data: {
       token,
       expires_in: expiresAt,
@@ -159,14 +159,14 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
   if (!id_user) {
     return res.status(400).json({
       status: "error",
-      message: "id_user is required",
+      message: "id_user wajib diisi",
     });
   }
 
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -178,7 +178,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(404).json({
       status: "error",
-      message: "User not found",
+      message: "User tidak ditemukan",
     });
   }
 
@@ -191,7 +191,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
     return res.status(400).json({
       status: "error",
       message:
-        "Biometric data already exists for this user. Use edit endpoint to update.",
+        "Data biometrik sudah terdaftar untuk user ini. Gunakan endpoint edit untuk memperbarui.",
     });
   }
 
@@ -262,7 +262,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       status: "success",
-      message: "Biometric data registered successfully",
+      message: "Data biometrik berhasil didaftarkan",
       data: {
         id_biometrik: biometrik.id_biometrik,
         id_user: biometrik.id_user,
@@ -293,7 +293,7 @@ exports.deleteBiometrik = asyncHandler(async (req, res) => {
   if (!biometrik || biometrik.deletedAt) {
     return res.status(404).json({
       status: "error",
-      message: "Biometric data not found",
+      message: "Data biometrik tidak ditemukan",
     });
   }
 
@@ -323,7 +323,7 @@ exports.deleteBiometrik = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Biometric data deleted successfully",
+    message: "Data biometrik berhasil dihapus",
   });
 });
 
@@ -338,7 +338,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -349,7 +349,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
   if (!biometrik || biometrik.deletedAt) {
     return res.status(404).json({
       status: "error",
-      message: "Biometric data not found",
+      message: "Data biometrik tidak ditemukan",
     });
   }
 
@@ -413,7 +413,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Biometric data updated successfully",
+      message: "Data biometrik berhasil diperbarui",
       data: {
         id_biometrik: updatedBiometrik.id_biometrik,
         id_user: updatedBiometrik.id_user,
@@ -437,7 +437,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -484,8 +484,8 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     if (allBiometrics.length === 0) {
       const message =
         req.user.role === "ADMIN"
-          ? "No registered faces in database"
-          : "You have not registered your biometric data yet";
+          ? "Belum ada wajah terdaftar di database"
+          : "Anda belum mendaftarkan data biometrik";
 
       return res.status(200).json({
         status: "success",
@@ -524,7 +524,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
       res.status(200).json({
         status: "success",
         matched: false,
-        message: "No matching face found",
+        message: "Tidak ada wajah yang cocok",
         ...(isAdmin && { best_similarity: matchResult.similarity }),
       });
     }
@@ -719,7 +719,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -745,7 +745,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
   ) {
     return res.status(400).json({
       status: "error",
-      message: "Invalid coordinates",
+      message: "Koordinat tidak valid",
     });
   }
 
@@ -801,7 +801,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       if (!faceResult.success) {
         return res.status(400).json({
           status: "error",
-          message: faceResult.error || "Face detection failed",
+          message: faceResult.error || "Gagal mendeteksi wajah. Coba ambil foto ulang.",
         });
       }
     }

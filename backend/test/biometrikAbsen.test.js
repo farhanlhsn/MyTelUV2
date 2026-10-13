@@ -104,7 +104,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 1: No File Uploaded
      * ============================================
      * Path: 1→2→3→END
-     * Expected: Error 400 - Image file is required
+     * Expected: Error 400 - File gambar wajib diisi
      */
     describe('Path 1: No File Uploaded', () => {
         test('TC001 - Should return 400 when no file is uploaded', async () => {
@@ -117,7 +117,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Image file is required'
+                message: 'File gambar wajib diisi'
             });
         });
 
@@ -131,7 +131,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Image file is required'
+                message: 'File gambar wajib diisi'
             });
         });
     });
@@ -159,7 +159,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 2: Invalid Coordinates
      * ============================================
      * Path: 1→2→4→5→END
-     * Expected: Error 400 - Invalid coordinates
+     * Expected: Error 400 - Koordinat tidak valid
      */
     describe('Path 2: Invalid Coordinates', () => {
         test('TC002a - Should return 400 when latitude is NaN', async () => {
@@ -174,7 +174,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid coordinates'
+                message: 'Koordinat tidak valid'
             });
         });
 
@@ -190,7 +190,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid coordinates'
+                message: 'Koordinat tidak valid'
             });
         });
 
@@ -248,7 +248,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 3: Face Detection Failed
      * ============================================
      * Path: 1→2→4→6→7→8→END
-     * Expected: Error 400 - Face detection failed
+     * Expected: Error 400 - Gagal mendeteksi wajah
      */
     describe('Path 3: Face Detection Failed', () => {
         test('TC003 - Should return 400 when face detection fails', async () => {
@@ -297,7 +297,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Face detection failed'
+                message: 'Gagal mendeteksi wajah. Coba ambil foto ulang.'
             });
         });
     });
@@ -692,10 +692,13 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Test mode is controlled by env only', () => {
         const originalTestMode = process.env.TEST_MODE;
+        const originalFaceApiKey = process.env.FACE_API_KEY;
 
         afterEach(() => {
             if (originalTestMode === undefined) delete process.env.TEST_MODE;
             else process.env.TEST_MODE = originalTestMode;
+            if (originalFaceApiKey === undefined) delete process.env.FACE_API_KEY;
+            else process.env.FACE_API_KEY = originalFaceApiKey;
         });
 
         const storedBiometric = {
@@ -723,6 +726,20 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 message: 'Wajah tidak cocok'
             }));
             expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
+        });
+
+        test('TC012b - the face service call carries X-API-Key from FACE_API_KEY and no X-Test-Mode header', async () => {
+            process.env.FACE_API_KEY = 'face-secret-key';
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            axios.post.mockResolvedValueOnce({ data: { success: true, embedding: [1, 0, 0] } });
+
+            await biometrikAbsen(createMockReq(), createMockRes(), jest.fn());
+
+            expect(axios.post).toHaveBeenCalledTimes(1);
+            const sentHeaders = axios.post.mock.calls[0][2].headers;
+            expect(sentHeaders['X-API-Key']).toBe('face-secret-key');
+            expect(Object.keys(sentHeaders).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
         });
 
         test('TC013 - client x-test-mode header is ignored: a failed detection is rejected', async () => {
