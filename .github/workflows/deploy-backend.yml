@@ -27,7 +27,9 @@ jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only a CI run triggered by a push to main deploys: a pull_request CI run whose head branch is
+    # named "main" (for example from a fork) must never reach the VPS.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
 
     env:
       # The exact commit the CI run tested (workflow_run), or the dispatched commit.
@@ -71,10 +73,16 @@ jobs:
             # Migrate with the NEW image BEFORE the new containers start. If the migration fails
             # the job fails here and the running (old) containers are left untouched.
             echo "🗄️ Applying database migrations..."
-            docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma
+            docker compose -f docker-compose.prod.yml run --rm -T --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma
 
             echo "🚀 Starting containers..."
             docker compose -f docker-compose.prod.yml up -d
+
+            # deploy/Caddyfile is a single-file bind mount. git rewrites it by replacing the file, so a
+            # running Caddy container keeps the OLD file (old inode) and `up -d` sees no config change.
+            # Recreating the container re-binds the current file; `caddy reload` would reload the stale one.
+            echo "🔁 Recreating Caddy so Caddyfile changes apply..."
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy
 
             echo "🧹 Cleaning up old images..."
             docker image prune -f

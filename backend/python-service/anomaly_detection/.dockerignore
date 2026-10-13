@@ -1,5 +1,4 @@
-# Build context is this service directory. Models (models/) are NOT excluded: the plate service
-# loads them at runtime and its Dockerfile copies them.
+# Build context is this service directory (the Dockerfile copies requirements.txt and app.py only).
 
 # Local virtualenv and Python caches
 venv

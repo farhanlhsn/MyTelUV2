@@ -149,19 +149,34 @@ Compose production menjalankan backend, face recognition, plate recognition, dan
 
 ### Deploy production
 
-Deploy berjalan otomatis lewat `.github/workflows/deploy-backend.yml` setelah workflow CI sukses di `main` (atau manual lewat `workflow_dispatch`). Urutannya di VPS (`/opt/myteluv2`):
+Deploy berjalan otomatis lewat `.github/workflows/deploy-backend.yml` setelah workflow CI sukses untuk **push** ke `main` (CI dari pull request tidak men-deploy; bisa juga manual lewat `workflow_dispatch`). Urutannya di VPS (`/opt/myteluv2`):
 
 1. `git reset --hard <SHA yang diuji CI>` (bukan `origin/main` terbaru).
 2. `.env` wajib sudah ada di server. Jika tidak ada, deploy gagal (tidak pernah disalin dari `.env.example`).
 3. `docker compose -f docker-compose.prod.yml build`, lalu migrasi database dengan image baru **sebelum** container baru dijalankan:
-   `docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma`
+   `docker compose -f docker-compose.prod.yml run --rm -T --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma`
    Jika migrasi gagal, deploy berhenti dan container lama tetap berjalan.
-4. `docker compose -f docker-compose.prod.yml up -d`.
-5. Health check: `curl -fsS http://127.0.0.1:8880/health` diulang hingga 30 kali tiap 5 detik. Caddy meneruskan `/health` ke backend, yang menjawab `503` bila database tidak tersedia, sehingga deploy dinyatakan gagal.
+4. `docker compose -f docker-compose.prod.yml up -d`, lalu container Caddy dibuat ulang (`up -d --force-recreate --no-deps caddy`) supaya perubahan `deploy/Caddyfile` berlaku: file itu di-bind-mount tunggal dan `git` menggantinya sebagai file baru, sehingga container yang berjalan masih melihat file lama.
+5. Health check: `curl -fsS http://127.0.0.1:8880/health` diulang hingga 30 kali tiap 5 detik. Caddy meneruskan `/health` ke backend, yang menjawab `503` bila database tidak tersedia, sehingga deploy dinyatakan gagal. `/health` dibatasi 60 permintaan per menit per IP (`429` jika terlampaui).
 
 Catatan penting:
 
 - **`DATABASE_URL` harus URL Postgres langsung** (`postgresql://...`) karena `prisma migrate deploy` membutuhkan koneksi langsung. `backend/prisma/schema.prisma` belum memakai `directUrl`; jika produksi memakai Prisma Accelerate (`prisma://...`), tambahkan `directUrl = env("DIRECT_URL")` pada datasource, isi `DIRECT_URL` dengan URL Postgres langsung di `.env`, dan sesuaikan `backend/prisma.config.ts`.
+- **Sebelum deploy pertama lewat pipeline ini**, periksa status migrasi produksi dari VPS:
+  `docker compose -f docker-compose.prod.yml run --rm -T --no-deps backend npx prisma migrate status --schema prisma/schema.prisma`
+  Jika skema produksi dulu dibuat dengan `prisma db push` (tidak ada tabel `_prisma_migrations`, atau migrasi lama dilaporkan belum diterapkan padahal tabelnya sudah ada), `migrate deploy` akan gagal dengan "already exists". Lakukan baselining: tandai setiap migrasi yang strukturnya sudah ada di database dengan
+  `docker compose -f docker-compose.prod.yml run --rm -T --no-deps backend npx prisma migrate resolve --applied <nama_folder_migrasi> --schema prisma/schema.prisma`
+  (nama folder ada di `backend/prisma/migrations/`), lalu jalankan ulang `migrate status` sampai hanya migrasi baru yang tersisa. Migrasi `20261013000000_system_settings_and_absensi_unique` bersifat idempoten dan aman diterapkan di database yang sudah punya tabel/indeks tersebut.
+- **Cek plat ganda sebelum deploy.** Migrasi `20261013000100_normalize_kendaraan_plates` menyeragamkan `kendaraan.plat_nomor` (huruf besar, hanya huruf dan angka) tetapi sengaja melewati baris yang hasil normalisasinya bentrok dengan baris lain, sehingga plat itu tetap dalam penulisan lama sampai dirapikan manual. Daftar kandidat bentrok (jalankan di Postgres produksi):
+  ```sql
+  SELECT upper(regexp_replace(plat_nomor, '[^A-Za-z0-9]', '', 'g')) AS plat_normal,
+         count(*) AS jumlah,
+         array_agg(id_kendaraan ORDER BY id_kendaraan) AS id_kendaraan,
+         array_agg(plat_nomor ORDER BY id_kendaraan) AS penulisan_asli
+  FROM kendaraan
+  GROUP BY 1
+  HAVING count(*) > 1;
+  ```
 - Image backend sengaja tetap membawa Prisma CLI (`npm ci --omit=dev` mempertahankannya karena dependensi opsional `@prisma/client`), dan build gagal bila CLI itu hilang.
 - Caddy (`deploy/Caddyfile`) hanya meneruskan `/api/*`, `/socket.io/*`, dan `/health` ke backend. Layanan AI (face, plate, anomaly) tidak dibuka ke luar; backend memanggilnya lewat jaringan Docker dengan header `X-API-Key`.
 - Log audit backend ditulis ke `AUDIT_LOG_DIR` (default `/app/logs`, volume `myteluv2-backend-logs`). Log container dirotasi (`json-file`, 10 MB x 3 file), setiap service punya batas memori (`mem_limit`), dan semua container memakai `TZ=Asia/Jakarta`.
