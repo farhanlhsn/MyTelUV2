@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 import '../models/post_model.dart';
 import 'api_client.dart';
+import '../utils/error_helper.dart';
 
 class PostService {
   final Dio _dio;
@@ -26,7 +27,7 @@ class PostService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get posts: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -47,7 +48,7 @@ class PostService {
       return null;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
-      throw Exception('Failed to get post: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -106,9 +107,9 @@ class PostService {
       return null;
     } on DioException catch (e) {
       if (e.response != null) {
-        throw Exception(e.response?.data['message'] ?? 'Failed to create post');
+        throw Exception(e.response?.data['message'] ?? 'Gagal membuat postingan.');
       }
-      throw Exception('Network error: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -120,7 +121,7 @@ class PostService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to delete post: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -137,7 +138,7 @@ class PostService {
       }
       return {};
     } on DioException catch (e) {
-      throw Exception('Failed to toggle like: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -159,7 +160,7 @@ class PostService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get comments: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -179,7 +180,7 @@ class PostService {
       }
       return null;
     } on DioException catch (e) {
-      throw Exception('Failed to add comment: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -191,7 +192,7 @@ class PostService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to delete comment: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -213,7 +214,7 @@ class PostService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get my posts: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 }

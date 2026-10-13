@@ -6,6 +6,7 @@ import 'dart:io';
 import '../../services/post_service.dart';
 import '../common/location_picker_page.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class CreatePostPage extends StatefulWidget {
   const CreatePostPage({super.key});
@@ -164,7 +165,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         Get.back(result: true);
       }
     } catch (e) {
-      _showError('Gagal membuat postingan: $e');
+      _showError('Gagal membuat postingan: ${ErrorHelper.parseError(e)}');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

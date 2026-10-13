@@ -141,7 +141,7 @@ class AccountPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: Text("Update Password", style: TextStyle(color: primaryColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text("Ubah Password", style: TextStyle(color: primaryColor, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 30),

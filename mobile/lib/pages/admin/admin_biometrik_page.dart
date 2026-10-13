@@ -7,6 +7,7 @@ import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/biometrik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/liveness_texts.dart';
 import 'package:mobile/utils/app_theme.dart';
 
 class AdminBiometrikPage extends StatefulWidget {
@@ -48,7 +49,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -66,7 +67,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
   Future<void> _addBiometrik(Map<String, dynamic> user) async {
     final idUser = user['id_user'] as int;
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
 
     // Get available cameras
@@ -81,6 +82,8 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       cameras: cameras,
       config: LivenessConfig(
         enableScreenGlareDetection: true,
+        challengeInstructions: livenessInstructionsId,
+        messages: livenessMessagesId,
       ),
       captureFinalImage: true,
       onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) async {
@@ -114,11 +117,11 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
           if (result['status'] == 'success') {
             ErrorHelper.showSuccess(
-              hasBiometric ? 'Biometrik $nama berhasil diupdate' : 'Biometrik $nama berhasil ditambahkan',
+              hasBiometric ? 'Biometrik $nama berhasil diperbarui' : 'Biometrik $nama berhasil ditambahkan',
             );
             _loadUsers();
           } else {
-            throw Exception(result['message'] ?? 'Unknown error');
+            throw Exception(result['message'] ?? 'Terjadi kesalahan yang tidak diketahui.');
           }
         } catch (e) {
           Get.back(); // Close loading dialog
@@ -130,7 +133,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
   Future<void> _deleteBiometrik(Map<String, dynamic> user) async {
     final idUser = user['id_user'] as int;
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -277,7 +280,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
   }
 
   Widget _buildUserCard(Map<String, dynamic> user) {
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final username = user['username'] as String? ?? '-';
     final role = user['role'] as String? ?? 'MAHASISWA';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
@@ -389,7 +392,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
               hasBiometric ? Icons.refresh : Icons.face_retouching_natural,
               color: AppColors.primary,
             ),
-            tooltip: hasBiometric ? 'Update Biometrik' : 'Tambah Biometrik',
+            tooltip: hasBiometric ? 'Perbarui Biometrik' : 'Tambah Biometrik',
             onPressed: () => _addBiometrik(user),
           ),
           if (hasBiometric)

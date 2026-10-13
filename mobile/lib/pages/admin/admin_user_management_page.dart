@@ -598,7 +598,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                 items: const [
                                   DropdownMenuItem(
                                     value: 'ALL',
-                                    child: Text('All'),
+                                    child: Text('Semua'),
                                   ),
                                   DropdownMenuItem(
                                     value: 'MAHASISWA',
@@ -785,7 +785,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   }
 
   Widget _buildUserCard(Map<String, dynamic> user) {
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final username = user['username'] as String? ?? '-';
     final role = user['role'] as String? ?? 'MAHASISWA';
     final hasBiometric = user['has_biometric'] as bool? ?? false;

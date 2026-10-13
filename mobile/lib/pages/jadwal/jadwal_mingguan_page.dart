@@ -60,7 +60,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }

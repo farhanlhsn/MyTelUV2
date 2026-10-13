@@ -5,6 +5,7 @@ import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/pages/kendaraan/admin/admin_pengajuan_detail_page.dart';
 import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/kendaraan_helper.dart';
 
 
 
@@ -87,7 +88,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
     } catch (e) {
       debugLog('Error loading pengajuan: $e');
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = kendaraanErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -256,7 +257,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Error: $_errorMessage',
+              '$_errorMessage',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.red),
             ),

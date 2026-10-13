@@ -20,7 +20,6 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
   KelasModel? _selectedKelas;
   bool _isLoadingKelas = true;
   bool _isLoadingPeserta = false;
-  String? _error;
 
   @override
   void initState() {
@@ -32,7 +31,6 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
   Future<void> _loadKelas() async {
     setState(() {
       _isLoadingKelas = true;
-      _error = null;
     });
 
     try {
@@ -43,9 +41,9 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
         _isLoadingKelas = false;
       });
+      ErrorHelper.showToast('Gagal', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
     }
   }
 
@@ -353,7 +351,7 @@ class _AdminPesertaTabState extends State<AdminPesertaTab> {
   }
 
   Widget _buildPesertaCard(Map<String, dynamic>? mahasiswa, int number) {
-    final nama = mahasiswa?['nama'] ?? 'Unknown';
+    final nama = mahasiswa?['nama'] ?? 'Tanpa nama';
     final username = mahasiswa?['username'] ?? '-';
 
     return Container(

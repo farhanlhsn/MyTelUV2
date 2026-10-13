@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/app_theme.dart';
+import '../utils/error_helper.dart';
 
 class MePage extends StatelessWidget {
   const MePage({super.key});
@@ -25,7 +26,7 @@ class MePage extends StatelessWidget {
         leading: IconButton(
           onPressed: () => Get.back(),
           icon: const Icon(Icons.arrow_back_ios),
-          tooltip: 'Kembali ke Home',
+          tooltip: 'Kembali ke Beranda',
         ),
       ),
       body: FutureBuilder<Map<String, String?>>(
@@ -41,7 +42,7 @@ class MePage extends StatelessWidget {
 
               if (snapshot.hasError) {
                 return Center(
-                  child: Text('Terjadi kesalahan: ${snapshot.error}'),
+                  child: Text('Terjadi kesalahan: ${ErrorHelper.parseError(snapshot.error)}'),
                 );
               }
 

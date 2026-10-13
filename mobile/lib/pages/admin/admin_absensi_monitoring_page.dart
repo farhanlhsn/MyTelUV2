@@ -4,6 +4,7 @@ import 'package:mobile/models/kelas.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AdminAbsensiMonitoringPage extends StatefulWidget {
   const AdminAbsensiMonitoringPage({super.key});
@@ -45,7 +46,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
       await Future.wait(futures);
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }

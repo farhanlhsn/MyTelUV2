@@ -48,7 +48,7 @@ class AkademikService {
             .toList();
         return (list, true);
       }
-      throw Exception('Failed to get kelas hari ini: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -80,7 +80,7 @@ class AkademikService {
       if (cached != null) {
         return (cached, true);
       }
-      throw Exception('Failed to get jadwal mingguan: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -129,7 +129,7 @@ class AkademikService {
 
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to delete jadwal pengganti: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -153,7 +153,7 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -177,7 +177,7 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get absensi: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -208,7 +208,7 @@ class AkademikService {
       }
       return {};
     } on DioException catch (e) {
-      throw Exception('Failed to get absensi stats: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -222,7 +222,7 @@ class AkademikService {
 
       return response.statusCode == 201;
     } on DioException catch (e) {
-      throw Exception('Failed to daftar kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -235,7 +235,7 @@ class AkademikService {
 
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to drop kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -362,7 +362,7 @@ class AkademikService {
       }
       return {'data': [], 'pagination': {}};
     } on DioException catch (e) {
-      throw Exception('Failed to get matakuliah: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -384,12 +384,12 @@ class AkademikService {
         final data = response.data['data'] as Map<String, dynamic>;
         return MatakuliahModel.fromJson(data);
       }
-      throw Exception('Invalid response format');
+      throw Exception('Format respons server tidak valid.');
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
         throw Exception('Kode matakuliah sudah ada');
       }
-      throw Exception('Failed to create matakuliah: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -413,12 +413,12 @@ class AkademikService {
         final responseData = response.data['data'] as Map<String, dynamic>;
         return MatakuliahModel.fromJson(responseData);
       }
-      throw Exception('Invalid response format');
+      throw Exception('Format respons server tidak valid.');
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
         throw Exception('Kode matakuliah sudah ada');
       }
-      throw Exception('Failed to update matakuliah: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -433,7 +433,7 @@ class AkademikService {
       if (e.response?.statusCode == 400) {
         throw Exception('Tidak bisa menghapus matakuliah yang masih memiliki kelas aktif');
       }
-      throw Exception('Failed to delete matakuliah: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -445,7 +445,7 @@ class AkademikService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to delete all kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -477,12 +477,12 @@ class AkademikService {
         final data = response.data['data'] as Map<String, dynamic>;
         return KelasModel.fromJson(data);
       }
-      throw Exception('Invalid response format');
+      throw Exception('Format respons server tidak valid.');
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
         throw Exception('Jadwal konflik dengan kelas lain');
       }
-      throw Exception('Failed to create kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -516,9 +516,9 @@ class AkademikService {
         final responseData = response.data['data'] as Map<String, dynamic>;
         return KelasModel.fromJson(responseData);
       }
-      throw Exception('Invalid response format');
+      throw Exception('Format respons server tidak valid.');
     } on DioException catch (e) {
-      throw Exception('Failed to update kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -530,7 +530,7 @@ class AkademikService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      throw Exception('Failed to delete kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -547,7 +547,7 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get peserta kelas: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -569,7 +569,7 @@ class AkademikService {
       if (e.response?.statusCode == 409) {
         throw Exception('Beberapa mahasiswa sudah terdaftar di kelas ini');
       }
-      throw Exception('Failed to add peserta: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -590,7 +590,7 @@ class AkademikService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get mahasiswa list: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -630,7 +630,7 @@ class AkademikService {
         }
         return dosenList;
       } catch (_) {
-        throw Exception('Failed to get dosen list: ${e.message}');
+        throw Exception(ErrorHelper.parseError(e));
       }
     }
   }
@@ -646,7 +646,7 @@ class AkademikService {
       );
       return response.data;
     } on DioException catch (e) {
-      throw Exception('Gagal download laporan: ${e.message}');
+      throw Exception('Gagal mengunduh laporan: ${ErrorHelper.parseError(e)}');
     }
   }
 
@@ -661,7 +661,7 @@ class AkademikService {
       );
       return response.data;
     } on DioException catch (e) {
-      throw Exception('Gagal download laporan: ${e.message}');
+      throw Exception('Gagal mengunduh laporan: ${ErrorHelper.parseError(e)}');
     }
   }
 }

@@ -39,7 +39,7 @@ class DetailPengajuanPlat extends StatelessWidget {
                   ),
                   const Expanded(
                     child: Text(
-                      'Pengajuan Register Plat',
+                      'Pengajuan Pendaftaran Plat',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white,

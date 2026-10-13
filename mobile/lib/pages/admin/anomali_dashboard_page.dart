@@ -68,7 +68,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoadingKelas = false);
-      ErrorHelper.showToast('Error', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
+      ErrorHelper.showToast('Gagal', 'Gagal memuat daftar kelas: ${ErrorHelper.parseError(e)}');
     }
   }
 

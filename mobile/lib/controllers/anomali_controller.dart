@@ -34,7 +34,7 @@ class AnomaliController extends GetxController {
       }
     } on DioException catch (e) {
       debugLog('Error getAnomalySettings: $e');
-      ErrorHelper.showToast("Error", "Gagal mengambil konfigurasi threshold");
+      ErrorHelper.showToast("Gagal", "Gagal mengambil konfigurasi threshold");
     } finally {
       isLoading.value = false;
     }
@@ -61,7 +61,7 @@ class AnomaliController extends GetxController {
       debugLog('Error updateAnomalySettings: $e');
       final responseData = e.response?.data;
       final serverMsg = responseData is Map<String, dynamic> ? responseData['message']?.toString() : null;
-      ErrorHelper.showToast("Error", serverMsg ?? "Gagal menyimpan konfigurasi threshold");
+      ErrorHelper.showToast("Gagal", serverMsg ?? "Gagal menyimpan konfigurasi threshold");
       return false;
     } finally {
       isLoading.value = false;
@@ -117,13 +117,13 @@ class AnomaliController extends GetxController {
         'Error Anomali: status=${e.response?.statusCode ?? '-'} type=${e.type}',
       );
       lastScanFailed.value = true;
-      if (!silent) ErrorHelper.showToast("Error", message.value);
+      if (!silent) ErrorHelper.showToast("Gagal", message.value);
       return false;
     } catch (e) {
       debugLog("Error Anomali: $e");
       message.value = 'Gagal memproses hasil analisis';
       lastScanFailed.value = true;
-      if (!silent) ErrorHelper.showToast("Error", message.value);
+      if (!silent) ErrorHelper.showToast("Gagal", message.value);
       return false;
     } finally {
       isLoading.value = false;

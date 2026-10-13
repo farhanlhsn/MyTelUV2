@@ -520,7 +520,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                           color: primaryRed,
                         ),
                         label: Text(
-                          isExpanded ? 'Tutup' : 'History',
+                          isExpanded ? 'Tutup' : 'Riwayat',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryRed),
                         ),
                         style: OutlinedButton.styleFrom(

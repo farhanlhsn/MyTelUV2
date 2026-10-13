@@ -5,6 +5,7 @@ import '../../../services/parkir_service.dart';
 import '../../../models/parkir_model.dart';
 import '../../../utils/date_helper.dart';
 import '../../../utils/app_theme.dart';
+import '../../../utils/error_helper.dart';
 
 class HistoriParkirPage extends StatefulWidget {
   const HistoriParkirPage({super.key});
@@ -79,7 +80,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -210,9 +211,9 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                     itemBuilder: (context, index) {
                       final log = filteredLogs[index];
                       return _buildHistoryCard(
-                        platNomor: log.kendaraan?.platNomor ?? 'Unknown',
+                        platNomor: log.kendaraan?.platNomor ?? 'Tidak diketahui',
                         namaKendaraan: log.kendaraan?.namaKendaraan ?? '',
-                        lokasi: log.parkiran?.namaParkiran ?? 'Unknown',
+                        lokasi: log.parkiran?.namaParkiran ?? 'Tidak diketahui',
                         waktu: formatTanggalJam(log.timestamp),
                         type: log.type,
                         imageUrl: log.imageUrl,
@@ -746,7 +747,7 @@ class _HistoriParkirPageState extends State<HistoriParkirPage> {
                     ),
                     const SizedBox(width: 2),
                     Text(
-                      detected ? 'Wajah' : 'Full',
+                      detected ? 'Wajah' : 'Penuh',
                       style: const TextStyle(color: Colors.white, fontSize: 11),
                     ),
                   ],

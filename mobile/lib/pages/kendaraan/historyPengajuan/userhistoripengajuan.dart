@@ -113,7 +113,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                   ),
                   const Expanded(
                     child: Text(
-                      "Pengajuan Register Plat", // Judul disesuaikan
+                      "Pengajuan Pendaftaran Plat", // Judul disesuaikan
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white,

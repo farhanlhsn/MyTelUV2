@@ -5,6 +5,7 @@ import '../models/kelas_hari_ini.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
 import '../utils/attendance_status.dart';
+import '../utils/error_helper.dart';
 import '../utils/logger.dart';
 
 class HomeController extends GetxController {
@@ -55,7 +56,7 @@ class HomeController extends GetxController {
         );
       }
     } catch (e) {
-      errorMessage.value = 'Failed to load user data: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat data pengguna: ${ErrorHelper.parseError(e)}';
     }
   }
 
@@ -102,7 +103,7 @@ class HomeController extends GetxController {
       kelasHariIniList.value = kelas;
       isKelasHariIniFromCache.value = fromCache;
     } catch (e) {
-      errorMessage.value = 'Failed to load kelas hari ini: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat kelas hari ini: ${ErrorHelper.parseError(e)}';
       kelasHariIniList.value = [];
       isKelasHariIniFromCache.value = false;
     } finally {
@@ -117,7 +118,7 @@ class HomeController extends GetxController {
       final List<PesertaKelasModel> kelas = await _akademikService.getKelasKu();
       kelasList.value = kelas;
     } catch (e) {
-      errorMessage.value = 'Failed to load kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat kelas: ${ErrorHelper.parseError(e)}';
       kelasList.value = [];
     } finally {
       isLoadingKelas.value = false;
@@ -135,7 +136,7 @@ class HomeController extends GetxController {
       kehadiranPercentage.value = overallAttendancePercentage(history);
     } catch (e) {
       // The last percentage stays on screen (none yet if this was the first load)
-      errorMessage.value = 'Failed to load absensi: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat absensi: ${ErrorHelper.parseError(e)}';
     } finally {
       isLoadingAbsensi.value = false;
     }
@@ -171,7 +172,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to daftar kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal mendaftar kelas: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;
@@ -190,7 +191,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to drop kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal keluar dari kelas: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;
@@ -220,7 +221,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to create absensi: ${e.toString()}';
+      errorMessage.value = 'Gagal membuat absensi: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;

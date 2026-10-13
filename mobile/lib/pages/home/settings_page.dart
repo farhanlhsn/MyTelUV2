@@ -22,7 +22,7 @@ class SettingsPage extends StatelessWidget {
               Icon(Icons.logout, color: Colors.red[700], size: 28),
               const SizedBox(width: 12),
               const Text(
-                'Konfirmasi Logout',
+                'Konfirmasi Keluar',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ],
@@ -75,7 +75,7 @@ class SettingsPage extends StatelessWidget {
   Future<void> _handleLogout() async {
     final bool success = await _authController.logout();
     if (!success) {
-      ErrorHelper.showError('Terjadi kesalahan saat logout', title: 'Logout Gagal');
+      ErrorHelper.showError('Terjadi kesalahan saat keluar', title: 'Gagal Keluar');
       return;
     }
 
@@ -103,7 +103,7 @@ class SettingsPage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: const Text("Akun"),
-              subtitle: const Text("Edit profil, ganti password"),
+              subtitle: const Text("Ubah profil dan password"),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.toNamed(AppRoutes.account);

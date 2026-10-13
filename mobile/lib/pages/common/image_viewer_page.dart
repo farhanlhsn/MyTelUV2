@@ -157,7 +157,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
             right: 0,
             child: Center(
               child: Text(
-                'Pinch to zoom • Tap to close',
+                'Cubit untuk memperbesar • Ketuk untuk menutup',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.5),
                   fontSize: 12,

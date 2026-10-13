@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/api_client.dart';
+import '../utils/error_helper.dart';
 import '../utils/logger.dart';
 
 class KendaraanService {
@@ -54,23 +55,17 @@ class KendaraanService {
         return result;
       } else {
         throw Exception(
-          response.data['message'] ?? 'Failed to fetch histori pengajuan',
+          response.data['message'] ?? 'Gagal memuat histori pengajuan.',
         );
       }
     } on DioException catch (e) {
       debugLog(
         'Histori pengajuan request failed: status=${e.response?.statusCode ?? '-'} type=${e.type}',
       );
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error fetching histori pengajuan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     } catch (e) {
       debugLog('Unexpected histori pengajuan error: $e');
-      throw Exception('Unexpected error: $e');
+      throw Exception('Terjadi kesalahan. Silakan coba lagi.');
     }
   }
 
@@ -125,22 +120,17 @@ class KendaraanService {
         return PengajuanPlatModel.fromJson(response.data['data']);
       } else {
         throw Exception(
-          response.data['message'] ?? 'Failed to register kendaraan',
+          response.data['message'] ?? 'Gagal mendaftarkan kendaraan.',
         );
       }
     } on DioException catch (e) {
       debugLog(
         'Register kendaraan request failed: status=${e.response?.statusCode ?? '-'} type=${e.type}',
       );
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error registering kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     } catch (e) {
-      throw Exception('Unexpected error: $e');
+      debugLog('Unexpected kendaraan error: $e');
+      throw Exception('Terjadi kesalahan. Silakan coba lagi.');
     }
   }
 
@@ -190,19 +180,14 @@ class KendaraanService {
         return PengajuanPlatModel.fromJson(response.data['data']);
       } else {
         throw Exception(
-          response.data['message'] ?? 'Failed to resubmit kendaraan',
+          response.data['message'] ?? 'Gagal mengajukan ulang kendaraan.',
         );
       }
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error resubmitting kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     } catch (e) {
-      throw Exception('Unexpected error: $e');
+      debugLog('Unexpected kendaraan error: $e');
+      throw Exception('Terjadi kesalahan. Silakan coba lagi.');
     }
   }
 
@@ -215,24 +200,19 @@ class KendaraanService {
         final List<dynamic> data = response.data['data'];
         final kendaraan = data.firstWhere(
           (item) => item['id_kendaraan'] == idKendaraan,
-          orElse: () => throw Exception('Kendaraan not found'),
+          orElse: () => throw Exception('Kendaraan tidak ditemukan.'),
         );
         return PengajuanPlatModel.fromJson(kendaraan);
       } else {
         throw Exception(
-          response.data['message'] ?? 'Failed to fetch kendaraan',
+          response.data['message'] ?? 'Gagal memuat data kendaraan.',
         );
       }
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error fetching kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     } catch (e) {
-      throw Exception('Unexpected error: $e');
+      debugLog('Unexpected kendaraan error: $e');
+      throw Exception('Terjadi kesalahan. Silakan coba lagi.');
     }
   }
 
@@ -278,17 +258,11 @@ class KendaraanService {
         };
       } else {
         throw Exception(
-          response.data['message'] ?? 'Failed to fetch unverified kendaraan',
+          response.data['message'] ?? 'Gagal memuat pengajuan kendaraan.',
         );
       }
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error fetching unverified kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -308,13 +282,7 @@ class KendaraanService {
 
       return response.statusCode == 200 && response.data['status'] == 'success';
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error verifying kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -336,13 +304,7 @@ class KendaraanService {
 
       return response.statusCode == 200 && response.data['status'] == 'success';
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error rejecting kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -362,13 +324,7 @@ class KendaraanService {
 
       return response.statusCode == 200 && response.data['status'] == 'success';
     } on DioException catch (e) {
-      if (e.response != null) {
-        throw Exception(
-          e.response?.data['message'] ?? 'Error requesting delete for kendaraan',
-        );
-      } else {
-        throw Exception('Network error: ${e.message}');
-      }
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 }

@@ -207,7 +207,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                   },
                 ),
                 const Text(
-                  'Register Plat',
+                  'Daftarkan Plat',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -373,8 +373,8 @@ class RegisterPlatBerhasilPage extends StatefulWidget {
 
   const RegisterPlatBerhasilPage({
     super.key,
-    this.appBarTitle = 'Register Plat',
-    this.title = 'Register Plat Berhasil!',
+    this.appBarTitle = 'Daftarkan Plat',
+    this.title = 'Pendaftaran Plat Berhasil!',
     this.message = 'Pengajuan Anda sedang diproses',
   });
 

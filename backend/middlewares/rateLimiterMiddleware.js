@@ -102,7 +102,7 @@ exports.edgeLimiter = rateLimit({
   max: 60, // limit to 60 requests per minute
   message: {
     status: "error",
-    message: 'Too many requests from edge device, please try again later.'
+    message: 'Terlalu banyak permintaan dari perangkat edge. Coba lagi nanti.'
   },
   standardHeaders: true,
   legacyHeaders: false,

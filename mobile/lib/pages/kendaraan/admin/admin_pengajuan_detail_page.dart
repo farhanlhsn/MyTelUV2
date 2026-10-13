@@ -380,7 +380,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                   ),
                   Flexible(
                     child: Text(
-                      widget.pengajuan.userName ?? widget.pengajuan.userUsername ?? 'Unknown',
+                      widget.pengajuan.userName ?? widget.pengajuan.userUsername ?? 'Tanpa nama',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,

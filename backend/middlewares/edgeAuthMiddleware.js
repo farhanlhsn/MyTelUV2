@@ -19,7 +19,7 @@ exports.protectEdgeDevice = (req, res, next) => {
         console.error('EDGE_DEVICE_SECRET is not configured');
         return res.status(503).json({
             status: 'error',
-            message: 'Edge device authentication is not configured',
+            message: 'Autentikasi perangkat edge belum dikonfigurasi',
             data: { gate_action: 'DENY' }
         });
     }
@@ -28,7 +28,7 @@ exports.protectEdgeDevice = (req, res, next) => {
     if (!secretsMatch(providedSecret, configuredSecret)) {
         return res.status(401).json({
             status: 'error',
-            message: 'Unauthorized edge device',
+            message: 'Perangkat edge tidak berwenang',
             data: { gate_action: 'DENY' }
         });
     }

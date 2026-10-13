@@ -3,6 +3,7 @@ import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/utils/logger.dart';
 import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/kendaraan_helper.dart';
 
 class ListKendaraanTerdaftarPage extends StatefulWidget {
   const ListKendaraanTerdaftarPage({super.key});
@@ -46,7 +47,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     } catch (e) {
       debugLog('Error loading registered vehicles: $e');
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = kendaraanErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -147,7 +148,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengajukan penghapusan: $e'),
+          content: Text('Gagal mengajukan penghapusan: ${kendaraanErrorMessage(e)}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -180,7 +181,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                   ),
                   const Expanded(
                     child: Text(
-                      "List Kendaraan Terdaftar",
+                      "Daftar Kendaraan Terdaftar",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -278,7 +279,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
               const Icon(Icons.error_outline, size: 60, color: Colors.red),
               const SizedBox(height: 16),
               Text(
-                'Error: $_errorMessage',
+                '$_errorMessage',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.red),
               ),

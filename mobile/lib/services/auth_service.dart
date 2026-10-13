@@ -26,7 +26,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -40,7 +40,7 @@ class AuthService {
         requestOptions: response.requestOptions,
         response: response,
         type: DioExceptionType.badResponse,
-        message: 'Invalid response format from server',
+        message: 'Format respons server tidak valid.',
       );
     }
   }
@@ -77,7 +77,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -96,7 +96,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -119,7 +119,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -137,7 +137,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -164,7 +164,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -184,7 +184,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 }

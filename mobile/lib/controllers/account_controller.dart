@@ -102,7 +102,7 @@ class AccountController extends GetxController {
     } catch (e) {
       ErrorHelper.showToast(
         "Gagal",
-        e.toString().replaceAll('Exception: ', ''),
+        ErrorHelper.parseError(e),
         backgroundColor: Colors.red.shade100,
         textColor: Colors.red,
       );

@@ -202,7 +202,7 @@ class _HomePageState extends State<HomePage> {
           return Row(
             children: [
               Tooltip(
-                message: 'Lihat Profile',
+                message: 'Lihat Profil',
                 child: InkWell(
                   onTap: () {
                     Get.toNamed(AppRoutes.me);
@@ -768,7 +768,7 @@ class _HomePageState extends State<HomePage> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.list_alt, color: AppColors.primary),
-                title: const Text('List Kendaraan Terdaftar'),
+                title: const Text('Daftar Kendaraan Terdaftar'),
                 subtitle: const Text('Daftar kendaraan Anda yang aktif'),
                 onTap: () {
                   Navigator.pop(context);

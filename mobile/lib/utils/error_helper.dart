@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:dio/dio.dart';
 import './app_theme.dart';
+import './server_messages.dart';
 
 /// Utility class untuk menangani error secara konsisten di seluruh aplikasi
 class ErrorHelper {
@@ -169,12 +170,12 @@ class ErrorHelper {
 
     // Handle Exception biasa
     if (error is Exception) {
-      return _orUnknown(stripExceptionPrefix(error.toString()));
+      return _orUnknown(translateServerMessage(stripExceptionPrefix(error.toString())));
     }
 
     // Handle string langsung (mis. hasil e.toString() dari pemanggil)
     if (error is String) {
-      return _orUnknown(stripExceptionPrefix(error));
+      return _orUnknown(translateServerMessage(stripExceptionPrefix(error)));
     }
 
     return _unknownError;
@@ -238,10 +239,10 @@ class ErrorHelper {
     // Coba ambil message dari response body
     if (data is Map<String, dynamic>) {
       if (data['message'] != null) {
-        return data['message'].toString();
+        return translateServerMessage(data['message'].toString());
       }
       if (data['error'] != null) {
-        return data['error'].toString();
+        return translateServerMessage(data['error'].toString());
       }
     }
 

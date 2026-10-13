@@ -75,4 +75,51 @@ void main() {
       isEmpty,
     );
   });
+
+  group('what the user reads is Indonesian and mapped, not a raw Dart error', () {
+    // A log line may quote the raw error; what is shown must not
+    final RegExp logLine = RegExp(r'debugLog|debugPrint|\bprint\(');
+
+    List<String> userFacing(RegExp pattern, {List<String> except = const <String>[]}) {
+      final List<String> found = <String>[];
+      for (final File file in sources) {
+        if (except.any(normalised(file).endsWith)) continue;
+        final List<String> content = file.readAsLinesSync();
+        for (int i = 0; i < content.length; i++) {
+          final String line = content[i];
+          if (line.trimLeft().startsWith('//')) continue;
+          if (!logLine.hasMatch(line) && pattern.hasMatch(line)) {
+            found.add('${normalised(file)}:${i + 1}');
+          }
+        }
+      }
+      return found;
+    }
+
+    test('no raw e.toString() is stored as an error message', () {
+      expect(
+        userFacing(RegExp(r'(_?error\w*|errorMessage(\.value)?)\s*=\s*e\.toString\(\)')),
+        isEmpty,
+      );
+    });
+
+    test('the caught error is never interpolated into the text', () {
+      // $e followed by a quote, a space or a parenthesis; ${e} and ${e.toString()}
+      expect(
+        userFacing(RegExp(r'''\$e['"\s)]|\$\{e\}|\$\{e\.toString\(\)\}''')),
+        isEmpty,
+      );
+    });
+
+    test('no English "Failed to ...", "Network error", "Unknown" text', () {
+      expect(
+        userFacing(
+          RegExp(r'''['"](Failed to |Network error|Unexpected error|Unknown\b|Invalid response)'''),
+          // It still recognises the English wrappers that older service versions threw
+          except: <String>['utils/kendaraan_helper.dart'],
+        ),
+        isEmpty,
+      );
+    });
+  });
 }

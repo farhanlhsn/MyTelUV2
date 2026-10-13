@@ -89,6 +89,39 @@ void main() {
       expect(fromCache, isFalse);
     });
 
+    test('a failed request says what the server said, in Indonesian, without an English wrapper', () async {
+      when(mockDio.get(any)).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/api/akademik/kelas/hari-ini'),
+        response: Response(
+          statusCode: 500,
+          requestOptions: RequestOptions(path: '/api/akademik/kelas/hari-ini'),
+          data: {'status': 'error', 'message': 'Terjadi kesalahan pada server'},
+        ),
+        type: DioExceptionType.badResponse,
+      ));
+
+      await expectLater(
+        akademikService.getKelasHariIni(),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'text', 'Exception: Terjadi kesalahan pada server')),
+      );
+    });
+
+    test('a failed request without a connection says so in Indonesian', () async {
+      when(mockDio.get(any)).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/api/akademik/kelas/hari-ini'),
+        type: DioExceptionType.connectionError,
+      ));
+
+      await expectLater(
+        akademikService.getKelasHariIni(),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'text',
+          startsWith('Exception: Tidak dapat terhubung ke server'),
+        )),
+      );
+    });
+
     // Admin test
     test('createMatakuliah should return MatakuliahModel on success', () async {
         final mockData = {

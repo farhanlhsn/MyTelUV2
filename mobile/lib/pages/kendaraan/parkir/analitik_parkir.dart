@@ -6,6 +6,7 @@ import '../../../services/api_client.dart';
 import '../../../models/parkir_model.dart';
 import 'package:mobile/utils/logger.dart';
 import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/error_helper.dart';
 
 class AnalitikParkirPage extends StatefulWidget {
   const AnalitikParkirPage({super.key});
@@ -64,7 +65,7 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
       debugLog('❌ Error loading analitik: $e\n$stackTrace');
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = ErrorHelper.parseError(e);
           _isLoading = false;
         });
       }

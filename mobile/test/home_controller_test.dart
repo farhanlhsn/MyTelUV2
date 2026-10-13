@@ -100,7 +100,11 @@ void main() {
       await controller.loadAbsensi();
 
       expect(controller.totalKehadiranPercentage, isNull);
-      expect(controller.errorMessage.value, isNotEmpty);
+      // Indonesian, with the server's own (Indonesian) reason, no English wrapper
+      expect(
+        controller.errorMessage.value,
+        'Gagal memuat absensi: Terjadi kesalahan',
+      );
       expect(controller.isLoadingAbsensi.value, isFalse);
     });
 
@@ -142,7 +146,7 @@ void main() {
       await controller.loadAbsensi();
 
       expect(controller.totalKehadiranPercentage, 75.0);
-      expect(controller.errorMessage.value, isNotEmpty);
+      expect(controller.errorMessage.value, startsWith('Gagal memuat absensi'));
       expect(controller.isLoadingAbsensi.value, isFalse);
     });
   });

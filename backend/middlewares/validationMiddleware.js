@@ -59,7 +59,7 @@ exports.validateRequired = (fields) => {
         if (missingFields.length > 0) {
             return res.status(400).json({
                 status: "error",
-                message: `Missing required fields: ${missingFields.join(', ')}`
+                message: `Kolom wajib belum diisi: ${missingFields.join(', ')}`
             });
         }
 
@@ -74,7 +74,7 @@ exports.validateEmail = (req, res, next) => {
     if (email && !validator.isEmail(email)) {
         return res.status(400).json({
             status: "error",
-            message: 'Please provide a valid email address'
+            message: 'Format email tidak valid'
         });
     }
     next();
@@ -88,7 +88,7 @@ exports.validatePassword = (req, res, next) => {
         if (!validator.isLength(password, { min: 6 })) {
             return res.status(400).json({
                 status: "error",
-                message: 'Password must be at least 6 characters long'
+                message: 'Password minimal 6 karakter'
             });
         }
 
@@ -96,7 +96,7 @@ exports.validatePassword = (req, res, next) => {
         if (!validator.matches(password, /^(?=.*[A-Za-z])(?=.*\d)/)) {
             return res.status(400).json({
                 status: "error",
-                message: 'Password must contain at least one letter and one number'
+                message: 'Password harus mengandung minimal satu huruf dan satu angka'
             });
         }
     }
@@ -112,7 +112,7 @@ exports.validateUsername = (req, res, next) => {
         if (!validator.isLength(username, { min: 3, max: 30 })) {
             return res.status(400).json({
                 status: "error",
-                message: 'Username must be between 3 and 30 characters'
+                message: 'Username harus 3 sampai 30 karakter'
             });
         }
 
@@ -120,7 +120,7 @@ exports.validateUsername = (req, res, next) => {
         if (!validator.matches(username, /^[a-zA-Z][a-zA-Z0-9_]*$/)) {
             return res.status(400).json({
                 status: "error",
-                message: 'Username must start with a letter and contain only letters, numbers, and underscores'
+                message: 'Username harus diawali huruf dan hanya boleh berisi huruf, angka, dan garis bawah (_)'
             });
         }
     }

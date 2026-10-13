@@ -186,7 +186,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text(
-            'Edit Matakuliah',
+            'Ubah Matakuliah',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
@@ -280,7 +280,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : const Text('UPDATE', style: TextStyle(color: Colors.white)),
+                  : const Text('PERBARUI', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -314,7 +314,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
       _loadMatakuliah();
       return true;
     } catch (e) {
-      ErrorHelper.showError(e, title: 'Gagal Mengupdate Matakuliah');
+      ErrorHelper.showError(e, title: 'Gagal Memperbarui Matakuliah');
       return false;
     }
   }

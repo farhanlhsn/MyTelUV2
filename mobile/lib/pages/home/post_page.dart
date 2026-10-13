@@ -10,6 +10,7 @@ import 'create_post_page.dart';
 import 'comments_page.dart';
 import '../common/image_viewer_page.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class PostPage extends StatefulWidget {
   final VoidCallback? onCloseTapped;
@@ -95,7 +96,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = ErrorHelper.parseError(e);
           _isLoading = false;
         });
       }
@@ -169,7 +170,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
         );
       }
     }
@@ -189,7 +190,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
         );
       }
     }

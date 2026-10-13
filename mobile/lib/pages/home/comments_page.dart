@@ -5,6 +5,7 @@ import '../../services/post_service.dart';
 import '../../models/post_model.dart';
 import '../../utils/date_helper.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class CommentsPage extends StatefulWidget {
   final PostModel post;
@@ -83,7 +84,7 @@ class _CommentsPageState extends State<CommentsPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text(ErrorHelper.parseError(e)),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -101,7 +102,7 @@ class _CommentsPageState extends State<CommentsPage> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
       );
     }
   }
