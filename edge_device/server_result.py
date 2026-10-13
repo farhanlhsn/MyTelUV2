@@ -23,11 +23,14 @@ On a network or JSON error the edge client itself builds
 {"gate_action": "DENY", "error": "<reason>"}.
 
 The gate fails closed: it opens only for an explicit "OPEN". A DENY, a missing
-or unknown value, a malformed body or an error dict all resolve to "DENY".
+or unknown value, a malformed body or an error dict all resolve to "DENY". A
+response whose "status" is present but not "success" is DENY even if it claims
+"OPEN" (a contradictory body must never open the gate).
 """
 
 GATE_OPEN = 'OPEN'
 GATE_DENY = 'DENY'
+STATUS_SUCCESS = 'success'
 
 
 def _pick(data, result, key, default=None):
@@ -56,7 +59,8 @@ def parse_server_result(result):
 
     Values are read from result['data'] when that is a dict, falling back to the
     top level of the response for the legacy flat shape. gate_action is always
-    exactly 'OPEN' or 'DENY' and defaults to 'DENY'. success is True only for
+    exactly 'OPEN' or 'DENY' and defaults to 'DENY'; it is forced to 'DENY' when a
+    status is present and is not 'success'. success is True only for
     status == 'success' together with gate_action == 'OPEN'.
     """
     parsed = {
@@ -74,8 +78,12 @@ def parse_server_result(result):
     if not isinstance(data, dict):
         data = {}
 
-    # Only an explicit, exact 'OPEN' opens the gate
-    if _pick(data, result, 'gate_action') == GATE_OPEN:
+    # Only an explicit, exact 'OPEN' opens the gate, and only when the response is not
+    # self-contradictory: a status that is present but is not 'success' forces DENY
+    # (legacy flat bodies carry no status and are unaffected)
+    status = result.get('status')
+    status_allows_open = status is None or status == STATUS_SUCCESS
+    if status_allows_open and _pick(data, result, 'gate_action') == GATE_OPEN:
         parsed['gate_action'] = GATE_OPEN
 
     message = _pick(data, result, 'message')
@@ -94,7 +102,7 @@ def parse_server_result(result):
     parsed['ocr_confidence'] = _to_float(confidence)
 
     parsed['success'] = (
-        result.get('status') == 'success'
+        status == STATUS_SUCCESS
         and parsed['gate_action'] == GATE_OPEN
     )
 

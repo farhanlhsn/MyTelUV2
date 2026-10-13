@@ -231,10 +231,8 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
 
     expect([200, 201]).toContain(res.status);
     // The response contract nests the gate decision under "data": { status, message, data: { gate_action } }
-    const gateAction = res.data.data.gate_action;
-    expect(["ALLOW", "OPEN"]).toContain(gateAction);
-    const plateText = res.data.plate_text || res.data.data?.plate_text;
-    expect(plateText).toBe("B1234XYZ");
+    expect(res.data.data.gate_action).toBe("OPEN");
+    expect(res.data.data.plate_text).toBe("B1234XYZ");
   });
 
   test("10. Anomaly Detection Integration - Trigger scheduled anomaly detection", async () => {

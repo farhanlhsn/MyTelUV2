@@ -153,10 +153,42 @@ class ParseServerResultTest(unittest.TestCase):
         self.assertEqual(parsed['plate_text'], 'B1234XYZ')
 
     def test_success_requires_success_status_and_open(self):
-        self.assertTrue(parse_server_result(nested('success', 'x', gate_action='OPEN'))['success'])
-        self.assertFalse(parse_server_result(nested('error', 'x', gate_action='OPEN'))['success'])
-        self.assertFalse(parse_server_result(nested('success', 'x', gate_action='DENY'))['success'])
-        self.assertFalse(parse_server_result({'gate_action': 'OPEN'})['success'])
+        cases = [
+            # (response, expected gate_action, expected success)
+            (nested('success', 'x', gate_action='OPEN'), 'OPEN', True),
+            (nested('error', 'x', gate_action='OPEN'), 'DENY', False),
+            (nested('success', 'x', gate_action='DENY'), 'DENY', False),
+            # legacy flat body without a status: still opens, but is not a "success" response
+            ({'gate_action': 'OPEN'}, 'OPEN', False),
+        ]
+
+        for result, gate_action, success in cases:
+            with self.subTest(result=result):
+                parsed = parse_server_result(result)
+                self.assertEqual(parsed['gate_action'], gate_action)
+                self.assertEqual(parsed['success'], success)
+
+    def test_contradictory_error_status_with_open_denies(self):
+        # status says error but the body claims OPEN: never open the gate
+        nested_result = {'status': 'error', 'message': 'x', 'data': {'gate_action': 'OPEN'}}
+        flat_result = {'status': 'error', 'message': 'x', 'gate_action': 'OPEN'}
+
+        for result in (nested_result, flat_result):
+            with self.subTest(result=result):
+                parsed = parse_server_result(result)
+                self.assertEqual(parsed['gate_action'], 'DENY')
+                self.assertFalse(parsed['success'])
+
+    def test_any_status_other_than_success_denies_open(self):
+        for status in ('error', 'fail', 'SUCCESS', 'Success', '', 0, False, True, 200, ['success']):
+            with self.subTest(status=status):
+                parsed = parse_server_result(nested(status, 'x', gate_action='OPEN'))
+                self.assertEqual(parsed['gate_action'], 'DENY')
+                self.assertFalse(parsed['success'])
+
+    def test_absent_or_null_status_does_not_block_legacy_open(self):
+        self.assertEqual(parse_server_result({'gate_action': 'OPEN'})['gate_action'], 'OPEN')
+        self.assertEqual(parse_server_result({'status': None, 'gate_action': 'OPEN'})['gate_action'], 'OPEN')
 
     def test_non_dict_data_falls_back_to_top_level(self):
         for data in (None, [], 'x', 5):

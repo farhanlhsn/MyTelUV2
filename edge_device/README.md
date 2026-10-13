@@ -81,7 +81,12 @@ falls back to the top level of the body (legacy flat shape).
 **The gate fails closed.** It opens only when `gate_action` is exactly `OPEN`. A `DENY`,
 a missing or unknown value, a body that is not a JSON object, a network error, a timeout
 or an invalid JSON response (the client then uses `{"gate_action": "DENY", "error": "..."}`)
-all leave the gate closed.
+all leave the gate closed. A body whose `status` is present but not `success` is treated
+as `DENY` even if it claims `OPEN`.
+
+A repeat detection of the same plate position (bbox IoU > 0.5) is not sent to the server
+again for 5 seconds after an `OPEN` and for 10 seconds after a `DENY`
+(`OPEN_COOLDOWN_SECONDS` / `DENY_COOLDOWN_SECONDS` in `plate_detector.py`).
 
 If the camera cannot be read, the detector waits 0.5s between attempts and re-opens the
 capture device after 20 consecutive failures.

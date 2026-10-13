@@ -32,6 +32,12 @@ except ImportError:
 # After this many failed cap.read() calls in a row (0.5s apart), re-open the camera
 MAX_CONSECUTIVE_READ_FAILURES = 20
 
+# A repeat detection of the same plate (bbox IoU > 0.5) is not sent to the server again within
+# this window: after an OPEN, and after a DENY (so a denied vehicle at the gate is not re-sent
+# on every processed frame)
+OPEN_COOLDOWN_SECONDS = 5.0
+DENY_COOLDOWN_SECONDS = 10.0
+
 
 class GateController:
     """Controls the parking gate barrier"""
@@ -195,7 +201,8 @@ class PlateDetector:
         self.last_detection = {
             'bbox': None,
             'time': 0,
-            'plate_text': None
+            'plate_text': None,
+            'gate_action': None
         }
     
     def calculate_iou(self, boxA, boxB):
@@ -544,8 +551,12 @@ class PlateDetector:
                 time_diff = current_time - self.last_detection['time']
                 
                 # If overlap is high and time is short, skip (Duplicate)
-                # IoU > 0.5 and Time < 5 seconds
-                if iou > 0.5 and time_diff < 5.0:
+                # IoU > 0.5 and Time < 5 seconds after an OPEN, < 10 seconds after a DENY
+                if self.last_detection.get('gate_action') == 'DENY':
+                    cooldown = DENY_COOLDOWN_SECONDS
+                else:
+                    cooldown = OPEN_COOLDOWN_SECONDS
+                if iou > 0.5 and time_diff < cooldown:
                     self.logger.info(f"Skipping duplicate detection (IoU: {iou:.2f}, Time: {time_diff:.1f}s)")
                     # Draw visual indicator for duplicate
                     if save_dir and self.config.get('debug', {}).get('save_images', False):
@@ -571,13 +582,13 @@ class PlateDetector:
             gate_action = parsed['gate_action']
             message = parsed['message']
 
-            # Update last detection if the gate was opened
-            if gate_action == 'OPEN':
-                self.last_detection = {
-                    'bbox': bbox,
-                    'time': current_time,
-                    'plate_text': plate_text
-                }
+            # Remember this detection (OPEN and DENY alike) so a repeat is not re-sent within its cool-down
+            self.last_detection = {
+                'bbox': bbox,
+                'time': current_time,
+                'plate_text': plate_text,
+                'gate_action': gate_action
+            }
 
             self.logger.info(
                 f"Detected plate: {plate_text} "
