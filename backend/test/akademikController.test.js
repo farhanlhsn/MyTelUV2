@@ -440,7 +440,7 @@ describe('Akademik Controller Tests', () => {
                 expect(res.status).toHaveBeenCalledWith(400);
                 expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                     status: 'error',
-                    message: expect.stringContaining('drop deadline')
+                    message: expect.stringContaining('Batas waktu untuk membatalkan kelas')
                 }));
             });
 
@@ -464,7 +464,7 @@ describe('Akademik Controller Tests', () => {
                 expect(res.status).toHaveBeenCalledWith(200);
                 expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                     status: 'success',
-                    message: 'Dropped class successfully'
+                    message: 'Pendaftaran kelas berhasil dibatalkan'
                 }));
             });
         });

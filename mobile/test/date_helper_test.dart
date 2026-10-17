@@ -83,7 +83,7 @@ void main() {
     });
   });
 
-  group('formatWaktuRelatif (notification times)', () {
+  group('formatWaktuRelatif (notifications, posts and comments)', () {
     // 2026-10-14 10:00 WIB
     final now = DateTime.utc(2026, 10, 14, 3, 0);
 
@@ -129,6 +129,23 @@ void main() {
         formatWaktuRelatif(DateTime.utc(2026, 9, 20, 2, 15), now: now),
         '20 Sep 2026',
       );
+    });
+
+    test('crossing midnight WIB changes the calendar day without waiting 24 hours', () {
+      // A post at 23:00 WIB, read at 00:15 WIB the following day.
+      expect(
+        formatWaktuRelatif(
+          DateTime.utc(2026, 10, 13, 16),
+          now: DateTime.utc(2026, 10, 13, 17, 15),
+        ),
+        'Kemarin, 23:00',
+      );
+    });
+
+    test('exactly one hour, one week and a future timestamp have readable labels', () {
+      expect(formatWaktuRelatif(now.subtract(const Duration(hours: 1)), now: now), '09:00');
+      expect(formatWaktuRelatif(now.subtract(const Duration(days: 7)), now: now), '7 Okt 2026');
+      expect(formatWaktuRelatif(now.add(const Duration(minutes: 1)), now: now), 'Baru saja');
     });
   });
 }

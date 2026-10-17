@@ -42,7 +42,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (!fotoKendaraanFiles || fotoKendaraanFiles.length < 3) {
         return res.status(400).json({
             status: "error",
-            message: `Exactly 3 fotoKendaraan are required (you uploaded ${fotoKendaraanFiles.length})`
+            message: `Wajib melampirkan tepat 3 foto kendaraan (Anda mengunggah ${fotoKendaraanFiles.length})`
         });
     }
 
@@ -50,7 +50,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (!fotoSTNKFile) {
         return res.status(400).json({
             status: "error",
-            message: "fotoSTNK is required"
+            message: "Foto STNK wajib dilampirkan"
         });
     }
 
@@ -85,7 +85,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (userKendaraanCount >= maxKendaraan) {
         return res.status(400).json({
             status: "error",
-            message: `User has reached the maximum limit of ${maxKendaraan} vehicles`
+            message: `Pengguna sudah mencapai batas maksimal ${maxKendaraan} kendaraan`
         });
     }
 
@@ -196,7 +196,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Kendaraan registered successfully",
+        message: "Kendaraan berhasil didaftarkan",
         data: kendaraan
     });
 });
@@ -223,7 +223,7 @@ exports.getKendaraan = asyncHandler(async (req, res) => {
             createdAt: 'desc'
         }
     });
-    res.status(200).json({ status: "success", message: "Kendaraan retrieved successfully", data: kendaraan });
+    res.status(200).json({ status: "success", message: "Data kendaraan berhasil diambil", data: kendaraan });
 });
 
 exports.deleteKendaraan = asyncHandler(async (req, res) => {
@@ -235,7 +235,7 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
         where: { id_kendaraan: parseInt(id_kendaraan), id_user, deletedAt: null }
     });
     if (!kendaraan || kendaraan.deletedAt) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
     }
 
     // Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus. Ini menjamin bahwa menolak permintaan hapus
@@ -257,7 +257,7 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
         }
     });
 
-    res.status(200).json({ status: "success", message: "Kendaraan deletion request submitted successfully" });
+    res.status(200).json({ status: "success", message: "Permintaan penghapusan kendaraan berhasil diajukan" });
 });
 
 exports.verifyKendaraan = asyncHandler(async (req, res) => {
@@ -266,11 +266,11 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user), deletedAt: null }
     });
     if (!kendaraan) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
     }
 
     if (kendaraan.statusVerif) {
-        return res.status(400).json({ status: "error", message: "Kendaraan already verified" });
+        return res.status(400).json({ status: "error", message: "Kendaraan sudah diverifikasi" });
     }
 
     // Jika ini adalah permintaan hapus kendaraan
@@ -296,7 +296,7 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
             console.error('Failed to send notification:', notifError.message);
         }
 
-        return res.status(200).json({ status: "success", message: "Kendaraan deletion approved and deleted successfully", data: updatedKendaraan });
+        return res.status(200).json({ status: "success", message: "Penghapusan kendaraan disetujui dan kendaraan berhasil dihapus", data: updatedKendaraan });
     }
 
     const updatedKendaraan = await prisma.kendaraan.update({
@@ -321,7 +321,7 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
         console.error('Failed to send notification:', notifError.message);
     }
 
-    res.status(200).json({ status: "success", message: "Kendaraan verified successfully", data: updatedKendaraan });
+    res.status(200).json({ status: "success", message: "Kendaraan berhasil diverifikasi", data: updatedKendaraan });
 });
 
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
@@ -377,7 +377,7 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "All unverified kendaraan retrieved successfully",
+        message: "Semua kendaraan yang belum diverifikasi berhasil diambil",
         data: unverifiedKendaraan,
         pagination: buildPaginationMeta(total, page, limit)
     });
@@ -395,7 +395,7 @@ exports.getAllKendaraan = asyncHandler(async (req, res) => {
     });
     res.status(200).json({
         status: "success",
-        message: "All kendaraan retrieved successfully",
+        message: "Semua data kendaraan berhasil diambil",
         data: kendaraan,
         pagination: buildPaginationMeta(total, page, limit)
     });
@@ -426,7 +426,7 @@ exports.getHistoriPengajuan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Histori pengajuan retrieved successfully",
+        message: "Riwayat pengajuan berhasil diambil",
         data: kendaraan
     });
 });
@@ -438,7 +438,7 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     if (!feedback || feedback.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Feedback is required when rejecting"
+            message: "Alasan penolakan wajib diisi"
         });
     }
 
@@ -449,7 +449,7 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     if (!kendaraan) {
         return res.status(404).json({
             status: "error",
-            message: "Kendaraan not found"
+            message: "Kendaraan tidak ditemukan"
         });
     }
 
@@ -479,13 +479,13 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
             console.error('Failed to send notification:', notifError.message);
         }
 
-        return res.status(200).json({ status: "success", message: "Kendaraan deletion request rejected", data: updatedKendaraan });
+        return res.status(200).json({ status: "success", message: "Permintaan penghapusan kendaraan ditolak", data: updatedKendaraan });
     }
 
     if (kendaraan.status_pengajuan === 'DISETUJUI') {
         return res.status(400).json({
             status: "error",
-            message: "Cannot reject already approved kendaraan"
+            message: "Kendaraan yang sudah disetujui tidak dapat ditolak"
         });
     }
 
@@ -513,7 +513,7 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Kendaraan rejected successfully",
+        message: "Kendaraan berhasil ditolak",
         data: updatedKendaraan
     });
 });
@@ -527,11 +527,11 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
     });
 
     if (!kendaraan) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
     }
 
     if (kendaraan.status_pengajuan !== 'DITOLAK') {
-        return res.status(400).json({ status: "error", message: "Only rejected vehicles can be resubmitted" });
+        return res.status(400).json({ status: "error", message: "Hanya kendaraan yang ditolak yang dapat diajukan ulang" });
     }
 
     const fotoKendaraanFiles = req.files?.fotoKendaraan || [];
@@ -546,7 +546,7 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
 
     if (fotoKendaraanFiles.length > 0) {
         if (fotoKendaraanFiles.length < 3) {
-            return res.status(400).json({ status: "error", message: "If updating vehicle photos, you must provide exactly 3 photos" });
+            return res.status(400).json({ status: "error", message: "Jika mengubah foto kendaraan, lampirkan tepat 3 foto" });
         }
         
         const uploadedFotoKendaraan = [];
@@ -575,7 +575,7 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Kendaraan resubmitted successfully",
+        message: "Kendaraan berhasil diajukan ulang",
         data: updatedKendaraan
     });
 });

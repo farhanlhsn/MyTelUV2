@@ -16,7 +16,6 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   
   static const Color primaryRed = AppColors.primary;
   static const Color darkBlue = Color(0xFF1D3557);
-  static const Color accentGreen = Color(0xFF2A9D8F);
 
   double _localJarangHadir = 50.0;
   bool _isInitializing = true;

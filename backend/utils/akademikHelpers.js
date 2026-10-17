@@ -53,14 +53,14 @@ const requireKelasOwnership = (req, res, next) => {
     if (!kelas) {
         return res.status(500).json({
             status: "error",
-            message: "Kelas not loaded for authorization check"
+            message: "Data kelas belum dimuat untuk pemeriksaan akses"
         });
     }
 
     if (!isDosenAuthorizedForKelas(req.user, kelas)) {
         return res.status(403).json({
             status: "error",
-            message: "You can only access your own classes"
+            message: "Anda hanya dapat mengakses kelas Anda sendiri"
         });
     }
 

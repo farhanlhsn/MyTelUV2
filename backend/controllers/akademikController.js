@@ -42,7 +42,7 @@ exports.createMatakuliah = asyncHandler(async (req, res) => {
     if (existingMatakuliah) {
         return res.status(409).json({
             status: "error",
-            message: "Kode matakuliah already exists"
+            message: "Kode matakuliah sudah digunakan"
         });
     }
 
@@ -55,7 +55,7 @@ exports.createMatakuliah = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Matakuliah created successfully",
+        message: "Matakuliah berhasil dibuat",
         data: matakuliah
     });
 });
@@ -128,7 +128,7 @@ exports.getMatakuliahById = asyncHandler(async (req, res) => {
     if (!matakuliah) {
         return res.status(404).json({
             status: "error",
-            message: "Matakuliah not found"
+            message: "Matakuliah tidak ditemukan"
         });
     }
 
@@ -152,7 +152,7 @@ exports.updateMatakuliah = asyncHandler(async (req, res) => {
     if (!matakuliah) {
         return res.status(404).json({
             status: "error",
-            message: "Matakuliah not found"
+            message: "Matakuliah tidak ditemukan"
         });
     }
 
@@ -169,7 +169,7 @@ exports.updateMatakuliah = asyncHandler(async (req, res) => {
         if (existingKode) {
             return res.status(409).json({
                 status: "error",
-                message: "Kode matakuliah already exists"
+                message: "Kode matakuliah sudah digunakan"
             });
         }
     }
@@ -184,7 +184,7 @@ exports.updateMatakuliah = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Matakuliah updated successfully",
+        message: "Matakuliah berhasil diperbarui",
         data: updatedMatakuliah
     });
 });
@@ -207,7 +207,7 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
     if (!matakuliah) {
         return res.status(404).json({
             status: "error",
-            message: "Matakuliah not found"
+            message: "Matakuliah tidak ditemukan"
         });
     }
 
@@ -215,7 +215,7 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
     if (matakuliah.kelas.length > 0) {
         return res.status(400).json({
             status: "error",
-            message: "Cannot delete matakuliah with active kelas. Delete or archive the kelas first."
+            message: "Matakuliah yang masih memiliki kelas aktif tidak dapat dihapus. Hapus atau arsipkan kelas terlebih dahulu."
         });
     }
 
@@ -226,7 +226,7 @@ exports.deleteMatakuliah = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Matakuliah deleted successfully"
+        message: "Matakuliah berhasil dihapus"
     });
 });
 
@@ -304,7 +304,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
     if (!matakuliah) {
         return res.status(404).json({
             status: "error",
-            message: "Matakuliah not found"
+            message: "Matakuliah tidak ditemukan"
         });
     }
 
@@ -320,7 +320,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
     if (!dosen) {
         return res.status(404).json({
             status: "error",
-            message: "Dosen not found or invalid role"
+            message: "Dosen tidak ditemukan atau perannya tidak sesuai"
         });
     }
 
@@ -328,7 +328,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== parseInt(id_dosen)) {
         return res.status(403).json({
             status: "error",
-            message: "Dosen can only create classes for themselves"
+            message: "Dosen hanya dapat membuat kelas untuk dirinya sendiri"
         });
     }
 
@@ -336,7 +336,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
     if (!KELAS_TIME_REGEX.test(jam_mulai) || !KELAS_TIME_REGEX.test(jam_berakhir)) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
+            message: "Format jam tidak valid. Gunakan format HH:MM:SS (contoh: 08:00:00)"
         });
     }
 
@@ -424,7 +424,7 @@ exports.createKelas = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Kelas created successfully",
+        message: "Kelas berhasil dibuat",
         data: createdKelas
     });
 });
@@ -808,7 +808,7 @@ exports.getKelasById = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -816,7 +816,7 @@ exports.getKelasById = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && kelas.id_dosen !== req.user.id_user) {
         return res.status(403).json({
             status: "error",
-            message: "You are not authorized to view this class details"
+            message: "Anda tidak berhak melihat detail kelas ini"
         });
     }
 
@@ -840,7 +840,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -848,7 +848,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only update your own classes"
+            message: "Anda hanya dapat mengubah kelas Anda sendiri"
         });
     }
 
@@ -864,7 +864,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
         if (!matakuliah) {
             return res.status(404).json({
                 status: "error",
-                message: "Matakuliah not found"
+                message: "Matakuliah tidak ditemukan"
             });
         }
     }
@@ -882,7 +882,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
         if (!dosen) {
             return res.status(404).json({
                 status: "error",
-                message: "Dosen not found or invalid role"
+                message: "Dosen tidak ditemukan atau perannya tidak sesuai"
             });
         }
     }
@@ -891,7 +891,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
     if ((jam_mulai && !KELAS_TIME_REGEX.test(jam_mulai)) || (jam_berakhir && !KELAS_TIME_REGEX.test(jam_berakhir))) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid time format. Use HH:MM:SS format (e.g., 08:00:00)"
+            message: "Format jam tidak valid. Gunakan format HH:MM:SS (contoh: 08:00:00)"
         });
     }
 
@@ -1038,7 +1038,7 @@ exports.updateKelas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Kelas updated successfully",
+        message: "Kelas berhasil diperbarui",
         data: updatedKelas
     });
 });
@@ -1048,7 +1048,7 @@ exports.deleteAllKelas = asyncHandler(async (req, res) => {
     if (req.user.role !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "Only Admin can perform this action"
+            message: "Hanya admin yang dapat melakukan tindakan ini"
         });
     }
 
@@ -1061,7 +1061,7 @@ exports.deleteAllKelas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "All items deleted successfully",
+        message: "Semua data berhasil dihapus",
         data: {
             count: result // result is the number of affected rows
         }
@@ -1081,7 +1081,7 @@ exports.deleteKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1089,7 +1089,7 @@ exports.deleteKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only delete your own classes"
+            message: "Anda hanya dapat menghapus kelas Anda sendiri"
         });
     }
 
@@ -1110,7 +1110,7 @@ exports.deleteKelas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Kelas deleted successfully"
+        message: "Kelas berhasil dihapus"
     });
 });
 
@@ -1134,7 +1134,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1229,7 +1229,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
                 code: 409,
                 body: {
                     status: "error",
-                    message: "Already enrolled in this class"
+                    message: "Anda sudah terdaftar di kelas ini"
                 }
             };
         }
@@ -1274,7 +1274,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
             code: 201,
             body: {
                 status: "success",
-                message: "Enrolled in class successfully",
+                message: "Pendaftaran kelas berhasil",
                 data: peserta
             }
         };
@@ -1306,7 +1306,7 @@ exports.daftarKelas = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             status: "success",
-            message: "Re-enrolled in class successfully",
+            message: "Pendaftaran ulang kelas berhasil",
             data: pesertaWithRelations
         });
     }
@@ -1331,7 +1331,7 @@ exports.dropKelas = asyncHandler(async (req, res) => {
         if (now > activeSemester.drop_deadline) {
             return res.status(400).json({
                 status: "error",
-                message: "Batas waktu (drop deadline) untuk membatalkan kelas di semester ini telah berakhir."
+                message: "Batas waktu untuk membatalkan kelas di semester ini telah berakhir."
             });
         }
     }
@@ -1348,7 +1348,7 @@ exports.dropKelas = asyncHandler(async (req, res) => {
     if (!peserta || peserta.deletedAt) {
         return res.status(404).json({
             status: "error",
-            message: "Not enrolled in this class"
+            message: "Anda tidak terdaftar di kelas ini"
         });
     }
 
@@ -1364,7 +1364,7 @@ exports.dropKelas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Dropped class successfully"
+        message: "Pendaftaran kelas berhasil dibatalkan"
     });
 });
 
@@ -1484,7 +1484,7 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
     if (!id_kelas || !id_mahasiswa) {
         return res.status(400).json({
             status: "error",
-            message: "id_kelas and id_mahasiswa are required"
+            message: "Kelas dan mahasiswa wajib dipilih"
         });
     }
 
@@ -1496,7 +1496,7 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
     if (mahasiswaIds.length === 0) {
         return res.status(400).json({
             status: "error",
-            message: "No mahasiswa IDs provided"
+            message: "Pilih minimal satu mahasiswa"
         });
     }
 
@@ -1511,7 +1511,7 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1636,7 +1636,7 @@ exports.adminAddPeserta = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Process completed",
+        message: "Proses selesai",
         data: {
             added: result.added,
             restored: result.restored,
@@ -1656,7 +1656,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     if (req.user.role !== 'DOSEN' && req.user.role !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "Not authorized to open absensi"
+            message: "Anda tidak berwenang membuka sesi absensi"
         });
     }
 
@@ -1674,7 +1674,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1682,7 +1682,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && kelas.id_dosen !== req.user.id_user) {
         return res.status(403).json({
             status: "error",
-            message: "Not authorized for this class"
+            message: "Anda tidak berwenang untuk kelas ini"
         });
     }
 
@@ -1696,13 +1696,13 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             return res.status(400).json({
                 status: "error",
-                message: "Invalid coordinates"
+                message: "Koordinat tidak valid"
             });
         }
         if (radius !== null && radius <= 0) {
             return res.status(400).json({
                 status: "error",
-                message: "Radius must be positive"
+                message: "Radius harus lebih dari 0"
             });
         }
     }
@@ -1786,7 +1786,7 @@ exports.openAbsensi = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Absensi session opened successfully",
+        message: "Sesi absensi berhasil dibuka",
         data: sesi
     });
 
@@ -1814,7 +1814,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -1830,7 +1830,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
         if (!peserta) {
             return res.status(403).json({
                 status: "error",
-                message: "Not enrolled in this class"
+                message: "Anda tidak terdaftar di kelas ini"
             });
         }
     }
@@ -1889,7 +1889,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
     if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid coordinates"
+            message: "Koordinat tidak valid"
         });
     }
 
@@ -2016,7 +2016,7 @@ exports.createAbsensi = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Absensi recorded successfully",
+        message: "Absensi berhasil dicatat",
         data: absensi
     });
 });
@@ -2081,7 +2081,7 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -2089,7 +2089,7 @@ exports.getAbsensiKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only view absensi for your own classes"
+            message: "Anda hanya dapat melihat absensi kelas Anda sendiri"
         });
     }
 
@@ -2163,7 +2163,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -2171,7 +2171,7 @@ exports.getAbsensiStats = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only view statistics for your own classes"
+            message: "Anda hanya dapat melihat statistik kelas Anda sendiri"
         });
     }
 
@@ -2265,7 +2265,7 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
     if (!kelas) {
         return res.status(404).json({
             status: "error",
-            message: "Kelas not found"
+            message: "Kelas tidak ditemukan"
         });
     }
 
@@ -2273,7 +2273,7 @@ exports.getSesiAbsensiByKelas = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only view sesi for your own classes"
+            message: "Anda hanya dapat melihat sesi kelas Anda sendiri"
         });
     }
 
@@ -2383,7 +2383,7 @@ exports.getSesiAbsensiDetail = asyncHandler(async (req, res) => {
     if (!sesi) {
         return res.status(404).json({
             status: "error",
-            message: "Sesi absensi not found"
+            message: "Sesi absensi tidak ditemukan"
         });
     }
 
@@ -2391,7 +2391,7 @@ exports.getSesiAbsensiDetail = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== sesi.kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only view detail for your own classes"
+            message: "Anda hanya dapat melihat detail kelas Anda sendiri"
         });
     }
 
@@ -2504,7 +2504,7 @@ exports.closeSesiAbsensi = asyncHandler(async (req, res) => {
     if (!sesi) {
         return res.status(404).json({
             status: "error",
-            message: "Sesi absensi not found"
+            message: "Sesi absensi tidak ditemukan"
         });
     }
 
@@ -2512,7 +2512,7 @@ exports.closeSesiAbsensi = asyncHandler(async (req, res) => {
     if (req.user.role === 'DOSEN' && req.user.id_user !== sesi.kelas.id_dosen) {
         return res.status(403).json({
             status: "error",
-            message: "You can only close sesi for your own classes"
+            message: "Anda hanya dapat menutup sesi kelas Anda sendiri"
         });
     }
 

@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/api_client.dart';
 import '../utils/error_helper.dart';
@@ -11,11 +10,6 @@ class KendaraanService {
   
   @visibleForTesting
   static set dio(Dio dio) => _dio = dio;
-
-  static FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
-  @visibleForTesting
-  static set secureStorage(FlutterSecureStorage ss) => _secureStorage = ss;
 
   // Get histori pengajuan kendaraan user
   static Future<List<PengajuanPlatModel>> getHistoriPengajuan() async {

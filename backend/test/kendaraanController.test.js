@@ -102,7 +102,7 @@ describe('Kendaraan Controller Tests', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                message: expect.stringContaining('Exactly 3')
+                message: expect.stringContaining('tepat 3 foto kendaraan')
             }));
         });
 
@@ -115,7 +115,7 @@ describe('Kendaraan Controller Tests', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                message: 'fotoSTNK is required'
+                message: 'Foto STNK wajib dilampirkan'
             }));
         });
 

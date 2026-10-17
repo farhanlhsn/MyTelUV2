@@ -34,7 +34,7 @@ const List<(String, String)> _attendanceMessages = <(String, String)>[
     'Lokasi tidak valid. Pastikan GPS aktif lalu coba lagi.',
   ),
   (
-    // POST /akademik/absensi still answers in English for this one
+    // Fallback for older servers.
     'invalid coordinates',
     'Lokasi tidak valid. Pastikan GPS aktif lalu coba lagi.',
   ),
@@ -71,7 +71,9 @@ const List<(String, String)> _attendanceMessages = <(String, String)>[
     'Sesi absensi tidak ditemukan atau sudah ditutup.',
   ),
   ('di luar waktu absensi', 'Di luar waktu absensi.'),
-  // POST /akademik/absensi still answers in English for these two
+  ('anda tidak terdaftar di kelas ini', 'Anda tidak terdaftar di kelas ini.'),
+  ('kelas tidak ditemukan', 'Kelas tidak ditemukan.'),
+  // Fallback for older servers.
   ('not enrolled in this class', 'Anda tidak terdaftar di kelas ini.'),
   ('kelas not found', 'Kelas tidak ditemukan.'),
   ('sudah melakukan absensi', 'Anda sudah melakukan absensi pada sesi ini.'),

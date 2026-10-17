@@ -27,9 +27,6 @@ class LogParkirModel {
     this.parkiran,
   });
 
-  /// Get timestamp in local timezone
-  DateTime get localTimestamp => timestamp.toLocal();
-
   /// Check if this is an entry log
   bool get isMasuk => type == 'MASUK';
 

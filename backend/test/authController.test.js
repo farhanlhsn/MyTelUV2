@@ -625,7 +625,7 @@ describe('Auth Controller Tests', () => {
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'success',
-                message: 'Logged out successfully'
+                message: 'Logout berhasil'
             });
         });
     });
@@ -812,7 +812,7 @@ describe('Auth Controller Tests', () => {
             const unknown = createMockRes();
             await authController.adminResetPassword({ ...createMockReq({ id_user: 7, new_password: 'Baru12345' }, admin), ip: '10.0.0.1', headers: {} }, unknown);
             expect(unknown.status).toHaveBeenCalledWith(404);
-            expect(unknown.json).toHaveBeenCalledWith({ status: 'error', message: 'User tidak ditemukan' });
+            expect(unknown.json).toHaveBeenCalledWith({ status: 'error', message: 'Pengguna tidak ditemukan' });
         });
 
         test('rejects a 7 character password without touching the database', async () => {

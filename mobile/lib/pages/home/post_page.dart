@@ -245,23 +245,6 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 7) {
-      return formatTanggalSingkat(dateTime);
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}h lalu';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}j lalu';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m lalu';
-    } else {
-      return 'Baru saja';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -549,7 +532,7 @@ class _PostPageState extends State<PostPage> {
                             style: TextStyle(color: primaryColor.withOpacity(0.8), fontSize: 12),
                           ),
                           Text(
-                            ' • ${_formatTimeAgo(post.createdAt)}',
+                            ' • ${formatWaktuRelatif(post.createdAt)}',
                             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                           ),
                         ],

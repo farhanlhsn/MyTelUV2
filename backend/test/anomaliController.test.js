@@ -413,7 +413,7 @@ describe('Anomaly Controller Tests', () => {
                 ]);
 
                 expect(active(table, 11, 'TIDAK_HADIR_BERULANG')).toEqual([expect.objectContaining({
-                    id_anomali: 3, status: 'OPEN', catatan_dosen: 'Hubungi wali', deskripsi: 'Kehadiran rendah: 0% (Threshold: 50%)', confidence: 1
+                    id_anomali: 3, status: 'OPEN', catatan_dosen: 'Hubungi wali', deskripsi: 'Kehadiran rendah: 0% (Ambang batas: 50%)', confidence: 1
                 })]);
                 expect(active(table, 12, 'TIDAK_HADIR_BERULANG')).toEqual([]);
                 expect(table.find((r) => r.id_anomali === 4).deletedAt).toEqual(expect.any(Date));
@@ -538,7 +538,7 @@ describe('Anomaly Controller Tests', () => {
                 }]);
                 expect(body.data.map((a) => a.type_anomali)).not.toContain('KEHADIRAN_GANDA');
                 // 11's status-aware rate is 1/2 = 50% -> flagged by the backend rule, not by the service result
-                expect(body.data.filter((a) => a.id_user === 11).map((a) => a.description)).toEqual(['Kehadiran rendah: 50% (Threshold: 50%)']);
+                expect(body.data.filter((a) => a.id_user === 11).map((a) => a.description)).toEqual(['Kehadiran rendah: 50% (Ambang batas: 50%)']);
                 expect(table.filter((r) => r.type_anomali === 'POLA_WAKTU_TIDAK_WAJAR').map((r) => r.id_user)).toEqual([10]);
             });
 
@@ -835,14 +835,20 @@ describe('Anomaly Controller Tests', () => {
             }
         });
 
-        test('TaskQueue.addJob records the owner on the job', () => {
+        test('TaskQueue.addJob records the owner on the job', async () => {
             const { TaskQueue } = require('../utils/TaskQueue');
             const queue = new TaskQueue(1);
 
             const info = queue.addJob('job-with-owner', async () => 'done', 7);
 
+            // Let the queued job complete, then drain processNext's follow-up callback before teardown.
+            await new Promise(resolve => setImmediate(resolve));
+            await new Promise(resolve => setImmediate(resolve));
+
             expect(info.ownerId).toBe(7);
-            expect(queue.getJobStatus('job-with-owner').ownerId).toBe(7);
+            expect(queue.getJobStatus('job-with-owner')).toMatchObject({ ownerId: 7, status: 'COMPLETED', result: 'done' });
+            expect(queue.activeWorkers).toBe(0);
+            expect(queue.queue).toHaveLength(0);
         });
 
         test('getJobStatus returns the job to its owner without leaking ownerId', async () => {

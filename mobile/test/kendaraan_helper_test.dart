@@ -32,6 +32,21 @@ void main() {
       );
     });
 
+    test('current Indonesian vehicle limits and photo counts keep the same guidance', () {
+      expect(
+        kendaraanErrorMessage(
+          Exception('Pengguna sudah mencapai batas maksimal 4 kendaraan'),
+        ),
+        'Anda telah mencapai batas maksimal 4 kendaraan.',
+      );
+      expect(
+        kendaraanErrorMessage(
+          Exception('Wajib melampirkan tepat 3 foto kendaraan (Anda mengunggah 2)'),
+        ),
+        'Lengkapi 3 foto kendaraan (depan, samping, belakang).',
+      );
+    });
+
     test('hides the service wrappers for network and unexpected errors', () {
       expect(
         kendaraanErrorMessage(Exception('Network error: Connection refused')),

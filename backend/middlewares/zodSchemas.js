@@ -18,7 +18,7 @@ const registerSchema = z.object({
     username: z.string()
         .min(3, "Username minimal 3 karakter")
         .max(30, "Username maksimal 30 karakter")
-        .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Username harus diawali huruf dan hanya boleh berisi huruf, angka, dan underscore"),
+        .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, "Username harus diawali huruf dan hanya boleh berisi huruf, angka, dan garis bawah (_)"),
     password: z.string()
         .min(8, "Password minimal 8 karakter")
         .regex(/^(?=.*[A-Za-z])(?=.*\d)/, "Password harus mengandung minimal satu huruf dan satu angka"),
@@ -113,7 +113,7 @@ const verifyKendaraanSchema = z.object({
 const rejectKendaraanSchema = z.object({
     id_kendaraan: z.union([z.number(), z.string()]),
     id_user: z.union([z.number(), z.string()]),
-    feedback: z.string().min(1, "Feedback wajib diisi")
+    feedback: z.string().min(1, "Alasan penolakan wajib diisi")
 });
 
 // Biometrik Schemas

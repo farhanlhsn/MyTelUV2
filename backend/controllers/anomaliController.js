@@ -333,7 +333,7 @@ exports.analyzeKelasAttendance = asyncHandler(async (req, res) => {
                     nama: nama,
                     type_anomali: 'TIDAK_HADIR_BERULANG',
                     confidence: Math.min(1.0, Math.max(0.0, parseFloat(confidence.toFixed(2)))),
-                    description: `Kehadiran rendah: ${(attendanceRate * 100).toFixed(0)}% (Threshold: ${(thresholdJarangHadir * 100).toFixed(0)}%)`
+                    description: `Kehadiran rendah: ${(attendanceRate * 100).toFixed(0)}% (Ambang batas: ${(thresholdJarangHadir * 100).toFixed(0)}%)`
                 });
             }
         }
@@ -618,7 +618,7 @@ exports.updateAnomalySettings = asyncHandler(async (req, res) => {
             if (isNaN(val) || val < 0 || val > 100) {
                 return res.status(400).json({
                     status: "error",
-                    message: "Threshold jarang hadir harus berupa angka antara 0 dan 100"
+                    message: "Ambang batas jarang hadir harus berupa angka antara 0 dan 100"
                 });
             }
             await prisma.systemSetting.upsert({
@@ -633,7 +633,7 @@ exports.updateAnomalySettings = asyncHandler(async (req, res) => {
             if (isNaN(val) || val < 0 || val > 100) {
                 return res.status(400).json({
                     status: "error",
-                    message: "Threshold kehadiran ganda harus berupa angka antara 0 dan 100"
+                    message: "Ambang batas kehadiran ganda harus berupa angka antara 0 dan 100"
                 });
             }
             await prisma.systemSetting.upsert({
@@ -645,7 +645,7 @@ exports.updateAnomalySettings = asyncHandler(async (req, res) => {
 
         res.status(200).json({
             status: "success",
-            message: "Konfigurasi threshold anomali berhasil diperbarui"
+            message: "Konfigurasi ambang batas anomali berhasil diperbarui"
         });
     } catch (error) {
         console.error("Failed to update anomaly settings:", error.message);

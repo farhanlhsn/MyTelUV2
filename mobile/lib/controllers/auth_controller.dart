@@ -66,6 +66,10 @@ class AuthController extends GetxController {
 
       final UserModel user = UserModel.fromMap(data);
 
+      // A restored or interrupted session can leave controllers from the previous user alive.
+      // Clear them before the new credentials can be read by any controller.
+      await deleteUserScopedControllers();
+
       // Simpan token dan data user baru
       await _secureStorage.write(key: 'token', value: token);
       if (refreshToken.isNotEmpty) {

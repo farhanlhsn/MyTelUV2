@@ -103,7 +103,7 @@ app.use(sanitizeInput); // Sanitize all input
 
 
 app.get('/', (req, res) => {
-    res.send('Hello World!');
+    res.send('Selamat datang di MyTelUV2!');
 });
 
 // Base URLs of the AI services, read per call so they follow the environment. The face service is
@@ -182,7 +182,7 @@ registerRoutes('/api/v1');
 app.use((req, res) => {
     res.status(404).json({
         status: "error",
-        message: `Route ${req.method} ${req.originalUrl} not found`
+        message: `Rute ${req.method} ${req.originalUrl} tidak ditemukan`
     });
 });
 
@@ -205,17 +205,28 @@ app.use((err, req, res, next) => {
     if (err.message?.includes('Not allowed by CORS')) {
         return res.status(403).json({
             status: "error",
-            message: "CORS not allowed"
+            message: "Akses lintas asal tidak diizinkan"
         });
     }
 
     const status = [err.statusCode, err.status].find((s) => Number.isInteger(s) && s >= 400 && s < 600) || 500;
 
     // A 5xx never carries the raw error (database hosts, credentials, stack details): it is logged above.
-    // A 4xx is a client error (malformed JSON, payload too large, ...) whose message is safe to return.
+    // Body-parser supplies English messages: select Indonesian text by its stable error type.
+    const clientErrorMessages = {
+        'entity.parse.failed': 'Format JSON tidak valid',
+        'entity.too.large': 'Data permintaan terlalu besar',
+        'entity.verify.failed': 'Data permintaan tidak dapat diverifikasi',
+        'request.aborted': 'Permintaan dibatalkan sebelum selesai',
+        'request.size.invalid': 'Ukuran data permintaan tidak sesuai',
+        'parameters.too.many': 'Terlalu banyak parameter dalam permintaan',
+        'charset.unsupported': 'Pengodean karakter tidak didukung',
+        'encoding.unsupported': 'Pengodean data tidak didukung',
+        'querystring.parse.rangeError': 'Struktur data permintaan terlalu dalam'
+    };
     res.status(status).json({
         status: "error",
-        message: status >= 500 ? GENERIC_SERVER_ERROR : err.message
+        message: status >= 500 ? GENERIC_SERVER_ERROR : (clientErrorMessages[err.type] || err.message)
     });
 });
 

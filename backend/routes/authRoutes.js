@@ -122,7 +122,7 @@ const profilePictureFileFilter = (req, file, cb) => {
     const hasAllowedExtension = allowedProfilePictureExtensions.has(extension);
 
     if (!hasAllowedMime || !hasAllowedExtension) {
-        return cb(new Error('Invalid profile picture file type. Allowed: jpeg, png, webp'), false);
+        return cb(new Error('Jenis file foto profil tidak valid. Gunakan JPEG, PNG, atau WebP'), false);
     }
 
     return cb(null, true);

@@ -72,7 +72,7 @@ void main() {
         mapAttendanceErrorMessage('Koordinat tidak valid'),
         'Lokasi tidak valid. Pastikan GPS aktif lalu coba lagi.',
       );
-      // the GPS endpoint still answers in English for this one
+      // English fallback for an older server.
       expect(
         mapAttendanceErrorMessage('Invalid coordinates'),
         'Lokasi tidak valid. Pastikan GPS aktif lalu coba lagi.',
@@ -130,6 +130,18 @@ void main() {
       expect(
         mapAttendanceErrorMessage('Not enrolled in this class'),
         'Anda tidak terdaftar di kelas ini.',
+      );
+      expect(
+        mapAttendanceErrorMessage('Anda tidak terdaftar di kelas ini'),
+        'Anda tidak terdaftar di kelas ini.',
+      );
+      expect(
+        mapAttendanceErrorMessage('Kelas tidak ditemukan'),
+        'Kelas tidak ditemukan.',
+      );
+      expect(
+        mapAttendanceErrorMessage('Kelas not found'),
+        'Kelas tidak ditemukan.',
       );
       expect(
         mapAttendanceErrorMessage(

@@ -72,6 +72,32 @@ void main() {
       expect(AuthMiddleware.cachedToken, 'mock_token');
     });
 
+    test('login clears previous user controllers before writing the new session', () async {
+      putUserScopedControllers();
+      expect(registeredUserScopedControllers(), hasLength(4));
+      when(mockAuthService.login(username: 'nextuser', password: 'password'))
+          .thenAnswer((_) async => <String, dynamic>{
+                'data': <String, dynamic>{
+                  'token': 'next_token',
+                  'id_user': 2,
+                  'username': 'nextuser',
+                  'nama': 'Next User',
+                  'role': 'MAHASISWA',
+                },
+              });
+      var checkedBeforeWrite = false;
+      when(mockSecureStorage.write(key: 'token', value: 'next_token'))
+          .thenAnswer((_) async {
+        checkedBeforeWrite = true;
+        expect(registeredUserScopedControllers(), isEmpty,
+            reason: 'No controller may retain the old user when the new token is stored');
+      });
+
+      expect(await authController.login('nextuser', 'password'), true);
+      expect(checkedBeforeWrite, true);
+      expect(registeredUserScopedControllers(), isEmpty);
+    });
+
     test('login failure (invalid credentials) should return false', () async {
       // Arrange
       when(mockAuthService.login(username: 'fail', password: 'fail'))

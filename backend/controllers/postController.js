@@ -109,7 +109,7 @@ exports.getPostById = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -134,7 +134,7 @@ exports.createPost = asyncHandler(async (req, res) => {
     if (!content || content.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Content is required"
+            message: "Isi postingan wajib diisi"
         });
     }
 
@@ -194,7 +194,7 @@ exports.createPost = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Post created successfully",
+        message: "Postingan berhasil dibuat",
         data: {
             ...post,
             isLiked: false,
@@ -220,14 +220,14 @@ exports.updatePost = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
     if (post.id_user !== userId) {
         return res.status(403).json({
             status: "error",
-            message: "You can only edit your own posts"
+            message: "Anda hanya dapat mengubah postingan Anda sendiri"
         });
     }
 
@@ -323,7 +323,7 @@ exports.updatePost = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Post updated successfully",
+        message: "Postingan berhasil diperbarui",
         data: updatedPost
     });
 });
@@ -344,7 +344,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -352,7 +352,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
     if (post.id_user !== userId && userRole !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "You can only delete your own posts"
+            message: "Anda hanya dapat menghapus postingan Anda sendiri"
         });
     }
 
@@ -372,7 +372,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Post deleted successfully"
+        message: "Postingan berhasil dihapus"
     });
 });
 
@@ -393,7 +393,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -456,7 +456,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: isLiked ? "Post liked" : "Post unliked",
+        message: isLiked ? "Postingan disukai" : "Suka pada postingan dibatalkan",
         data: {
             isLiked,
             likeCount
@@ -481,7 +481,7 @@ exports.getComments = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -533,7 +533,7 @@ exports.addComment = asyncHandler(async (req, res) => {
     if (!content || content.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Comment content is required"
+            message: "Isi komentar wajib diisi"
         });
     }
 
@@ -556,7 +556,7 @@ exports.addComment = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -585,7 +585,7 @@ exports.addComment = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Comment added successfully",
+        message: "Komentar berhasil ditambahkan",
         data: comment
     });
 });
@@ -607,7 +607,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
     if (!comment) {
         return res.status(404).json({
             status: "error",
-            message: "Comment not found"
+            message: "Komentar tidak ditemukan"
         });
     }
 
@@ -615,7 +615,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
     if (comment.id_user !== userId && userRole !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "You can only delete your own comments"
+            message: "Anda hanya dapat menghapus komentar Anda sendiri"
         });
     }
 
@@ -626,7 +626,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Comment deleted successfully"
+        message: "Komentar berhasil dihapus"
     });
 });
 

@@ -50,7 +50,7 @@ exports.getHistoriParkir = asyncHandler(async (req, res) => {
     if (kendaraanIds.length === 0) {
         return res.status(200).json({
             status: "success",
-            message: "No parking history found",
+            message: "Belum ada riwayat parkir",
             data: [],
             pagination: buildPaginationMeta(0, page, limit)
         });
@@ -93,7 +93,7 @@ exports.getHistoriParkir = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Parking history retrieved successfully",
+        message: "Riwayat parkir berhasil diambil",
         data: logParkir,
         pagination: buildPaginationMeta(totalCount, page, limit)
     });
@@ -119,7 +119,7 @@ exports.getAllParkiran = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "All parkiran retrieved successfully",
+        message: "Semua data parkiran berhasil diambil",
         data: parkiran
     });
 });
@@ -146,7 +146,7 @@ exports.getAnalitikParkiran = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Parking analytics retrieved successfully",
+        message: "Analisis parkir berhasil diambil",
         data: {
             parkiran: parkiran,
             summary: {
@@ -168,21 +168,21 @@ exports.createParkiran = asyncHandler(async (req, res) => {
     if (!nama_parkiran || nama_parkiran.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Nama parkiran is required"
+            message: "Nama parkiran wajib diisi"
         });
     }
 
     if (kapasitas === undefined || isNaN(Number(kapasitas)) || parseInt(kapasitas) <= 0) {
         return res.status(400).json({
             status: "error",
-            message: "Kapasitas must be a positive number"
+            message: "Kapasitas harus berupa angka positif"
         });
     }
 
     if (latitude === undefined || longitude === undefined) {
         return res.status(400).json({
             status: "error",
-            message: "Latitude and longitude are required"
+            message: "Latitude dan longitude wajib diisi"
         });
     }
 
@@ -191,13 +191,13 @@ exports.createParkiran = asyncHandler(async (req, res) => {
     if (isNaN(lat) || lat < -90 || lat > 90) {
         return res.status(400).json({
             status: "error",
-            message: "Latitude must be a valid number between -90 and 90"
+            message: "Latitude harus berupa angka antara -90 dan 90"
         });
     }
     if (isNaN(lng) || lng < -180 || lng > 180) {
         return res.status(400).json({
             status: "error",
-            message: "Longitude must be a valid number between -180 and 180"
+            message: "Longitude harus berupa angka antara -180 dan 180"
         });
     }
 
@@ -212,7 +212,7 @@ exports.createParkiran = asyncHandler(async (req, res) => {
     if (existing) {
         return res.status(409).json({
             status: "error",
-            message: "Nama parkiran already exists"
+            message: "Nama parkiran sudah digunakan"
         });
     }
 
@@ -247,7 +247,7 @@ exports.createParkiran = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Lokasi parkiran created successfully",
+        message: "Lokasi parkiran berhasil dibuat",
         data: newParkiran[0]
     });
 });
@@ -260,7 +260,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
     if (isNaN(parseInt(id))) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid ID format"
+            message: "Format ID tidak valid"
         });
     }
 
@@ -275,7 +275,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
     if (!existing) {
         return res.status(404).json({
             status: "error",
-            message: "Parkiran not found"
+            message: "Parkiran tidak ditemukan"
         });
     }
 
@@ -292,7 +292,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         if (nameCheck) {
             return res.status(409).json({
                 status: "error",
-                message: "Nama parkiran already exists"
+                message: "Nama parkiran sudah digunakan"
             });
         }
     }
@@ -301,7 +301,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         if (isNaN(Number(kapasitas)) || parseInt(kapasitas) <= 0) {
             return res.status(400).json({
                 status: "error",
-                message: "Kapasitas must be a positive number"
+                message: "Kapasitas harus berupa angka positif"
             });
         }
     }
@@ -310,7 +310,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         if (latitude === undefined || longitude === undefined) {
             return res.status(400).json({
                 status: "error",
-                message: "Latitude and longitude are required"
+                message: "Latitude dan longitude wajib diisi"
             });
         }
         const lat = parseFloat(latitude);
@@ -318,13 +318,13 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
         if (isNaN(lat) || lat < -90 || lat > 90) {
             return res.status(400).json({
                 status: "error",
-                message: "Latitude must be a valid number between -90 and 90"
+                message: "Latitude harus berupa angka antara -90 dan 90"
             });
         }
         if (isNaN(lng) || lng < -180 || lng > 180) {
             return res.status(400).json({
                 status: "error",
-                message: "Longitude must be a valid number between -180 and 180"
+                message: "Longitude harus berupa angka antara -180 dan 180"
             });
         }
     }
@@ -372,7 +372,7 @@ exports.updateParkiran = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Lokasi parkiran updated successfully",
+        message: "Lokasi parkiran berhasil diperbarui",
         data: updatedParkiran[0]
     });
 });
@@ -391,7 +391,7 @@ exports.deleteParkiran = asyncHandler(async (req, res) => {
     if (existing.length === 0) {
         return res.status(404).json({
             status: "error",
-            message: "Parkiran not found"
+            message: "Parkiran tidak ditemukan"
         });
     }
 
@@ -404,7 +404,7 @@ exports.deleteParkiran = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: `Lokasi parkiran "${existing[0].nama_parkiran}" deleted successfully`
+        message: `Lokasi parkiran "${existing[0].nama_parkiran}" berhasil dihapus`
     });
 });
 
@@ -429,7 +429,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     if (edgeSecret !== process.env.EDGE_DEVICE_SECRET) {
         return res.status(401).json({
             status: "error",
-            message: "Unauthorized edge device",
+            message: "Perangkat edge tidak berwenang",
             data: { gate_action: "DENY" }
         });
     }
@@ -475,7 +475,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
     if (!recognizedPlate || !parkiran_id || !gate_type) {
         return res.status(400).json({
             status: "error",
-            message: "Missing required fields: plate_text, parkiran_id, gate_type",
+            message: "Kolom wajib belum diisi: plate_text, parkiran_id, gate_type",
             data: { gate_action: "DENY" }
         });
     }
@@ -691,7 +691,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             status: "success",
-            message: `Selamat datang ${kendaraan.user?.nama || 'User'}! Kendaraan ${recognizedPlate} masuk.`,
+            message: `Selamat datang ${kendaraan.user?.nama || 'Pengguna'}! Kendaraan ${recognizedPlate} masuk.`,
             data: {
                 gate_action: "OPEN",
                 plate_text: normalizedPlate,
@@ -778,7 +778,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             status: "success",
-            message: `Sampai jumpa ${kendaraan.user?.nama || 'User'}! Kendaraan ${recognizedPlate} keluar.`,
+            message: `Sampai jumpa ${kendaraan.user?.nama || 'Pengguna'}! Kendaraan ${recognizedPlate} keluar.`,
             data: {
                 gate_action: "OPEN",
                 plate_text: normalizedPlate,
@@ -791,7 +791,7 @@ exports.processEdgeEntry = asyncHandler(async (req, res) => {
 
     return res.status(400).json({
         status: "error",
-        message: "Invalid gate_type. Use 'MASUK' or 'KELUAR'",
+        message: "gate_type tidak valid. Gunakan 'MASUK' atau 'KELUAR'",
         data: { gate_action: "DENY" }
     });
 });
@@ -841,7 +841,7 @@ exports.reconcileKapasitas = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: `Kapasitas direconcile: ${actualCount} kendaraan di dalam`,
+        message: `Kapasitas disesuaikan: ${actualCount} kendaraan di dalam`,
         data: { live_kapasitas: actualCount }
     });
 });

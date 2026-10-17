@@ -211,6 +211,13 @@ describe('GET /health', () => {
 });
 
 describe('CORS', () => {
+    test('rejects a disallowed origin with an Indonesian message', async () => {
+        const res = await request(base.app).get('/').set('Origin', 'https://tidak-diizinkan.example');
+
+        expect(res.status).toBe(403);
+        expect(res.body).toEqual({ status: 'error', message: 'Akses lintas asal tidak diizinkan' });
+    });
+
     test('exposes the CSV export headers so browser clients can read them', async () => {
         const { app } = base;
 
@@ -280,7 +287,7 @@ describe('global error handler', () => {
         const res = await request(app).get('/api/v1/tidak-ada');
 
         expect(res.status).toBe(404);
-        expect(res.body.status).toBe('error');
+        expect(res.body).toEqual({ status: 'error', message: 'Rute GET /api/v1/tidak-ada tidak ditemukan' });
     });
 
     test('a client error such as malformed JSON keeps its 4xx status', async () => {
@@ -292,7 +299,17 @@ describe('global error handler', () => {
             .send('{"username": ');
 
         expect(res.status).toBe(400);
-        expect(res.body.status).toBe('error');
+        expect(res.body).toEqual({ status: 'error', message: 'Format JSON tidak valid' });
+    });
+
+    test('an unsupported JSON charset keeps its 415 status with an Indonesian message', async () => {
+        const res = await request(base.app)
+            .post('/api/v1/auth/login')
+            .set('Content-Type', 'application/json; charset=iso-8859-1')
+            .send('{}');
+
+        expect(res.status).toBe(415);
+        expect(res.body).toEqual({ status: 'error', message: 'Pengodean karakter tidak didukung' });
     });
 });
 

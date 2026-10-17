@@ -29,7 +29,7 @@ const fileFilter = (req, file, cb) => {
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error("Only image files (jpeg, jpg, png) are allowed!"));
+    cb(new Error("Hanya file gambar JPEG, JPG, atau PNG yang diizinkan"));
   }
 };
 

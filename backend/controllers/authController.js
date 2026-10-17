@@ -176,7 +176,7 @@ exports.getMe = asyncHandler(async (req, res) => {
     const user = req.user;
     res.status(200).json({
         status: "success",
-        message: 'User data retrieved successfully',
+        message: 'Data pengguna berhasil diambil',
         data: {
             id: user.id_user,
             username: user.username,
@@ -210,7 +210,7 @@ exports.logout = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Logged out successfully'
+        message: 'Logout berhasil'
     });
 });
 
@@ -218,7 +218,7 @@ exports.refreshToken = asyncHandler(async (req, res) => {
     const { refresh_token } = req.body;
 
     if (!refresh_token) {
-        return res.status(400).json({ status: "error", message: 'Refresh token is required' });
+        return res.status(400).json({ status: "error", message: 'Refresh token wajib diisi' });
     }
 
     // Check if refresh token exists in DB
@@ -228,18 +228,18 @@ exports.refreshToken = asyncHandler(async (req, res) => {
     });
 
     if (!existingToken) {
-        return res.status(401).json({ status: "error", message: 'Invalid refresh token' });
+        return res.status(401).json({ status: "error", message: 'Refresh token tidak valid' });
     }
 
     // Check if expired
     if (new Date() > existingToken.expiresAt) {
         await prisma.refreshToken.delete({ where: { id: existingToken.id } });
-        return res.status(401).json({ status: "error", message: 'Refresh token expired' });
+        return res.status(401).json({ status: "error", message: 'Refresh token sudah kedaluwarsa' });
     }
 
     // Check if user is still active (not soft deleted)
     if (existingToken.user.deletedAt) {
-        return res.status(401).json({ status: "error", message: 'User account is deactivated' });
+        return res.status(401).json({ status: "error", message: 'Akun pengguna sudah dinonaktifkan' });
     }
 
     // Generate new access token (1 hour)
@@ -263,7 +263,7 @@ exports.refreshToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Token refreshed successfully',
+        message: 'Token berhasil diperbarui',
         data: {
             token: token,
             refresh_token: newRefreshToken
@@ -357,7 +357,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Users retrieved successfully',
+        message: 'Data pengguna berhasil diambil',
         data: {
             users: usersWithBioStatus,
             pagination: {
@@ -379,7 +379,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     if (!nama || nama.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: 'Nama is required'
+            message: 'Nama wajib diisi'
         });
     }
 
@@ -396,7 +396,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Profile updated successfully',
+        message: 'Profil berhasil diperbarui',
         data: updatedUser
     });
 });
@@ -484,7 +484,7 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     if (!user || user.deletedAt) {
         return res.status(404).json({
             status: "error",
-            message: 'User tidak ditemukan'
+            message: 'Pengguna tidak ditemukan'
         });
     }
 
@@ -519,12 +519,12 @@ exports.deactivateUser = asyncHandler(async (req, res) => {
     
     const user = await prisma.user.findUnique({ where: { id_user: parsedId } });
     if (!user || user.deletedAt) {
-        return res.status(404).json({ status: "error", message: "User not found or already deactivated" });
+        return res.status(404).json({ status: "error", message: "Pengguna tidak ditemukan atau sudah dinonaktifkan" });
     }
     
     // Prevent deactivating self
     if (parsedId === req.user.id_user) {
-        return res.status(400).json({ status: "error", message: "Cannot deactivate yourself" });
+        return res.status(400).json({ status: "error", message: "Anda tidak dapat menonaktifkan akun sendiri" });
     }
     
     await prisma.$transaction([
@@ -555,7 +555,7 @@ exports.deactivateUser = asyncHandler(async (req, res) => {
     
     res.status(200).json({
         status: "success",
-        message: `User ${user.nama} has been deactivated`
+        message: `Pengguna ${user.nama} berhasil dinonaktifkan`
     });
 });
 
@@ -565,7 +565,7 @@ exports.reactivateUser = asyncHandler(async (req, res) => {
     
     const user = await prisma.user.findUnique({ where: { id_user: parsedId } });
     if (!user || !user.deletedAt) {
-        return res.status(404).json({ status: "error", message: "User not found or already active" });
+        return res.status(404).json({ status: "error", message: "Pengguna tidak ditemukan atau sudah aktif" });
     }
     
     // Only the account is reactivated. Biometric data that was soft-deleted (on purpose, or when the
@@ -588,7 +588,7 @@ exports.reactivateUser = asyncHandler(async (req, res) => {
     
     res.status(200).json({
         status: "success",
-        message: `User ${user.nama} has been reactivated`
+        message: `Pengguna ${user.nama} berhasil diaktifkan kembali`
     });
 });
 
@@ -600,7 +600,7 @@ exports.registerFcmToken = asyncHandler(async (req, res) => {
     if (!fcm_token || fcm_token.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: 'FCM token is required'
+            message: 'Token FCM wajib diisi'
         });
     }
 
@@ -611,7 +611,7 @@ exports.registerFcmToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'FCM token registered successfully'
+        message: 'Token FCM berhasil didaftarkan'
     });
 });
 
@@ -622,7 +622,7 @@ exports.updatePreferences = asyncHandler(async (req, res) => {
     if (push_notifications_enabled === undefined) {
         return res.status(400).json({
             status: "error",
-            message: 'push_notifications_enabled is required'
+            message: 'push_notifications_enabled wajib diisi'
         });
     }
 
@@ -634,7 +634,7 @@ exports.updatePreferences = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Preferences updated successfully',
+        message: 'Preferensi berhasil diperbarui',
         data: user
     });
 });
@@ -648,7 +648,7 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
     if (!file) {
         return res.status(400).json({
             status: "error",
-            message: 'Profile picture image is required'
+            message: 'Foto profil wajib diunggah'
         });
     }
 
@@ -668,7 +668,7 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
 
         res.status(200).json({
             status: "success",
-            message: 'Profile picture uploaded successfully',
+            message: 'Foto profil berhasil diunggah',
             data: updatedUser
         });
     } catch (error) {

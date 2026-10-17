@@ -65,8 +65,7 @@ void main() {
     });
   });
 
-  // Some backend controllers still answer in English; the app words the ones a person can run into
-  group('English server messages the app can word in Indonesian', () {
+  group('current and legacy server messages get friendly Indonesian wording', () {
     DioException responseWith(String message, {int status = 400}) {
       final request = RequestOptions(path: '/x');
       return DioException(
@@ -92,6 +91,30 @@ void main() {
       expect(
         ErrorHelper.parseError(responseWith('Already enrolled in this class', status: 400)),
         'Anda sudah terdaftar di kelas ini.',
+      );
+    });
+
+    test('current Indonesian backend messages keep the same guidance as English fallbacks', () {
+      const equivalentMessages = <String, String>{
+        'Refresh token tidak valid': 'Invalid refresh token',
+        'Akun pengguna sudah dinonaktifkan': 'User account is deactivated',
+        'Koordinat tidak valid': 'Invalid coordinates',
+        'Postingan tidak ditemukan': 'Post not found',
+        'Anda tidak terdaftar di kelas ini': 'Not enrolled in this class',
+        'Matakuliah yang masih memiliki kelas aktif tidak dapat dihapus. Hapus atau arsipkan kelas terlebih dahulu.':
+            'Cannot delete matakuliah with active kelas. Delete or archive the kelas first.',
+      };
+
+      for (final entry in equivalentMessages.entries) {
+        expect(
+          ErrorHelper.parseError(responseWith(entry.key)),
+          ErrorHelper.parseError(responseWith(entry.value)),
+          reason: entry.key,
+        );
+      }
+      expect(
+        ErrorHelper.parseError(responseWith('Refresh token tidak valid')),
+        'Sesi tidak valid. Silakan login kembali.',
       );
     });
 

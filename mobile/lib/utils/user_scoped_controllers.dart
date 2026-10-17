@@ -13,7 +13,8 @@ import 'logger.dart';
 /// already registered hands back the old instance without loading anything again. So whoever logs in
 /// next on the same phone would see the previous user's data (their attendance percentage on Home,
 /// for one) until it happened to be reloaded. Called when the user logs out and when the session is
-/// ended by the server. The auth controller is not here: it holds no user data, and the login page
+/// ended by the server, and before storing a new login session. The auth controller is not here: it
+/// holds no user data, and the login page
 /// needs it.
 Future<void> deleteUserScopedControllers() async {
   await _delete<HomeController>();
