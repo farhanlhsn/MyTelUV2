@@ -203,7 +203,7 @@ module.exports = {
     '/auth/login': {
       post: {
         tags: ['Auth'],
-        summary: 'Login user',
+        summary: 'Masuk ke akun pengguna',
         security: [],
         requestBody: {
           required: true,
@@ -213,7 +213,7 @@ module.exports = {
             },
           },
         },
-        responses: { 200: { description: 'Login successful' } },
+        responses: { 200: { description: 'Berhasil masuk' } },
       },
     },
     '/auth/me': {

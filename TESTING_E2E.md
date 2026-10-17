@@ -33,9 +33,9 @@ Rangkaian testing mencakup tiga lapisan:
 | Tool | Versi Minimum | Fungsi |
 |---|---|---|
 | Docker Desktop | 4.x | PostgreSQL test container |
-| Node.js | 18+ | Backend server + Jest |
+| Node.js | 22 | Backend server + Jest |
 | npm | 9+ | Package management |
-| Python | 3.9+ | AI microservices + contract tests |
+| Python | 3.11 | AI microservices + contract tests |
 | pip | 22+ | Python dependencies |
 | Flutter SDK | 3.x | Mobile integration tests |
 | curl | any | Service readiness check di script |
@@ -59,6 +59,7 @@ JWT_SECRET="e2e-testing-super-secret-key-minimum-32-chars"
 JWT_REFRESH_SECRET="e2e-testing-refresh-secret-key-minimum-32-chars"
 PORT=5050
 NODE_ENV="test"
+TEST_MODE="true"
 EDGE_DEVICE_SECRET="e2e-testing-edge-device-secret-32-chars"
 FACE_API_URL="http://localhost:5051"
 PLATE_API_URL="http://localhost:5001"
@@ -103,32 +104,36 @@ docker exec myteluv2-postgres-test pg_isready -U test_user -d myteluv2_test
 
 ### Langkah 2: Migrasi & Seed
 ```bash
+cd backend
+
 # Migrasi schema
-npx dotenv -e .env.test -- prisma migrate deploy --schema backend/prisma/schema.prisma
+npx dotenv -e ../.env.test -- prisma migrate deploy --schema prisma/schema.prisma
 
 # Generate Prisma client
-npx dotenv -e .env.test -- prisma generate --schema backend/prisma/schema.prisma
+npx dotenv -e ../.env.test -- prisma generate --schema prisma/schema.prisma
 
 # Seed data test deterministik
-npx dotenv -e .env.test -- node backend/prisma/seed-test-data.js
+npx dotenv -e ../.env.test -- node prisma/seed-test-data.js
+cd ..
 ```
 
 ### Langkah 3: Start AI Services (TEST_MODE)
 ```bash
-export TEST_MODE=true
-export NODEJS_BACKEND_URL=http://localhost:5050
+cd backend
 
 # Di terminal terpisah masing-masing:
-python backend/python-service/face_recognition/app.py
-python backend/python-service/plate_recognition/app.py
-python backend/python-service/anomaly_detection/app.py
+npx dotenv -e ../.env.test -- python python-service/face_recognition/app.py
+npx dotenv -e ../.env.test -- python python-service/plate_recognition/app.py
+npx dotenv -e ../.env.test -- python python-service/anomaly_detection/app.py
 ```
 
 ### Langkah 4: Start Backend
 ```bash
-export NODE_ENV=test
-node backend/server.js
+cd backend
+npx dotenv -e ../.env.test -- node server.js
 ```
+
+Mulai setiap terminal dari root proyek, lalu masuk `backend/` seperti contoh. `dotenv` berasal dari dependensi development backend dan memuat `.env.test` ke proses, sehingga backend tidak memakai database development dari `.env`. `TEST_MODE` wajib diset pada proses backend dan setiap layanan AI untuk skenario mock E2E. Header permintaan tidak mengaktifkan mode test. Backend menolak startup jika `NODE_ENV=production` dan `TEST_MODE=true`. Gunakan database test terpisah; semua logika tanggal bisnis tetap WIB (`Asia/Jakarta`).
 
 ### Langkah 5: Jalankan Tests
 
@@ -138,11 +143,19 @@ cd backend
 npm run test:unit
 ```
 
+`npm test` menjalankan suite unit yang sama dengan coverage untuk `controllers/**`, `middlewares/**`, dan `utils/**`; folder `test-e2e/` serta file macOS `._*` diabaikan.
+
 **B. AI Contract Tests:**
 ```bash
 python -m pytest backend/python-service/tests/test_ai_contract.py -v
 # atau jika pytest tidak tersedia:
 python -m unittest backend/python-service/tests/test_ai_contract.py -v
+```
+
+Kontrak respons edge berjalan terpisah tanpa layanan AI, model, atau kamera:
+
+```bash
+python -m unittest edge_device/test_parse_server_result.py -v
 ```
 
 **C. Backend E2E Tests:**
@@ -183,7 +196,8 @@ File: `backend/prisma/seed-test-data.js`
 ### Cleanup & Reset:
 ```bash
 # Reset seluruh test database ke state awal
-npx dotenv -e .env.test -- node backend/prisma/seed-test-data.js
+cd backend
+npx dotenv -e ../.env.test -- node prisma/seed-test-data.js
 ```
 Script seed sudah termasuk cleanup otomatis di awal sebelum insert ulang.
 
@@ -279,8 +293,7 @@ Script seed sudah termasuk cleanup otomatis di awal sebelum insert ulang.
 # Environment variable
 export TEST_MODE=true
 
-# Hanya lewat environment service itu sendiri. Header X-Test-Mode dari client
-# diabaikan (tidak bisa mengaktifkan TEST_MODE).
+# Atur pada proses backend dan setiap layanan AI sebelum startup.
 ```
 
 ---
@@ -295,10 +308,12 @@ Pipeline berjalan otomatis pada:
 
 **Jobs:**
 1. `backend-unit-tests` — Jest unit tests + coverage upload
-2. `ai-contract-tests` — Python AI contract tests (parallel dengan job 1)
+2. `ai-contract-tests` — Python AI contract tests dan unittest kontrak respons edge (parallel dengan job 1)
 3. `backend-e2e-tests` — Full stack E2E (hanya jika unit tests lulus)
 
 Mobile E2E test **tidak** dijalankan di CI otomatis karena memerlukan emulator Android/iOS (resource intensif). Jalankan manual sebelum release.
+
+Unit/widget test mobile dan `flutter analyze --no-fatal-infos` menjadi syarat build di `.github/workflows/build-apk.yml`. Jika checkout lokal berada di exFAT pada Windows, jalankan pengujian Flutter dari salinan `mobile/` pada NTFS agar symlink plugin tersedia.
 
 ---
 

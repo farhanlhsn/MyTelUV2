@@ -7,6 +7,12 @@ on:
       - 'mobile/**'
       - '.github/workflows/build-apk.yml'
 
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
+
   workflow_dispatch:
     inputs:
       build_type:
@@ -46,7 +52,10 @@ jobs:
       - name: Analyze code
         working-directory: mobile
         run: flutter analyze --no-fatal-infos
-        continue-on-error: true
+
+      - name: Run Flutter tests
+        working-directory: mobile
+        run: flutter test
 
       - name: Build APK (Release - Production)
         working-directory: mobile

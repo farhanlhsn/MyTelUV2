@@ -1,5 +1,11 @@
 # MyTelUV2 Hardening & Polish Implementation Plan
 
+## Execution status — 18 October 2026
+
+All planned tasks are complete. Tasks 1–16 and inserted Task 16a were completed in the earlier run; inserted Task 16b and Task 17 were completed in the Codex continuation. Remaining planned tasks: **0**.
+
+Final evidence and validation limits: [completion report](../reports/2026-10-18-myteluv2-hardening-completion.md). The original checklists below record the initial implementation instructions; prior-task completion is recorded in the execution ledger. The continuation uses truthful contributor attribution rather than the earlier Claude-specific commit trailer.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix every in-scope finding of the 2026-10-13 review (security, business logic, infra, mobile UX) on branch `improve/full-hardening` without touching secrets.
@@ -322,6 +328,13 @@ Spec: U12, I8 (mobile tests).
 - [ ] **Step 1: Failing date helper tests. Step 2: FAIL. Step 3: Implement all. Step 4: ENTIRE mobile suite green (0 failures) + `flutter analyze` 0 errors and warnings ≤ baseline.**
 - [ ] **Step 5: Commit** `refactor(mobile): id_ID locale, WIB dates, theme colors, accessible back buttons, cached images`.
 
+### Task 16b: Indonesian backend messages and mobile follow-ups (inserted)
+
+- [x] Translate remaining backend response messages and update explicit validation/error messages and affected tests. Preserve machine codes, status/envelope, logs, Socket.IO `Unauthorized`, and edge gate decisions.
+- [x] Support both Indonesian responses and legacy English fallbacks in mobile, including dynamic vehicle and attendance messages.
+- [x] Clear user-scoped controllers before storing a new login session, remove unused `LogParkirModel.localTimestamp`, and reuse the WIB relative-time helper in posts/comments.
+- [x] Complete tests, analyzer checks, and independent specification/code-quality review. See the completion report for exact evidence.
+
 ### Task 17: CI gates, repo hygiene, docs
 
 Spec: I3 (CI parts not done in Task 8), I8, I9.
@@ -335,5 +348,5 @@ Spec: I3 (CI parts not done in Task 8), I8, I9.
 - Modify: `README.md` — `/api/docs` path, correct data flow (Edge → Backend → Plate AI; Backend → Anomaly AI now true), Node 22, test commands, TZ note, attendance statuses, mobile test note.
 - Modify: `TESTING_E2E.md` — remove `X-Test-Mode` header instructions; explain env `TEST_MODE`.
 - Modify: `MyTelUV2_Postman_Collection.json` — add requests: absensi override, liveness token, anomaly job status, preferences (match exact paths).
-- [ ] **Step 1: Implement. Step 2: Run backend suite with coverage `npx jest --coverage --testPathIgnorePatterns "/\._" "test-e2e"` to measure and set threshold; YAML sanity (`node -e "require('js-yaml')"` only if available, else careful review).**
-- [ ] **Step 3: Commit** `ci: gate mobile tests and coverage; docs and repo hygiene`.
+- [x] **Step 1: Implement. Step 2: Run backend suite with coverage `npx jest --coverage --testPathIgnorePatterns "/\._" "test-e2e"` to measure and set threshold; YAML sanity (`node -e "require('js-yaml')"` only if available, else careful review).** Final tracked-only coverage: 731 tests passed, exit 0, 72.91% lines; threshold 70%. Coverage also excludes macOS `._*` sidecars.
+- [x] **Step 3: Commit** `ci: gate mobile tests and coverage; docs and repo hygiene`.

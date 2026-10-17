@@ -23,7 +23,7 @@
         },
         {
             "key": "api_docs_url",
-            "value": "http://localhost:5050/api-docs",
+            "value": "http://localhost:5050/api/docs",
             "type": "string"
         },
         {
@@ -38,6 +38,26 @@
         },
         {
             "key": "edge_secret",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "liveness_token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "id_sesi",
+            "value": "1",
+            "type": "string"
+        },
+        {
+            "key": "id_user",
+            "value": "1",
+            "type": "string"
+        },
+        {
+            "key": "job_id",
             "value": "",
             "type": "string"
         }
@@ -95,7 +115,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"nama\": \"Test User\",\n    \"username\": \"testuser\",\n    \"password\": \"Test123!\",\n    \"role\": \"MAHASISWA\"\n}"
+                            "raw": "{\n    \"nama\": \"Test User\",\n    \"username\": \"testuser\",\n    \"password\": \"Test1234!\"\n}"
                         },
                         "url": {
                             "raw": "{{base_url}}/api/auth/register",
@@ -108,7 +128,7 @@
                                 "register"
                             ]
                         },
-                        "description": "Register a new user. Required fields: nama, username, password. Optional: role (default: MAHASISWA)"
+                        "description": "Pendaftaran publik selalu membuat akun MAHASISWA; password minimal 8 karakter."
                     },
                     "response": []
                 },
@@ -250,6 +270,41 @@
                             ]
                         },
                         "description": "Get all users with filtering, searching, pagination, and sorting. **Requires ADMIN role**. Returns list of users (password excluded), total count, and pagination metadata. Enable query parameters as needed for filtering."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Notification Preferences",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"push_notifications_enabled\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/auth/preferences",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "preferences"
+                            ]
+                        },
+                        "description": "Simpan preferensi notifikasi push pengguna yang sedang login."
                     },
                     "response": []
                 }
@@ -1015,6 +1070,45 @@
                                 "description": "Get attendance statistics for a class. Requires DOSEN or ADMIN role."
                             },
                             "response": []
+                        },
+                        {
+                            "name": "Override Student Attendance (Dosen or Admin)",
+                            "request": {
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"status\": \"IZIN\",\n    \"keterangan\": \"Izin mengikuti kegiatan kampus\"\n}",
+                                    "options": {
+                                        "raw": {
+                                            "language": "json"
+                                        }
+                                    }
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/api/v1/akademik/absensi/sesi/{{id_sesi}}/mahasiswa/{{id_user}}",
+                                    "host": [
+                                        "{{base_url}}"
+                                    ],
+                                    "path": [
+                                        "api",
+                                        "v1",
+                                        "akademik",
+                                        "absensi",
+                                        "sesi",
+                                        "{{id_sesi}}",
+                                        "mahasiswa",
+                                        "{{id_user}}"
+                                    ]
+                                },
+                                "description": "DOSEN pemilik kelas atau ADMIN. Status: HADIR, TELAT, IZIN, SAKIT, ALPHA. Mahasiswa wajib terdaftar di kelas."
+                            },
+                            "response": []
                         }
                     ],
                     "description": "Endpoints for managing attendance (absensi)"
@@ -1238,6 +1332,41 @@
                         "description": "Scan and identify multiple faces in an image. Used for batch attendance (e.g., CCTV or classroom camera). Returns all matched users. Available to all authenticated users."
                     },
                     "response": []
+                },
+                {
+                    "name": "Request Liveness Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/biometrik/request-liveness-token",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "biometrik",
+                                "request-liveness-token"
+                            ]
+                        },
+                        "description": "MAHASISWA: ambil token sekali pakai sebelum absensi biometrik; kirim data.token sebagai liveness_token saat absen."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('liveness_token', jsonData.data.token);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
                 }
             ],
             "description": "Biometric face recognition endpoints for adding, updating, verifying, and scanning faces"
@@ -1912,7 +2041,43 @@
                                 }
                             ]
                         },
-                        "description": "Start anomaly analysis for a class. Requires DOSEN or ADMIN role."
+                        "description": "Start anomaly analysis for a class. Requires DOSEN or ADMIN role. Add ?async=true to receive a 202 response; data.jobId is saved as job_id for Get Analysis Job Status."
+                    },
+                    "response": [],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 202) {",
+                                    "    const jsonData = pm.response.json();",
+                                    "    pm.collectionVariables.set('job_id', jsonData.data.jobId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Analysis Job Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/anomali/job-status/{{job_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "anomali",
+                                "job-status",
+                                "{{job_id}}"
+                            ]
+                        },
+                        "description": "DOSEN pemilik job atau ADMIN; isi job_id dari respons analyze. Job milik pengguna lain mengembalikan 404."
                     },
                     "response": []
                 }

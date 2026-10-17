@@ -94,7 +94,7 @@ jobs:
 
       - name: Run Backend Unit Tests (with coverage)
         working-directory: backend
-        run: npx jest --testPathPattern=test/ --coverage --ci --forceExit
+        run: npm test -- --ci --runInBand
 
       - name: Upload Coverage Report
         if: always()
@@ -132,8 +132,9 @@ jobs:
           pip install onnxruntime pyyaml
           # Shared
           pip install requests python-dotenv
-          # Test runner
-          pip install pytest
+
+      - name: Run edge device response contract tests
+        run: python -m unittest edge_device/test_parse_server_result.py -v
 
       - name: Start Face Recognition Service (TEST_MODE=true)
         env:
@@ -177,9 +178,7 @@ jobs:
           if [ "$READY" = "false" ]; then echo "❌ Service failed to start"; exit 1; fi
 
       - name: Run AI Contract Tests
-        run: |
-          python -m pytest backend/python-service/tests/test_ai_contract.py -v --tb=short 2>/dev/null || \
-          python -m unittest discover -s backend/python-service/tests -v
+        run: python -m unittest discover -s backend/python-service/tests -v
 
       - name: Upload service logs on failure
         if: failure()
@@ -289,7 +288,7 @@ jobs:
 
       - name: Run Backend E2E Tests
         working-directory: backend
-        run: npx jest test-e2e/api_e2e.test.js --runInBand --detectOpenHandles --forceExit --verbose --ci
+        run: npm run test:e2e -- --verbose --ci
 
       - name: Save service logs on failure
         if: failure()

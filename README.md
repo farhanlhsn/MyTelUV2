@@ -19,7 +19,7 @@ Alur data utama:
 ```text
 Mobile -> Backend API -> PostgreSQL
 Mobile -> Backend API -> Face AI -> Backend -> PostgreSQL
-Edge Device -> Plate AI -> Backend Parking API -> PostgreSQL/Socket.IO
+Edge Device -> Backend Parking API -> Plate AI -> Backend -> PostgreSQL/Socket.IO
 Backend -> Anomaly AI -> Backend -> PostgreSQL
 ```
 
@@ -61,9 +61,11 @@ flutter run -d android --dart-define=API_URL_DEV=http://10.0.2.2:5050
 flutter build apk --dart-define=ENV=prod --dart-define=API_URL_PROD=https://api.example.com
 ```
 
-Saat `ENV=prod`, `API_URL_PROD` wajib diisi.
+Saat `ENV=prod`, `API_URL_PROD` dapat mengganti alamat produksi default `https://mytelu.farhanlhsn.web.id`.
 
 ## Backend Setup
+
+Gunakan Node.js 22 (sama dengan CI) dan Python 3.11 untuk layanan AI.
 
 ```bash
 cd backend
@@ -78,10 +80,10 @@ Backend default berjalan di port `5050`.
 Swagger/OpenAPI docs tersedia di:
 
 ```text
-http://localhost:5050/api-docs
+http://localhost:5050/api/docs
 ```
 
-Kalau backend dijalankan dari host lain atau via production compose, sesuaikan host-nya dan buka endpoint `api-docs` yang sama.
+Sesuaikan host jika backend berjalan di server lain. Swagger aktif di development; di production perlu `ENABLE_SWAGGER=true`.
 
 ## AI Services
 
@@ -145,7 +147,7 @@ Production compose:
 docker compose -f docker-compose.prod.yml up --build -d
 ```
 
-Compose production menjalankan backend, face recognition, plate recognition, dan anomaly detection. Backend health check memakai `FACE_API_URL`, `PLATE_API_URL`, dan `ANOMALY_SERVICE_URL`.
+Compose production menjalankan backend, face recognition, plate recognition, dan anomaly detection. Backend health check memakai `PYTHON_SERVICE_URL` (fallback `FACE_API_URL`), `PLATE_API_URL`, dan `ANOMALY_SERVICE_URL`. Semua logika tanggal bisnis memakai `Asia/Jakarta` (WIB, UTC+7), termasuk pemilihan hari kelas dan statistik absensi, terlepas dari timezone perangkat.
 
 ### Deploy production
 
@@ -188,8 +190,10 @@ Auth:
 
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/admin/users` (khusus ADMIN; membuat akun dengan role `MAHASISWA`, `DOSEN`, atau `ADMIN`)
 - `POST /api/v1/auth/refresh`
 - `GET /api/v1/auth/me`
+- `PUT /api/v1/auth/preferences` dengan `{ "push_notifications_enabled": true }`
 
 Biometrik:
 
@@ -201,6 +205,11 @@ Biometrik:
 
 Catatan: absensi biometrik wajib membawa `id_sesi_absensi` eksplisit dari sesi yang dipilih user.
 
+Akademik:
+
+- `PUT /api/v1/akademik/absensi/sesi/:id/mahasiswa/:id_user` untuk koreksi dosen pemilik kelas atau admin, dengan `{ "status": "IZIN", "keterangan": "Kegiatan kampus" }`.
+- Status absensi: `HADIR`, `TELAT`, `IZIN`, `SAKIT`, `ALPHA`. HADIR/TELAT dihitung hadir, IZIN/SAKIT dikecualikan dari ketidakhadiran, ALPHA dihitung tidak hadir.
+
 Parkir:
 
 - `GET /api/v1/parkir/all`
@@ -211,6 +220,7 @@ Anomali:
 
 - `POST /api/v1/anomali/analyze/:id_kelas`
 - `GET /api/v1/anomali/:id_kelas`
+- `GET /api/v1/anomali/job-status/:jobId` untuk pemilik job atau admin.
 
 ## Security Notes
 
@@ -221,20 +231,20 @@ Anomali:
 
 ## Testing
 
-Backend unit/API tests:
+Backend unit/API tests (E2E dikecualikan, coverage untuk controllers, middlewares, dan utils; batas minimum coverage baris 70%):
 
 ```bash
 cd backend
 npm test
 ```
 
-Targeted tests:
+Targeted tests tanpa coverage penuh:
 
 ```bash
 cd backend
-node ../node_modules/jest/bin/jest.js test/parkirController.test.js --runInBand
-node ../node_modules/jest/bin/jest.js test/biometrikAbsen.test.js --runInBand --coverage=false
-node ../node_modules/jest/bin/jest.js test/anomaliController.test.js --runInBand
+npx jest test/parkirController.test.js --runInBand --coverage=false
+npx jest test/biometrikAbsen.test.js --runInBand --coverage=false
+npx jest test/anomaliController.test.js --runInBand --coverage=false
 ```
 
 Mobile tests:
@@ -242,7 +252,17 @@ Mobile tests:
 ```bash
 cd mobile
 flutter test
-flutter analyze
+flutter analyze --no-fatal-infos
+```
+
+Pada Windows, Flutter memerlukan filesystem NTFS yang mendukung symlink. Jika proyek berada di drive exFAT (misalnya E:), salin `mobile/` ke folder NTFS (misalnya C:) sebelum `flutter pub get`, `flutter test`, dan analyze.
+
+Workflow `.github/workflows/build-apk.yml` mewajibkan analyze tanpa error/warning dan seluruh unit/widget test lulus sebelum build. APK memakai alamat produksi default dari `AppConfig`. Workflow berjalan untuk push/PR `main` yang menyentuh mobile dan dapat dijalankan manual.
+
+Kontrak respons edge (standard library Python, tanpa model/kamera):
+
+```bash
+python -m unittest edge_device/test_parse_server_result.py
 ```
 
 E2E orchestration:
@@ -250,6 +270,8 @@ E2E orchestration:
 ```bash
 powershell -ExecutionPolicy Bypass -File .\scripts\test-e2e.ps1
 ```
+
+Untuk E2E manual, siapkan database dan layanan test sesuai `TESTING_E2E.md`, lalu jalankan `cd backend` dan `npm run test:e2e`. `npm run test:all` menjalankan unit lalu E2E. `TEST_MODE=true` hanya diatur lewat environment proses backend/AI pada lingkungan test. File root `test_detection.py` dan `test_recognition.py` adalah tes model nyata yang memerlukan dependensi/model tersendiri; keduanya tidak termasuk unit test atau CI kontrak.
 
 ## Troubleshooting
 
