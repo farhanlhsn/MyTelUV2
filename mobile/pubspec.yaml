@@ -79,9 +79,11 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/telyu.png"
+  # Padded sources from tool/brand_assets.py (the raw logo got cropped by the icon mask)
+  image_path: "assets/icon/launcher_legacy.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/telyu.png"
+  adaptive_icon_foreground: "assets/icon/launcher_foreground.png"
+  adaptive_icon_foreground_inset: 0
 
 
 # For information on the generic Dart part of this file, see the
