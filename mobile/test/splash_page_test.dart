@@ -127,6 +127,36 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  testWidgets('the mark sits on the display centre when the view stops above the navigation bar', (
+    WidgetTester tester,
+  ) async {
+    fresh();
+    // Android 12-14 without edge-to-edge: the view ends above a 48 dp navigation bar, while the
+    // native splash is centred on the whole display.
+    tester.view.devicePixelRatio = 2.625;
+    tester.view.display.size = const Size(1080, 2400);
+    tester.view.physicalSize = const Size(1080, 2400 - 126);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+
+    await tester.pumpWidget(splash());
+
+    expect(tester.getCenter(find.byKey(const Key('splash-mark'))).dy, closeTo(2400 / 2.625 / 2, 0.5));
+  });
+
+  testWidgets('edge-to-edge: the mark stays on the view centre', (WidgetTester tester) async {
+    fresh();
+    tester.view.devicePixelRatio = 2.625;
+    tester.view.display.size = const Size(1080, 2400);
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+
+    await tester.pumpWidget(splash());
+
+    expect(tester.getCenter(find.byKey(const Key('splash-mark'))).dy, closeTo(2400 / 2.625 / 2, 0.5));
+  });
+
   group('splashSheetTop lands on the first frame of the destination', () {
     tearDown(AuthMiddleware.clearCredentials);
 

@@ -1,6 +1,7 @@
-import 'dart:ui' show lerpDouble;
+import 'dart:ui' show FlutterView, lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../app/auth_middleware.dart';
@@ -14,15 +15,29 @@ typedef SplashNavigate = void Function(String route);
 /// Leaves the splash for [route]; on the home page, opens the notification that launched the app
 /// (cold start) on top of it, so back returns to home.
 ///
-/// The page is pushed over the splash and the splash is removed once the page's fade-in is over:
+/// The page is pushed over the splash and the splash is removed when the page's fade-in completes:
 /// replacing it (offNamed/offAllNamed) takes the splash away at once, and the page would fade in
-/// over a blank background instead of over the splash's red top.
+/// over a blank background instead of over the splash's red top. Back during the fade-in pops the
+/// page and would uncover the finished splash; the app is left instead, as back on its first page
+/// does.
 void splashNavigate(String route) {
   final Route<dynamic>? splash = Get.rawRoute;
   Get.toNamed(route);
-  Future<void>.delayed(const Duration(milliseconds: 400), () {
-    if (splash != null && splash.isActive) Get.removeRoute(splash);
-  });
+  final Route<dynamic>? page = Get.rawRoute;
+  final Animation<double>? fadeIn = page is ModalRoute<dynamic> ? page.animation : null;
+  if (splash != null && page != null && page != splash && fadeIn != null) {
+    void onStatus(AnimationStatus status) {
+      if (status == AnimationStatus.completed) {
+        fadeIn.removeStatusListener(onStatus);
+        if (splash.isActive && !splash.isCurrent) Get.removeRoute(splash);
+      } else if (status == AnimationStatus.dismissed) {
+        fadeIn.removeStatusListener(onStatus);
+        SystemNavigator.pop();
+      }
+    }
+
+    fadeIn.addStatusListener(onStatus);
+  }
   if (route == AppRoutes.home) {
     WidgetsBinding.instance.addPostFrameCallback((_) => NotificationNavigator.openPending());
   }
@@ -44,6 +59,15 @@ const double _circle = 160;
 const double _symbol = 96;
 const Duration _introDuration = Duration(milliseconds: 700);
 const Duration _exitDuration = Duration(milliseconds: 450);
+
+/// How far the centre of the display lies below the centre of this view. Android draws its launch
+/// splash on the whole display; below Android 15 without edge-to-edge the Flutter view stops above
+/// the navigation bar, so the mark moves down by half of it to start where the native one was.
+double _displayCentreOffset(BuildContext context) {
+  final FlutterView view = View.of(context);
+  final double missing = view.display.size.height - view.physicalSize.height;
+  return missing > 0 ? missing / 2 / view.devicePixelRatio : 0;
+}
 
 /// The red splash: a short intro while the session is checked, then a white sheet rises to where
 /// the destination's sheet starts and [navigate] is called once. No fixed delay.
@@ -131,6 +155,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final double height = MediaQuery.sizeOf(context).height;
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final double dy = _displayCentreOffset(context);
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: AnimatedBuilder(
@@ -149,13 +174,16 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                   children: <Widget>[
                     Center(
                       child: Transform.translate(
-                        offset: Offset(0, -56 * t),
-                        child: Transform.scale(scale: 1 - 0.2 * t, child: const _Mark()),
+                        offset: Offset(0, dy - 56 * t),
+                        child: Transform.scale(
+                          scale: 1 - 0.2 * t,
+                          child: const _Mark(key: Key('splash-mark')),
+                        ),
                       ),
                     ),
                     Center(
                       child: Transform.translate(
-                        offset: Offset(0, 40 + 16 * (1 - t)),
+                        offset: Offset(0, dy + 40 + 16 * (1 - t)),
                         child: Opacity(
                           opacity: t,
                           child: const Text(
@@ -173,7 +201,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
                     if (_introDone && _route == null)
                       Center(
                         child: Transform.translate(
-                          offset: const Offset(0, 100),
+                          offset: Offset(0, dy + 100),
                           child: const SizedBox(
                             key: Key('splash-progress'),
                             width: 120,
@@ -226,7 +254,7 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
 
 /// The Telkom University symbol in a white circle, as on the native splash.
 class _Mark extends StatelessWidget {
-  const _Mark();
+  const _Mark({super.key});
 
   @override
   Widget build(BuildContext context) {
