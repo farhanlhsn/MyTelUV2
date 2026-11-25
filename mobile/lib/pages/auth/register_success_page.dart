@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../app/routes.dart';
+import '../../utils/app_theme.dart';
 
 class RegisterSuccessPage extends StatefulWidget {
   const RegisterSuccessPage({super.key});
@@ -11,6 +12,8 @@ class RegisterSuccessPage extends StatefulWidget {
 }
 
 class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
+  Timer? _redirectTimer;
+
   @override
   void initState() {
     super.initState();
@@ -19,7 +22,7 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
 
   void _navigateToLogin() {
     // Auto redirect ke login setelah 3 detik
-    Timer(const Duration(seconds: 3), () {
+    _redirectTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
         Get.offAllNamed(AppRoutes.login);
       }
@@ -27,9 +30,15 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
   }
 
   @override
+  void dispose() {
+    _redirectTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
+      backgroundColor: AppColors.primary,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
@@ -103,6 +112,7 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
               // Manual Navigation Button (optional)
               TextButton(
                 onPressed: () {
+                  _redirectTimer?.cancel();
                   Get.offAllNamed(AppRoutes.login);
                 },
                 style: TextButton.styleFrom(

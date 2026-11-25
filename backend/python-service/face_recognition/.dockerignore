@@ -1,0 +1,26 @@
+# Build context is this service directory (the Dockerfile copies requirements.txt and *.py only).
+# InsightFace downloads its models at runtime into the insightface-models volume, so nothing here
+# is a model file; models/ is left alone anyway.
+
+# Local virtualenv and Python caches
+venv
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Local environment
+.env
+.env.*
+
+# macOS metadata / AppleDouble files (exFAT drives)
+._*
+**/._*
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Not needed in the image
+*.md
+.git
+.gitignore

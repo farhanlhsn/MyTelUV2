@@ -15,6 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
+# Run as an unprivileged user, like the other AI services
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 5003
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

@@ -1,13 +1,20 @@
 const prisma = require("../utils/prisma");
 const asyncHandler = require("express-async-handler");
 const FormData = require("form-data");
-const axios = require("axios");
-const axiosRetry = require("axios-retry").default;
 const { uploadFile, deleteFile } = require("../utils/r2FileHandler");
 const embeddingCache = require("../utils/embeddingCache");
 const { logAudit, BIOMETRIK_ACTIONS } = require("../utils/auditLogger");
 const livenessTokenManager = require("../utils/livenessTokenManager");
 const CircuitBreaker = require("../utils/CircuitBreaker");
+const { pythonServiceHeaders } = require("../utils/pythonServiceHeaders");
+const { pythonClient } = require("../utils/pythonClient");
+const { isUniqueViolation, checkInStatus } = require("../utils/akademikHelpers");
+const {
+  translateFaceServiceError,
+  isFaceServiceInternalError,
+  FACE_MATCH_FAILED_MESSAGE,
+  FACE_SERVICE_FAILURE_MESSAGE,
+} = require("../utils/faceServiceMessages");
 
 const PYTHON_SERVICE_URL = process.env.FACE_API_URL || "http://localhost:5051";
 const PYTHON_SERVICE_TIMEOUT = parseInt(
@@ -23,37 +30,29 @@ const faceApiBreaker = new CircuitBreaker("FaceAPI", {
   recoveryTimeout: parseInt(process.env.FACE_CB_RECOVERY_TIMEOUT || "30000"),
 });
 
-// Configure axios retry with exponential backoff
-axiosRetry(axios, {
-  retries: 3,
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) =>
-    axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-    error.code === "ECONNABORTED",
-  onRetry: (retryCount, error, requestConfig) => {
-    console.log(
-      `[PythonService] Retry attempt ${retryCount} for ${requestConfig.url}: ${error.message}`,
-    );
-  },
-});
-
 /**
- * Helper function to call Python service with retry, timeout and circuit breaker
+ * Helper function to call the Python face service with timeout and circuit breaker.
+ * Uses the dedicated pythonClient (retries GET/HEAD only), never the global axios.
+ *
+ * The service answers HTTP 400 {success:false, error} for input problems (no face, several faces,
+ * unreadable image). That is a result for the caller, not an outage, so it is returned instead of
+ * thrown: the caller turns it into a 400 and the circuit breaker is not charged with a failure.
+ * The same 400 shape also carries internal failures ("Error processing image: <exception>" from
+ * face_processor.py); those are logged and thrown so the circuit breaker counts them.
  */
 const callPythonService = async (endpoint, formData) => {
   return faceApiBreaker.fire(async () => {
     try {
-      const response = await axios.post(
+      const response = await pythonClient.post(
         `${PYTHON_SERVICE_URL}${endpoint}`,
         formData,
         {
-          headers: {
-            ...(formData.getHeaders
+          headers: pythonServiceHeaders(
+            "face",
+            formData.getHeaders
               ? formData.getHeaders()
-              : { "Content-Type": "application/json" }),
-            "X-API-Key": process.env.FACE_API_KEY || "",
-            ...(process.env.TEST_MODE === "true" && { "X-Test-Mode": "true" })
-          },
+              : { "Content-Type": "application/json" },
+          ),
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
           timeout: PYTHON_SERVICE_TIMEOUT,
@@ -61,6 +60,22 @@ const callPythonService = async (endpoint, formData) => {
       );
       return response.data;
     } catch (error) {
+      const serviceData = error.response?.data;
+      if (
+        error.response?.status === 400 &&
+        serviceData &&
+        serviceData.success === false
+      ) {
+        if (!isFaceServiceInternalError(serviceData.error)) {
+          console.warn(
+            "[Biometrik] Face service rejected the input:",
+            serviceData.error,
+          );
+          return serviceData;
+        }
+        console.error("Python service error:", serviceData);
+        throw new Error(FACE_SERVICE_FAILURE_MESSAGE);
+      }
       console.error(
         "Python service error:",
         error.response?.data || error.message,
@@ -71,7 +86,7 @@ const callPythonService = async (endpoint, formData) => {
         );
       }
       throw new Error(
-        error.response?.data?.error || "Face recognition service unavailable",
+        error.response?.data?.error || "Layanan pengenalan wajah tidak tersedia",
       );
     }
   });
@@ -95,6 +110,40 @@ function cosineSimilarity(vecA, vecB) {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+const confidenceLabel = (similarity) =>
+  similarity > 0.8 ? "high" : similarity > 0.7 ? "medium" : "low";
+
+/**
+ * Match details for a response. The raw similarity score (and the confidence band derived from it)
+ * is only for ADMIN: handing it to anyone else lets them probe how close a photo is to a stored
+ * face (an oracle), so every other caller only learns the boolean `match`.
+ */
+const matchDetails = (isAdmin, similarity) =>
+  isAdmin
+    ? { match: true, similarity, confidence: confidenceLabel(similarity) }
+    : { match: true };
+
+const DUPLICATE_FACE_MESSAGE = "Wajah ini sudah terdaftar untuk pengguna lain";
+
+/**
+ * True when the embedding matches ANOTHER user's active embedding at or above the verification
+ * threshold. Queries the database directly (not the cache) because it guards enrollment.
+ * Skipped in TEST_MODE: the face service then returns one dummy embedding for every image, so every
+ * enrollment would look like a duplicate of the previous one.
+ */
+const isFaceRegisteredByOtherUser = async (embedding, userId) => {
+  if (process.env.TEST_MODE === "true") return false;
+
+  const others = await prisma.dataBiometrik.findMany({
+    where: { deletedAt: null, id_user: { not: userId } },
+    select: { id_user: true, face_embedding: true },
+  });
+  return others.some(
+    (other) =>
+      cosineSimilarity(embedding, other.face_embedding) >= SIMILARITY_THRESHOLD,
+  );
+};
+
 /**
  * @desc    Request a one-time liveness token for biometric attendance
  * @route   POST /api/biometrik/request-liveness-token
@@ -106,10 +155,37 @@ exports.requestLivenessToken = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Liveness token generated",
+    message: "Token liveness berhasil dibuat",
     data: {
       token,
       expires_in: expiresAt,
+    },
+  });
+});
+
+/**
+ * @desc    Whether the logged-in user has an active face enrolled (self status, no face data returned)
+ * @route   GET /api/biometrik/status
+ * @access  Protected (any role)
+ */
+exports.getMyBiometrikStatus = asyncHandler(async (req, res) => {
+  const biometrik = await prisma.dataBiometrik.findUnique({
+    where: { id_user: req.user.id_user },
+    select: { deletedAt: true, updatedAt: true },
+  });
+
+  // A soft-deleted row counts as not registered
+  const terdaftar = Boolean(biometrik && !biometrik.deletedAt);
+
+  res.status(200).json({
+    status: "success",
+    message: "Status biometrik berhasil diambil",
+    data: {
+      terdaftar,
+      diperbarui:
+        terdaftar && biometrik.updatedAt
+          ? new Date(biometrik.updatedAt).toISOString()
+          : null,
     },
   });
 });
@@ -125,14 +201,14 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
   if (!id_user) {
     return res.status(400).json({
       status: "error",
-      message: "id_user is required",
+      message: "id_user wajib diisi",
     });
   }
 
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -144,7 +220,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(404).json({
       status: "error",
-      message: "User not found",
+      message: "Pengguna tidak ditemukan",
     });
   }
 
@@ -157,7 +233,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
     return res.status(400).json({
       status: "error",
       message:
-        "Biometric data already exists for this user. Use edit endpoint to update.",
+        "Data biometrik sudah terdaftar untuk user ini. Gunakan endpoint edit untuk memperbarui.",
     });
   }
 
@@ -174,7 +250,17 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
+      });
+    }
+
+    // One face, one account: refuse a face that is already registered for someone else
+    if (
+      await isFaceRegisteredByOtherUser(faceResult.embedding, parseInt(id_user))
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message: DUPLICATE_FACE_MESSAGE,
       });
     }
 
@@ -218,7 +304,7 @@ exports.addBiometrik = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       status: "success",
-      message: "Biometric data registered successfully",
+      message: "Data biometrik berhasil didaftarkan",
       data: {
         id_biometrik: biometrik.id_biometrik,
         id_user: biometrik.id_user,
@@ -249,7 +335,7 @@ exports.deleteBiometrik = asyncHandler(async (req, res) => {
   if (!biometrik || biometrik.deletedAt) {
     return res.status(404).json({
       status: "error",
-      message: "Biometric data not found",
+      message: "Data biometrik tidak ditemukan",
     });
   }
 
@@ -279,7 +365,7 @@ exports.deleteBiometrik = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     status: "success",
-    message: "Biometric data deleted successfully",
+    message: "Data biometrik berhasil dihapus",
   });
 });
 
@@ -294,7 +380,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -305,7 +391,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
   if (!biometrik || biometrik.deletedAt) {
     return res.status(404).json({
       status: "error",
-      message: "Biometric data not found",
+      message: "Data biometrik tidak ditemukan",
     });
   }
 
@@ -322,7 +408,17 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
+      });
+    }
+
+    // One face, one account: refuse a face that is already registered for someone else
+    if (
+      await isFaceRegisteredByOtherUser(faceResult.embedding, parseInt(id_user))
+    ) {
+      return res.status(409).json({
+        status: "error",
+        message: DUPLICATE_FACE_MESSAGE,
       });
     }
 
@@ -359,7 +455,7 @@ exports.editBiometrik = asyncHandler(async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Biometric data updated successfully",
+      message: "Data biometrik berhasil diperbarui",
       data: {
         id_biometrik: updatedBiometrik.id_biometrik,
         id_user: updatedBiometrik.id_user,
@@ -383,7 +479,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -400,7 +496,7 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     if (!faceResult.success) {
       return res.status(400).json({
         status: "error",
-        message: faceResult.error,
+        message: translateFaceServiceError(faceResult.error),
       });
     }
 
@@ -430,8 +526,8 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     if (allBiometrics.length === 0) {
       const message =
         req.user.role === "ADMIN"
-          ? "No registered faces in database"
-          : "You have not registered your biometric data yet";
+          ? "Belum ada wajah terdaftar di database"
+          : "Anda belum mendaftarkan data biometrik";
 
       return res.status(200).json({
         status: "success",
@@ -447,8 +543,11 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
     });
 
     if (matchResult.error) {
-      throw new Error(matchResult.error);
+      console.error("[Biometrik] find-match error:", matchResult.error);
+      throw new Error(FACE_MATCH_FAILED_MESSAGE);
     }
+
+    const isAdmin = req.user.role === "ADMIN";
 
     if (matchResult.is_match) {
       const matchedBiometrik = allBiometrics[matchResult.best_match_index];
@@ -461,21 +560,15 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
           nama: matchedBiometrik.user.nama,
           username: matchedBiometrik.user.username,
           role: matchedBiometrik.user.role,
-          similarity: matchResult.similarity,
-          confidence:
-            matchResult.similarity > 0.8
-              ? "high"
-              : matchResult.similarity > 0.7
-                ? "medium"
-                : "low",
+          ...matchDetails(isAdmin, matchResult.similarity),
         },
       });
     } else {
       res.status(200).json({
         status: "success",
         matched: false,
-        message: "No matching face found",
-        best_similarity: matchResult.similarity,
+        message: "Tidak ada wajah yang cocok",
+        ...(isAdmin && { best_similarity: matchResult.similarity }),
       });
     }
   } catch (error) {
@@ -487,16 +580,70 @@ exports.verifyWajah = asyncHandler(async (req, res) => {
 /**
  * @desc    Scan multiple faces (CCTV/classroom)
  * @route   POST /api/biometrik/scan
- * @access  Protected
+ * @access  Protected (ADMIN, DOSEN)
+ *          ADMIN may scan against every enrolled face or, with id_kelas, one class.
+ *          DOSEN must pass the id_kelas of a class they teach; only that class's
+ *          active participants are candidates.
  */
 exports.scanWajah = asyncHandler(async (req, res) => {
-  const { id_kelas } = req.body;
+  const isAdmin = req.user.role === "ADMIN";
+  if (!isAdmin && req.user.role !== "DOSEN") {
+    return res.status(403).json({
+      status: "error",
+      message: "Anda tidak memiliki akses untuk memindai wajah",
+    });
+  }
 
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
+  }
+
+  const rawKelasId = req.body?.id_kelas;
+  const hasKelasId =
+    rawKelasId !== undefined && rawKelasId !== null && rawKelasId !== "";
+  let id_kelas = null;
+  if (hasKelasId) {
+    id_kelas = Number(rawKelasId);
+    if (!Number.isInteger(id_kelas) || id_kelas <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "id_kelas tidak valid",
+      });
+    }
+  } else if (!isAdmin) {
+    return res.status(400).json({
+      status: "error",
+      message: "id_kelas wajib diisi untuk pemindaian oleh dosen",
+    });
+  }
+
+  // Class scope: DOSEN only their own class; the candidates are that class's active participants
+  let classParticipantIds = null;
+  if (id_kelas !== null) {
+    const kelas = await prisma.kelas.findFirst({
+      where: { id_kelas, deletedAt: null },
+    });
+    if (!kelas) {
+      return res.status(404).json({
+        status: "error",
+        message: "Kelas tidak ditemukan",
+      });
+    }
+    if (!isAdmin && kelas.id_dosen !== req.user.id_user) {
+      return res.status(403).json({
+        status: "error",
+        message: "Anda hanya dapat memindai kelas yang Anda ampu",
+      });
+    }
+
+    const peserta = await prisma.pesertaKelas.findMany({
+      where: { id_kelas, deletedAt: null },
+      select: { id_mahasiswa: true },
+    });
+    classParticipantIds = new Set(peserta.map((p) => p.id_mahasiswa));
   }
 
   try {
@@ -512,12 +659,17 @@ exports.scanWajah = asyncHandler(async (req, res) => {
     if (!facesResult.success) {
       return res.status(400).json({
         status: "error",
-        message: facesResult.error,
+        message: translateFaceServiceError(facesResult.error),
       });
     }
 
-    // Get all active biometric data from cache
-    const allBiometrics = await embeddingCache.getAllEmbeddings();
+    // Active biometric data from cache, narrowed to the class participants when scanning a class
+    let allBiometrics = await embeddingCache.getAllEmbeddings();
+    if (classParticipantIds) {
+      allBiometrics = allBiometrics.filter((b) =>
+        classParticipantIds.has(b.id_user),
+      );
+    }
 
     if (allBiometrics.length === 0) {
       return res.status(200).json({
@@ -527,6 +679,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
           identified_users: 0,
           unidentified_count: facesResult.count,
           users: [],
+          ...(id_kelas !== null && { id_kelas }),
         },
       });
     }
@@ -555,14 +708,8 @@ exports.scanWajah = asyncHandler(async (req, res) => {
           nama: matchedBiometrik.user.nama,
           username: matchedBiometrik.user.username,
           role: matchedBiometrik.user.role,
-          similarity: bestSimilarity,
+          ...matchDetails(isAdmin, bestSimilarity),
           bbox: face.bbox,
-          confidence:
-            bestSimilarity > 0.8
-              ? "high"
-              : bestSimilarity > 0.7
-                ? "medium"
-                : "low",
         });
       }
     }
@@ -574,7 +721,7 @@ exports.scanWajah = asyncHandler(async (req, res) => {
         identified_users: identifiedUsers.length,
         unidentified_count: facesResult.count - identifiedUsers.length,
         users: identifiedUsers,
-        ...(id_kelas && { id_kelas: parseInt(id_kelas) }),
+        ...(id_kelas !== null && { id_kelas }),
       },
     });
   } catch (error) {
@@ -615,7 +762,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       status: "error",
-      message: "Image file is required",
+      message: "File gambar wajib diisi",
     });
   }
 
@@ -641,7 +788,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
   ) {
     return res.status(400).json({
       status: "error",
-      message: "Invalid coordinates",
+      message: "Koordinat tidak valid",
     });
   }
 
@@ -663,8 +810,9 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     });
   }
 
-  const isTestMode =
-    req.headers?.["x-test-mode"] === "true" || process.env.TEST_MODE === "true";
+  // Test mode comes from the server environment only. A client header must never switch it on
+  // (the backend refuses to boot with TEST_MODE=true in production).
+  const isTestMode = process.env.TEST_MODE === "true";
 
   try {
     // Get user's biometric data from cache or database
@@ -696,7 +844,7 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       if (!faceResult.success) {
         return res.status(400).json({
           status: "error",
-          message: faceResult.error || "Face detection failed",
+          message: translateFaceServiceError(faceResult.error),
         });
       }
     }
@@ -712,10 +860,11 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     };
 
     if (!matchResult.is_match) {
+      // No similarity in the body: it would tell the caller how close the photo was
       return res.status(400).json({
         status: "error",
         message: "Wajah tidak cocok",
-        similarity: matchResult.similarity,
+        match: false,
       });
     }
 
@@ -815,11 +964,13 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
     }
 
     // Step 6: Server-Side Heuristics & Impossible Travel Check
+    // (records entered by a dosen have no location and are skipped)
     const prevAbsensi = await prisma.$queryRaw`
             SELECT koordinat[0] AS lng, koordinat[1] AS lat, "createdAt"
             FROM absensi
             WHERE id_user = ${id_user}
             AND "deletedAt" IS NULL
+            AND koordinat IS NOT NULL
             ORDER BY "createdAt" DESC
             LIMIT 1
         `;
@@ -887,9 +1038,11 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
       // Tetap lanjutkan absensi meskipun gagal upload foto
     }
 
-    // Step 8: Create attendance record
-    await prisma.$executeRaw`
-            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, "updatedAt")
+    // Step 8: Create attendance record (TELAT when more than LATE_THRESHOLD_MINUTES after the start)
+    const statusKehadiran = checkInStatus(activeSesi.mulai, now);
+    try {
+      await prisma.$executeRaw`
+            INSERT INTO absensi (id_user, id_kelas, id_sesi_absensi, type_absensi, koordinat, is_mock_location, photo_url, status, "updatedAt")
             VALUES (
                 ${id_user},
                 ${activeSesi.id_kelas},
@@ -898,9 +1051,20 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
                 point(${lng}::float, ${lat}::float),
                 ${isMock},
                 ${absenPhotoUrl},
+                ${statusKehadiran}::"StatusKehadiran",
                 NOW()
             )
         `;
+    } catch (insertError) {
+      // A parallel request for the same session won the unique index (uq_absensi_user_sesi)
+      if (isUniqueViolation(insertError)) {
+        return res.status(409).json({
+          status: "error",
+          message: "Anda sudah melakukan absensi untuk sesi ini",
+        });
+      }
+      throw insertError;
+    }
 
     const absensi = await prisma.absensi.findFirst({
       where: { id_user, id_sesi_absensi: activeSesi.id_sesi_absensi },
@@ -931,7 +1095,8 @@ exports.biometrikAbsen = asyncHandler(async (req, res) => {
         ruangan: activeSesi.kelas.ruangan,
         waktu: absensi.createdAt,
         type: activeSesi.type_absensi,
-        similarity: matchResult.similarity,
+        status: statusKehadiran,
+        match: true,
       },
     });
   } catch (error) {

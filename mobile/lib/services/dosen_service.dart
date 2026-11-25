@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'api_client.dart';
 
 class DosenService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  DosenService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   /// Get kelas yang diampu oleh dosen
   Future<List<Map<String, dynamic>>> getKelasDiampu() async {
@@ -82,6 +84,33 @@ class DosenService {
 
     if (response.data is Map<String, dynamic>) {
       return response.data as Map<String, dynamic>;
+    }
+    return <String, dynamic>{};
+  }
+
+  /// Set the attendance status of one student of a sesi by hand (dosen of the class or admin).
+  /// [status] is one of HADIR, TELAT, IZIN, SAKIT, ALPHA; [keterangan] is an optional note
+  /// (max 255, a blank one clears the previous note). Returns the updated absensi row.
+  /// A DioException (403 other dosen, 404 not enrolled, 400 invalid) is left to the caller;
+  /// `ErrorHelper.parseError` turns it into the server's Indonesian message.
+  Future<Map<String, dynamic>> overrideAbsensi({
+    required int idSesi,
+    required int idUser,
+    required String status,
+    String? keterangan,
+  }) async {
+    final String note = keterangan?.trim() ?? '';
+    final Response<dynamic> response = await _dio.put<dynamic>(
+      '/api/v1/akademik/absensi/sesi/$idSesi/mahasiswa/$idUser',
+      data: <String, dynamic>{
+        'status': status,
+        if (note.isNotEmpty) 'keterangan': note,
+      },
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      final data = response.data as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
     }
     return <String, dynamic>{};
   }

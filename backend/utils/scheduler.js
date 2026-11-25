@@ -4,6 +4,7 @@
  */
 const cron = require('node-cron');
 const prisma = require('./prisma');
+const { globalAnomalyQueue } = require('./TaskQueue');
 
 /**
  * Auto-close expired attendance sessions
@@ -65,6 +66,10 @@ const initScheduler = () => {
     });
 
     console.log('[Scheduler] Auto-close session task scheduled (runs every minute)');
+
+    // Drop finished anomaly analysis jobs from memory (hourly, unref()ed timer)
+    globalAnomalyQueue.startCleanupTimer();
+    console.log('[Scheduler] Anomaly job cleanup scheduled (runs every hour)');
 
     // Run once on startup to close any sessions that expired while server was down
     closeExpiredSessions();

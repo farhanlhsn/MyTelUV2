@@ -8,6 +8,7 @@ const {
   verifyWajah,
   scanWajah,
   biometrikAbsen,
+  getMyBiometrikStatus,
 } = require("../controllers/biometrikController");
 const { protect, authorize } = require("../middlewares/authMiddleware");
 const { validateRequired } = require("../middlewares/validationMiddleware");
@@ -28,7 +29,7 @@ const fileFilter = (req, file, cb) => {
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error("Only image files (jpeg, jpg, png) are allowed!"));
+    cb(new Error("Hanya file gambar JPEG, JPG, atau PNG yang diizinkan"));
   }
 };
 
@@ -62,7 +63,7 @@ router.put(
   editBiometrik,
 );
 
-// Verify & Scan - semua authenticated user bisa akses
+// Verify - semua authenticated user bisa akses (non-ADMIN hanya mencocokkan wajahnya sendiri)
 router.post(
   "/verify",
   protect,
@@ -71,13 +72,18 @@ router.post(
   verifyWajah,
 );
 
+// Scan - ADMIN dan DOSEN saja; DOSEN wajib mengirim id_kelas kelas yang diampu
 router.post(
   "/scan",
   protect,
+  authorize("ADMIN", "DOSEN"),
   biometrikLimiter,
   upload.single("image"),
   scanWajah,
 );
+
+// Own biometric status (is a face enrolled?) - any authenticated user
+router.get("/status", protect, getMyBiometrikStatus);
 
 // Biometric attendance - MAHASISWA absen pakai wajah
 router.post(

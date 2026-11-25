@@ -5,62 +5,135 @@ const { v4: uuidv4 } = require('uuid');
 const asyncHandler = require('express-async-handler');
 const { logAudit } = require('../utils/auditLogger');
 const embeddingCache = require('../utils/embeddingCache');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
-exports.register = asyncHandler(async (req, res) => {
-    const { nama, username, password, role, nim_nip } = req.body;
+// Picks the Indonesian 409 message for whichever unique field the existing row collides on.
+const duplicateMessage = (existing, wanted) => {
+    if (existing.username === wanted.username) return 'Username sudah digunakan';
+    if (wanted.nim_nip && existing.nim_nip === wanted.nim_nip) return 'NIM/NIP sudah terdaftar';
+    if (wanted.email && existing.email === wanted.email) return 'Email sudah terdaftar';
+    return 'Username, NIM/NIP, atau email sudah terdaftar';
+};
 
-    // Only allow MAHASISWA and DOSEN roles for public registration
-    // ADMIN role can only be assigned by existing admins
-    const allowedRoles = ['MAHASISWA', 'DOSEN'];
-    const userRole = allowedRoles.includes(role) ? role : 'MAHASISWA';
+// Public registration can only ever create a MAHASISWA. DOSEN and ADMIN accounts are created by an
+// admin through adminCreateUser; any `role` sent to /register is ignored (the Zod schema strips it,
+// and register never reads it).
+const PUBLIC_REGISTER_ROLE = 'MAHASISWA';
 
-    const checkExisted = await prisma.user.findFirst({
-        where: {
-            username: username,
-            deletedAt: null
-        }
+// Shared by register and adminCreateUser so both apply exactly the same duplicate rules.
+// Resolves to { user } on success or { conflict: <Indonesian message> } for a 409.
+const createUserAccount = async ({ nama, username, password, role, nim_nip, email: rawEmail }) => {
+    const email = rawEmail ? rawEmail.trim().toLowerCase() : null;
+
+    // The duplicate check deliberately includes soft-deleted users: the DB unique constraints on
+    // username / nim_nip / email still cover them, so excluding them here turned a duplicate into a 500.
+    const conflictFilters = [{ username }];
+    if (nim_nip) conflictFilters.push({ nim_nip });
+    if (email) conflictFilters.push({ email });
+
+    const existing = await prisma.user.findFirst({
+        where: { OR: conflictFilters },
+        select: { username: true, nim_nip: true, email: true }
     });
-    if (checkExisted) {
-        return res.status(400).json({ status: "error", message: 'Username already exists' });
-    }
-
-    if (nim_nip) {
-        const checkNimNip = await prisma.user.findFirst({
-            where: {
-                nim_nip: nim_nip,
-                deletedAt: null
-            }
-        });
-        if (checkNimNip) {
-            return res.status(400).json({ status: "error", message: 'NIM/NIP already exists' });
-        }
+    if (existing) {
+        return { conflict: duplicateMessage(existing, { username, nim_nip, email }) };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-        data: {
-            nama,
-            username,
-            password: hashedPassword,
-            role: userRole,
-            nim_nip: nim_nip || null
-        }
-    });
-    if (user) {
-        res.status(201).json({
-            status: "success",
-            message: 'User created successfully',
+    try {
+        const user = await prisma.user.create({
             data: {
-                id: user.id_user,
-                username: user.username,
-                nama: user.nama,
-                role: user.role
+                nama,
+                username,
+                password: hashedPassword,
+                role,
+                nim_nip: nim_nip || null,
+                email
             }
         });
-    } else {
-        res.status(400).json({ status: "error", message: 'Invalid user data' });
-        throw new Error('Invalid user data');
+        return { user };
+    } catch (error) {
+        // A concurrent registration won the race for the same unique value after our check.
+        if (error?.code === 'P2002') {
+            return { conflict: 'Username, NIM/NIP, atau email sudah terdaftar' };
+        }
+        throw error;
     }
+};
+
+exports.register = asyncHandler(async (req, res) => {
+    const { nama, username, password, nim_nip, email } = req.body;
+
+    const { user, conflict } = await createUserAccount({
+        nama, username, password, nim_nip, email, role: PUBLIC_REGISTER_ROLE
+    });
+    if (conflict) {
+        return res.status(409).json({ status: "error", message: conflict });
+    }
+
+    res.status(201).json({
+        status: "success",
+        message: 'Akun berhasil dibuat',
+        data: {
+            id: user.id_user,
+            username: user.username,
+            nama: user.nama,
+            role: user.role
+        }
+    });
+});
+
+// ADMIN only (see authRoutes): creates an account with an explicit role, which is how DOSEN and
+// ADMIN accounts come to exist now that public registration is MAHASISWA only.
+exports.adminCreateUser = asyncHandler(async (req, res) => {
+    const { nama, username, password, role, nim_nip, email } = req.body;
+
+    const { user, conflict } = await createUserAccount({ nama, username, password, role, nim_nip, email });
+    if (conflict) {
+        return res.status(409).json({ status: "error", message: conflict });
+    }
+
+    logAudit({
+        action: 'ADMIN_CREATE_USER',
+        performedBy: req.user.id_user,
+        targetUserId: user.id_user,
+        details: `Admin ${req.user.nama} created ${user.role} account '${user.username}'`,
+        ip: req.ip || req.headers['x-forwarded-for']
+    });
+
+    res.status(201).json({
+        status: "success",
+        message: 'Akun berhasil dibuat',
+        data: {
+            id: user.id_user,
+            username: user.username,
+            nama: user.nama,
+            role: user.role,
+            nim_nip: user.nim_nip,
+            email: user.email
+        }
+    });
+});
+
+// Issues an access token (1 hour) plus a refresh token and its expiry (7 days). The caller stores the
+// refresh token row, so login can do it standalone and changePassword can do it inside its transaction.
+const issueSession = (userId) => {
+    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    return { token, refreshToken, expiresAt };
+};
+
+// The `data` object of a successful login. changePassword returns the same shape so the client can
+// treat both responses identically.
+const sessionPayload = (user, token, refreshToken) => ({
+    id_user: user.id_user,
+    token: token,
+    refresh_token: refreshToken,
+    username: user.username,
+    nama: user.nama,
+    role: user.role
 });
 
 exports.login = asyncHandler(async (req, res) => {
@@ -73,21 +146,15 @@ exports.login = asyncHandler(async (req, res) => {
         }
     });
     if (!user) {
-        return res.status(401).json({ status: "error", message: 'Invalid username or password' });
+        return res.status(401).json({ status: "error", message: 'Username atau password salah' });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-        return res.status(401).json({ status: "error", message: 'Invalid username or password' });
+        return res.status(401).json({ status: "error", message: 'Username atau password salah' });
     }
 
-    // Generate access token (1 hour)
-    const token = jwt.sign({ id: user.id_user }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    
-    // Generate refresh token (7 days)
-    const refreshToken = uuidv4();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    const { token, refreshToken, expiresAt } = issueSession(user.id_user);
 
     // Store refresh token in DB
     await prisma.refreshToken.create({
@@ -100,15 +167,8 @@ exports.login = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Login successful',
-        data: {
-            id_user: user.id_user,
-            token: token,
-            refresh_token: refreshToken,
-            username: user.username,
-            nama: user.nama,
-            role: user.role
-        }
+        message: 'Login berhasil',
+        data: sessionPayload(user, token, refreshToken)
     });
 });
 
@@ -116,13 +176,14 @@ exports.getMe = asyncHandler(async (req, res) => {
     const user = req.user;
     res.status(200).json({
         status: "success",
-        message: 'User data retrieved successfully',
+        message: 'Data pengguna berhasil diambil',
         data: {
             id: user.id_user,
             username: user.username,
             nama: user.nama,
             role: user.role,
-            nim_nip: user.nim_nip
+            nim_nip: user.nim_nip,
+            push_notifications_enabled: user.push_notifications_enabled
         }
     });
 });
@@ -149,7 +210,7 @@ exports.logout = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Logged out successfully'
+        message: 'Logout berhasil'
     });
 });
 
@@ -157,7 +218,7 @@ exports.refreshToken = asyncHandler(async (req, res) => {
     const { refresh_token } = req.body;
 
     if (!refresh_token) {
-        return res.status(400).json({ status: "error", message: 'Refresh token is required' });
+        return res.status(400).json({ status: "error", message: 'Refresh token wajib diisi' });
     }
 
     // Check if refresh token exists in DB
@@ -167,18 +228,18 @@ exports.refreshToken = asyncHandler(async (req, res) => {
     });
 
     if (!existingToken) {
-        return res.status(401).json({ status: "error", message: 'Invalid refresh token' });
+        return res.status(401).json({ status: "error", message: 'Refresh token tidak valid' });
     }
 
     // Check if expired
     if (new Date() > existingToken.expiresAt) {
         await prisma.refreshToken.delete({ where: { id: existingToken.id } });
-        return res.status(401).json({ status: "error", message: 'Refresh token expired' });
+        return res.status(401).json({ status: "error", message: 'Refresh token sudah kedaluwarsa' });
     }
 
     // Check if user is still active (not soft deleted)
     if (existingToken.user.deletedAt) {
-        return res.status(401).json({ status: "error", message: 'User account is deactivated' });
+        return res.status(401).json({ status: "error", message: 'Akun pengguna sudah dinonaktifkan' });
     }
 
     // Generate new access token (1 hour)
@@ -202,7 +263,7 @@ exports.refreshToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Token refreshed successfully',
+        message: 'Token berhasil diperbarui',
         data: {
             token: token,
             refresh_token: newRefreshToken
@@ -296,7 +357,7 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Users retrieved successfully',
+        message: 'Data pengguna berhasil diambil',
         data: {
             users: usersWithBioStatus,
             pagination: {
@@ -318,7 +379,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     if (!nama || nama.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: 'Nama is required'
+            message: 'Nama wajib diisi'
         });
     }
 
@@ -335,7 +396,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Profile updated successfully',
+        message: 'Profil berhasil diperbarui',
         data: updatedUser
     });
 });
@@ -347,14 +408,14 @@ exports.changePassword = asyncHandler(async (req, res) => {
     if (!oldPassword || !newPassword) {
         return res.status(400).json({
             status: "error",
-            message: 'Old password and new password are required'
+            message: 'Password lama dan password baru wajib diisi'
         });
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
         return res.status(400).json({
             status: "error",
-            message: 'New password must be at least 6 characters'
+            message: 'Password minimal 8 karakter'
         });
     }
 
@@ -363,25 +424,37 @@ exports.changePassword = asyncHandler(async (req, res) => {
         where: { id_user: userId }
     });
 
-    // Verify old password
+    // Verify old password. A wrong current password is a validation failure (400), not 401: the caller
+    // is authenticated, and clients treat 401 as "session expired" (refresh, then log out).
     const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
     if (!isPasswordValid) {
-        return res.status(401).json({
+        return res.status(400).json({
             status: "error",
-            message: 'Old password is incorrect'
+            message: 'Password lama salah'
         });
     }
 
-    // Hash and save new password
+    // Hash and save the new password. Every refresh token of the user is revoked in the same
+    // transaction so a stolen session cannot outlive the password change; the caller's own session is
+    // replaced by a fresh pair (created after the delete, in the same transaction) so this device
+    // stays logged in.
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-        where: { id_user: userId },
-        data: { password: hashedPassword }
-    });
+    const { token, refreshToken, expiresAt } = issueSession(userId);
+    await prisma.$transaction([
+        prisma.user.update({
+            where: { id_user: userId },
+            data: { password: hashedPassword }
+        }),
+        prisma.refreshToken.deleteMany({ where: { id_user: userId } }),
+        prisma.refreshToken.create({
+            data: { token: refreshToken, id_user: userId, expiresAt }
+        })
+    ]);
 
     res.status(200).json({
         status: "success",
-        message: 'Password changed successfully'
+        message: 'Password berhasil diubah',
+        data: sessionPayload(user, token, refreshToken)
     });
 });
 
@@ -392,14 +465,14 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     if (!id_user || !new_password) {
         return res.status(400).json({
             status: "error",
-            message: 'id_user and new_password are required'
+            message: 'id_user dan new_password wajib diisi'
         });
     }
 
-    if (new_password.length < 6) {
+    if (new_password.length < 8) {
         return res.status(400).json({
             status: "error",
-            message: 'Password must be at least 6 characters'
+            message: 'Password minimal 8 karakter'
         });
     }
 
@@ -411,16 +484,19 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
     if (!user || user.deletedAt) {
         return res.status(404).json({
             status: "error",
-            message: 'User not found'
+            message: 'Pengguna tidak ditemukan'
         });
     }
 
-    // Hash and save new password
+    // Hash and save new password; revoke the target user's refresh tokens in the same transaction.
     const hashedPassword = await bcrypt.hash(new_password, 10);
-    await prisma.user.update({
-        where: { id_user: parseInt(id_user) },
-        data: { password: hashedPassword }
-    });
+    await prisma.$transaction([
+        prisma.user.update({
+            where: { id_user: parseInt(id_user) },
+            data: { password: hashedPassword }
+        }),
+        prisma.refreshToken.deleteMany({ where: { id_user: parseInt(id_user) } })
+    ]);
 
     // Audit log for sensitive action
     logAudit({
@@ -433,7 +509,7 @@ exports.adminResetPassword = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: `Password for ${user.nama} has been reset successfully`
+        message: `Password untuk ${user.nama} berhasil direset`
     });
 });
 
@@ -443,12 +519,12 @@ exports.deactivateUser = asyncHandler(async (req, res) => {
     
     const user = await prisma.user.findUnique({ where: { id_user: parsedId } });
     if (!user || user.deletedAt) {
-        return res.status(404).json({ status: "error", message: "User not found or already deactivated" });
+        return res.status(404).json({ status: "error", message: "Pengguna tidak ditemukan atau sudah dinonaktifkan" });
     }
     
     // Prevent deactivating self
     if (parsedId === req.user.id_user) {
-        return res.status(400).json({ status: "error", message: "Cannot deactivate yourself" });
+        return res.status(400).json({ status: "error", message: "Anda tidak dapat menonaktifkan akun sendiri" });
     }
     
     await prisma.$transaction([
@@ -479,7 +555,7 @@ exports.deactivateUser = asyncHandler(async (req, res) => {
     
     res.status(200).json({
         status: "success",
-        message: `User ${user.nama} has been deactivated`
+        message: `Pengguna ${user.nama} berhasil dinonaktifkan`
     });
 });
 
@@ -489,25 +565,19 @@ exports.reactivateUser = asyncHandler(async (req, res) => {
     
     const user = await prisma.user.findUnique({ where: { id_user: parsedId } });
     if (!user || !user.deletedAt) {
-        return res.status(404).json({ status: "error", message: "User not found or already active" });
+        return res.status(404).json({ status: "error", message: "Pengguna tidak ditemukan atau sudah aktif" });
     }
     
-    await prisma.$transaction([
-        // Reactivate user
-        prisma.user.update({
-            where: { id_user: parsedId },
-            data: { deletedAt: null }
-        }),
-        // Reactivate associated biometrics
-        prisma.dataBiometrik.updateMany({
-            where: { id_user: parsedId },
-            data: { deletedAt: null }
-        })
-    ]);
-    
+    // Only the account is reactivated. Biometric data that was soft-deleted (on purpose, or when the
+    // account was deactivated) is NOT restored: the admin re-enrolls the face if it is still needed.
+    await prisma.user.update({
+        where: { id_user: parsedId },
+        data: { deletedAt: null }
+    });
+
     // Invalidate embeddings cache
     embeddingCache.invalidateCache();
-    
+
     logAudit({
         action: 'ADMIN_REACTIVATE_USER',
         performedBy: req.user.id_user,
@@ -518,7 +588,7 @@ exports.reactivateUser = asyncHandler(async (req, res) => {
     
     res.status(200).json({
         status: "success",
-        message: `User ${user.nama} has been reactivated`
+        message: `Pengguna ${user.nama} berhasil diaktifkan kembali`
     });
 });
 
@@ -530,7 +600,7 @@ exports.registerFcmToken = asyncHandler(async (req, res) => {
     if (!fcm_token || fcm_token.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: 'FCM token is required'
+            message: 'Token FCM wajib diisi'
         });
     }
 
@@ -541,7 +611,7 @@ exports.registerFcmToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'FCM token registered successfully'
+        message: 'Token FCM berhasil didaftarkan'
     });
 });
 
@@ -552,7 +622,7 @@ exports.updatePreferences = asyncHandler(async (req, res) => {
     if (push_notifications_enabled === undefined) {
         return res.status(400).json({
             status: "error",
-            message: 'push_notifications_enabled is required'
+            message: 'push_notifications_enabled wajib diisi'
         });
     }
 
@@ -564,7 +634,7 @@ exports.updatePreferences = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: 'Preferences updated successfully',
+        message: 'Preferensi berhasil diperbarui',
         data: user
     });
 });
@@ -578,7 +648,7 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
     if (!file) {
         return res.status(400).json({
             status: "error",
-            message: 'Profile picture image is required'
+            message: 'Foto profil wajib diunggah'
         });
     }
 
@@ -598,28 +668,33 @@ exports.uploadProfilePicture = asyncHandler(async (req, res) => {
 
         res.status(200).json({
             status: "success",
-            message: 'Profile picture uploaded successfully',
+            message: 'Foto profil berhasil diunggah',
             data: updatedUser
         });
     } catch (error) {
+        console.error('Failed to upload profile picture:', error.message);
         res.status(500).json({
             status: "error",
-            message: 'Failed to upload profile picture: ' + error.message
+            message: GENERIC_SERVER_ERROR
         });
     }
 });
 
 const { sendPasswordResetEmail } = require('../utils/mailer');
 
+// Same answer whether or not the account exists (prevents user enumeration)
+const PASSWORD_RESET_REQUESTED_MESSAGE = 'Jika username atau email terdaftar, tautan reset password telah dikirim.';
+
 exports.requestPasswordReset = asyncHandler(async (req, res) => {
     const { username } = req.body;
     
-    // Find user by username or email
+    // Find user by username or email. Emails are stored lowercased by register, but older rows may not
+    // be, so the email match is case-insensitive.
     const user = await prisma.user.findFirst({
         where: {
             OR: [
                 { username: username },
-                { email: username } // Also check email if they enter email
+                { email: { equals: username, mode: 'insensitive' } } // Also check email if they enter email
             ],
             deletedAt: null
         }
@@ -629,14 +704,14 @@ exports.requestPasswordReset = asyncHandler(async (req, res) => {
         // Return 200 anyway to prevent user enumeration attacks
         return res.status(200).json({
             status: "success",
-            message: "If the username or email exists, a reset link has been sent."
+            message: PASSWORD_RESET_REQUESTED_MESSAGE
         });
     }
 
     // Respond immediately to prevent timing attack / user enumeration
     res.status(200).json({
         status: "success",
-        message: "If the username or email exists, a reset link has been sent."
+        message: PASSWORD_RESET_REQUESTED_MESSAGE
     });
 
     // Handle token creation and email sending asynchronously in the background
@@ -682,14 +757,14 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
     if (!resetRecord || resetRecord.usedAt || new Date() > resetRecord.expiresAt) {
         return res.status(400).json({
             status: "error",
-            message: "Invalid or expired reset token"
+            message: "Token reset tidak valid atau sudah kedaluwarsa"
         });
     }
 
     if (resetRecord.user.deletedAt) {
         return res.status(400).json({
             status: "error",
-            message: "User account is deactivated"
+            message: "Akun pengguna sudah dinonaktifkan"
         });
     }
 
@@ -703,7 +778,9 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
         prisma.passwordResetToken.update({
             where: { id: resetRecord.id },
             data: { usedAt: new Date() }
-        })
+        }),
+        // Revoke every existing session: whoever knew the old password must log in again
+        prisma.refreshToken.deleteMany({ where: { id_user: resetRecord.id_user } })
     ]);
 
     logAudit({
@@ -716,6 +793,6 @@ exports.resetPasswordWithToken = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Password has been successfully reset"
+        message: "Password berhasil direset"
     });
 });

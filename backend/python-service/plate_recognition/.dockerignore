@@ -1,0 +1,25 @@
+# Build context is this service directory. Models (models/) are NOT excluded: this service loads
+# them at runtime and its Dockerfile copies them (the compose files also mount the directory).
+
+# Local virtualenv and Python caches
+venv
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Local environment
+.env
+.env.*
+
+# macOS metadata / AppleDouble files (exFAT drives)
+._*
+**/._*
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Not needed in the image
+*.md
+.git
+.gitignore

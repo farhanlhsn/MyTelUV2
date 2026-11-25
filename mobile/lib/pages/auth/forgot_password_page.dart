@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/error_helper.dart';
+import 'auth_feedback.dart';
+import '../../utils/app_theme.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -23,34 +26,46 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Future<void> _handleForgotPassword() async {
+    if (_authController.isLoading.value) return;
+    FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() != true) return;
 
-    final success = await _authController.forgotPassword(_usernameController.text.trim());
-    
-    if (success) {
-      Get.snackbar(
-        'Berhasil', 
-        'Link reset password (berisi token) telah dikirim jika email/username terdaftar.',
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
+    final AuthResult result = await _authController.forgotPassword(
+      _usernameController.text.trim(),
+    );
+    if (!mounted) return;
+
+    if (result.success) {
+      // Navigate to reset password page where user can paste the token. Navigate first: the
+      // toast is only a courtesy and must never keep the user on this page.
+      Get.toNamed(AppRoutes.resetPassword);
+      ErrorHelper.showSuccess(
+        'Jika username atau email terdaftar, token reset telah dikirim ke email Anda.',
       );
-      // Navigate to reset password page where user can paste the token
-      Get.toNamed('/reset-password');
-    } else {
-      ErrorHelper.showError('Terjadi kesalahan saat mengirim link reset.');
+      return;
     }
+
+    showAuthFailure(
+      result,
+      title: 'Gagal Mengirim Token',
+      onRetry: _handleForgotPassword,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lupa Password'),
-        backgroundColor: const Color(0xFFE63946),
+        title: const Text(
+          'Lupa Password',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: Padding(
+        // Scrollable so the keyboard never overflows the column on a small screen.
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(25.0),
           child: Form(
             key: _formKey,
@@ -62,7 +77,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -73,15 +88,23 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 const SizedBox(height: 30),
                 TextFormField(
                   controller: _usernameController,
+                  autofillHints: const [AutofillHints.username],
+                  autocorrect: false,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _handleForgotPassword(),
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
                     labelText: 'Username atau Email',
+                    helperText:
+                        'Belum mengisi email saat mendaftar? Hubungi admin untuk mereset password.',
+                    helperMaxLines: 3,
+                    errorMaxLines: 3,
                     prefixIcon: const Icon(Icons.person_outline),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
+                    if (value == null || value.trim().isEmpty) {
                       return 'Username/Email wajib diisi';
                     }
                     return null;
@@ -93,9 +116,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _authController.isLoading.value ? null : _handleForgotPassword,
+                      onPressed: _authController.isLoading.value
+                          ? null
+                          : _handleForgotPassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE63946),
+                        backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),
@@ -103,19 +128,26 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       child: _authController.isLoading.value
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
-                              'Kirim Reset Link',
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              'Kirim Token Reset',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                     ),
                   );
                 }),
-                const Spacer(),
+                const SizedBox(height: 24),
                 Center(
                   child: TextButton(
-                    onPressed: () => Get.toNamed('/reset-password'),
-                    child: const Text('Sudah punya token? Masukkan di sini', style: TextStyle(color: Color(0xFFE63946))),
+                    onPressed: () => Get.toNamed(AppRoutes.resetPassword),
+                    child: const Text(
+                      'Sudah punya token? Masukkan di sini',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
                   ),
-                )
+                ),
               ],
             ),
           ),

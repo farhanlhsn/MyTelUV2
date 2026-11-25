@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/app_theme.dart';
+import '../utils/error_helper.dart';
 
-class MePage extends StatelessWidget {
+class MePage extends StatefulWidget {
   const MePage({super.key});
+
+  @override
+  State<MePage> createState() => _MePageState();
+}
+
+class _MePageState extends State<MePage> {
+  late final Future<Map<String, String?>> _userData = _loadUserData();
 
   Future<Map<String, String?>> _loadUserData() async {
     const FlutterSecureStorage storage = FlutterSecureStorage();
@@ -19,16 +28,16 @@ class MePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         leading: IconButton(
           onPressed: () => Get.back(),
-          icon: const Icon(Icons.arrow_back_ios),
-          tooltip: 'Kembali ke Home',
+          icon: const Icon(appBackIcon),
+          tooltip: 'Kembali ke Beranda',
         ),
       ),
       body: FutureBuilder<Map<String, String?>>(
-        future: _loadUserData(),
+        future: _userData,
         builder:
             (
               BuildContext context,
@@ -39,8 +48,9 @@ class MePage extends StatelessWidget {
               }
 
               if (snapshot.hasError) {
-                return Center(
-                  child: Text('Terjadi kesalahan: ${snapshot.error}'),
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text('Terjadi kesalahan: ${ErrorHelper.parseError(snapshot.error)}'),
                 );
               }
 
@@ -49,7 +59,7 @@ class MePage extends StatelessWidget {
               final String nama = data['nama'] ?? '-';
               final String role = data['role'] ?? '-';
 
-              return Padding(
+              return SingleChildScrollView(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,7 +68,7 @@ class MePage extends StatelessWidget {
                     Center(
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: const Color(0xFFE63946),
+                        backgroundColor: AppColors.primary,
                         child: Text(
                           nama.isNotEmpty ? nama[0].toUpperCase() : 'U',
                           style: const TextStyle(

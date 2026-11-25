@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlng;
 import '../../services/parkir_service.dart';
 import '../../models/parkir_model.dart';
+import '../../utils/app_theme.dart';
 
 class MapPage extends StatefulWidget {
   final MapController mapController;
@@ -23,7 +24,7 @@ class _MapPageState extends State<MapPage> {
     107.63041937130109,
   );
   static const double _kTelyuZoom = 16.0;
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -50,7 +51,7 @@ class _MapPageState extends State<MapPage> {
         ? Colors.green
         : parkiran.slotTersedia > 0
             ? Colors.orange
-            : Colors.red;
+            : AppColors.danger;
 
     showModalBottomSheet(
       context: context,
@@ -257,7 +258,7 @@ class _MapPageState extends State<MapPage> {
           ? Colors.green
           : parkiran.slotTersedia > 0
               ? Colors.orange
-              : Colors.red;
+              : AppColors.danger;
 
       return Marker(
         point: latlng.LatLng(parkiran.latitude!, parkiran.longitude!),
@@ -463,7 +464,7 @@ class _MapPageState extends State<MapPage> {
                       const SizedBox(height: 8),
                       _buildLegendItem(Colors.green, 'Tersedia'),
                       _buildLegendItem(Colors.orange, 'Hampir Penuh'),
-                      _buildLegendItem(Colors.red, 'Penuh'),
+                      _buildLegendItem(AppColors.danger, 'Penuh'),
                     ],
                   ),
                 ),
@@ -549,7 +550,7 @@ class _MapPageState extends State<MapPage> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               color: Colors.grey.shade700,
             ),
           ),

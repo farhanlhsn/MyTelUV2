@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/anomali_controller.dart';
+import '../../utils/error_helper.dart';
+import '../../utils/app_theme.dart';
 
 class AdminAnomalyConfigPage extends StatefulWidget {
   const AdminAnomalyConfigPage({super.key});
@@ -12,9 +14,8 @@ class AdminAnomalyConfigPage extends StatefulWidget {
 class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   final AnomaliController _controller = Get.put(AnomaliController());
   
-  static const Color primaryRed = Color(0xFFE63946);
+  static const Color primaryRed = AppColors.primary;
   static const Color darkBlue = Color(0xFF1D3557);
-  static const Color accentGreen = Color(0xFF2A9D8F);
 
   double _localJarangHadir = 50.0;
   bool _isInitializing = true;
@@ -37,18 +38,13 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
   Future<void> _saveSettings() async {
     final bool success = await _controller.updateAnomalySettings(
       _localJarangHadir.round(),
-      _controller.thresholdKehadiranGanda.value,
     );
     if (success) {
       Get.back();
-      Get.snackbar(
+      ErrorHelper.showToast(
         "Sukses",
         "threshold berhasil diubah",
         backgroundColor: Colors.green.shade600,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
-        margin: const EdgeInsets.all(15),
-        borderRadius: 8,
         icon: const Icon(Icons.check_circle_outline, color: Colors.white),
       );
     }
@@ -115,7 +111,8 @@ class _AdminAnomalyConfigPageState extends State<AdminAnomalyConfigPage> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                     onPressed: () => Get.back(),
                   ),
                   const Text(

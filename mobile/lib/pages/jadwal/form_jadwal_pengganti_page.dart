@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/jadwal_pengganti_helper.dart';
+import '../../utils/app_theme.dart';
 
 class FormJadwalPenggantiPage extends StatefulWidget {
-  const FormJadwalPenggantiPage({super.key});
+  /// For tests; the app uses the default one.
+  final AkademikService? akademikService;
+
+  const FormJadwalPenggantiPage({super.key, this.akademikService});
 
   @override
   State<FormJadwalPenggantiPage> createState() => _FormJadwalPenggantiPageState();
 }
 
 class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
-  final AkademikService _akademikService = AkademikService();
+  late final AkademikService _akademikService;
   final _formKey = GlobalKey<FormState>();
   
   // Arguments passed from previous page
@@ -24,6 +29,9 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
   String _status = 'LIBUR'; // LIBUR or GANTI_JADWAL
   final _alasanController = TextEditingController();
   DateTime? _tanggalGanti;
+  TimeOfDay? _jamMulaiGanti;
+  TimeOfDay? _jamBerakhirGanti;
+  String? _jamError;
   final _ruanganController = TextEditingController();
   
   bool _isLoading = false;
@@ -31,6 +39,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
   @override
   void initState() {
     super.initState();
+    _akademikService = widget.akademikService ?? AkademikService();
     final args = Get.arguments as Map<String, dynamic>;
     idKelas = args['id_kelas'];
     namaKelas = args['nama_kelas'];
@@ -61,6 +70,29 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
     }
   }
 
+  Future<void> _selectTime(bool isStart) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: (isStart ? _jamMulaiGanti : _jamBerakhirGanti) ??
+          const TimeOfDay(hour: 8, minute: 0),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        if (isStart) {
+          _jamMulaiGanti = picked;
+        } else {
+          _jamBerakhirGanti = picked;
+        }
+        // The pair is only checked once both are picked: with one still empty there is nothing to
+        // compare yet, and "Pilih jam ..." is for the submit. An error of an earlier submit stays
+        // until the pair is complete.
+        if (_jamMulaiGanti != null && _jamBerakhirGanti != null) {
+          _jamError = validateJamGanti(_jamMulaiGanti, _jamBerakhirGanti);
+        }
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_tanggalAsli == null) {
@@ -71,18 +103,30 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
       ErrorHelper.showError('Pilih tanggal pengganti');
       return;
     }
+    if (_status == 'GANTI_JADWAL') {
+      final String? jamError = validateJamGanti(_jamMulaiGanti, _jamBerakhirGanti);
+      setState(() => _jamError = jamError);
+      if (jamError != null) return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
+      final bool gantiJadwal = _status == 'GANTI_JADWAL';
       final success = await _akademikService.createJadwalPengganti(
         idKelas: idKelas,
         tanggalAsli: _tanggalAsli!,
         status: _status,
         alasan: _alasanController.text,
-        tanggalGanti: _status == 'GANTI_JADWAL' ? _tanggalGanti : null,
-        ruanganGanti: _status == 'GANTI_JADWAL' && _ruanganController.text.isNotEmpty 
-            ? _ruanganController.text 
+        tanggalGanti: gantiJadwal ? _tanggalGanti : null,
+        ruanganGanti: gantiJadwal && _ruanganController.text.isNotEmpty
+            ? _ruanganController.text
+            : null,
+        jamMulaiGanti: gantiJadwal && _jamMulaiGanti != null
+            ? formatJamHHmm(_jamMulaiGanti!)
+            : null,
+        jamBerakhirGanti: gantiJadwal && _jamBerakhirGanti != null
+            ? formatJamHHmm(_jamBerakhirGanti!)
             : null,
       );
 
@@ -91,10 +135,31 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
         ErrorHelper.showSuccess('Jadwal pengganti berhasil dibuat');
       }
     } catch (e) {
+      // The message is the server's (e.g. the date is not on the class's weekday)
       ErrorHelper.showError(e, title: 'Gagal Membuat Jadwal');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildTimeField({
+    required String label,
+    required TimeOfDay? value,
+    required bool isStart,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: () => _selectTime(isStart),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.access_time),
+          ),
+          child: Text(value != null ? formatJamHHmm(value) : 'Pilih Jam'),
+        ),
+      ),
+    );
   }
 
   @override
@@ -102,7 +167,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Atur Jadwal Pengganti'),
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -130,7 +195,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                   ),
                   child: Text(
                     _tanggalAsli != null 
-                        ? DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_tanggalAsli!)
+                        ? formatTanggalKalender(_tanggalAsli!)
                         : 'Pilih Tanggal',
                   ),
                 ),
@@ -146,7 +211,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     value: 'LIBUR',
                     groupValue: _status,
                     onChanged: (val) => setState(() => _status = val!),
-                    activeColor: const Color(0xFFE63946),
+                    activeColor: AppColors.primary,
                   ),
                   const Text('Liburkan Kelas'),
                   const SizedBox(width: 16),
@@ -154,7 +219,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     value: 'GANTI_JADWAL',
                     groupValue: _status,
                     onChanged: (val) => setState(() => _status = val!),
-                    activeColor: const Color(0xFFE63946),
+                    activeColor: AppColors.primary,
                   ),
                   const Text('Ganti Jadwal'),
                 ],
@@ -174,12 +239,53 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                     ),
                     child: Text(
                       _tanggalGanti != null 
-                          ? DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_tanggalGanti!)
+                          ? formatTanggalKalender(_tanggalGanti!)
                           : 'Pilih Tanggal Baru',
                     ),
                   ),
                 ),
                 
+                const SizedBox(height: 16),
+                const Text('Jam Pengganti (Opsional):', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _buildTimeField(
+                      label: 'Jam Mulai',
+                      value: _jamMulaiGanti,
+                      isStart: true,
+                    ),
+                    const SizedBox(width: 12),
+                    _buildTimeField(
+                      label: 'Jam Berakhir',
+                      value: _jamBerakhirGanti,
+                      isStart: false,
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 12),
+                  child: Text(
+                    _jamError ?? 'Kosongkan jika sama dengan jam kelas asli',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _jamError != null ? Colors.red.shade700 : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+                if (_jamMulaiGanti != null || _jamBerakhirGanti != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _jamMulaiGanti = null;
+                        _jamBerakhirGanti = null;
+                        _jamError = null;
+                      }),
+                      child: const Text('Hapus jam'),
+                    ),
+                  ),
+
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _ruanganController,
@@ -212,7 +318,7 @@ class _FormJadwalPenggantiPageState extends State<FormJadwalPenggantiPage> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

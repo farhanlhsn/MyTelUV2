@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'biometrik_verification_page.dart';
+import '../../utils/app_theme.dart';
 
 class BiometrikStatusWidget extends StatelessWidget {
-  /// Whether biometric is registered for current user
-  final bool isRegistered;
-  
+  /// Whether biometric is registered for current user; null while the status is still loading
+  final bool? isRegistered;
+
   /// Whether to show action button
   final bool showAction;
 
   const BiometrikStatusWidget({
     super.key,
-    this.isRegistered = false,
+    this.isRegistered,
     this.showAction = true,
   });
 
+  MaterialColor get _statusColor => isRegistered == null
+      ? Colors.grey
+      : isRegistered!
+      ? Colors.green
+      : Colors.orange;
+
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -40,14 +47,16 @@ class BiometrikStatusWidget extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isRegistered
-                  ? Colors.green.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.1),
+              color: _statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              isRegistered ? Icons.face_retouching_natural : Icons.face_retouching_off,
-              color: isRegistered ? Colors.green : Colors.orange,
+              isRegistered == null
+                  ? Icons.face
+                  : isRegistered!
+                  ? Icons.face_retouching_natural
+                  : Icons.face_retouching_off,
+              color: _statusColor,
               size: 24,
             ),
           ),
@@ -68,12 +77,14 @@ class BiometrikStatusWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isRegistered
+                  isRegistered == null
+                      ? 'Memeriksa status…'
+                      : isRegistered!
                       ? 'Wajah sudah terdaftar'
                       : 'Wajah belum terdaftar',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isRegistered ? Colors.green.shade600 : Colors.orange.shade600,
+                    color: _statusColor.shade600,
                   ),
                 ),
               ],
@@ -93,7 +104,7 @@ class BiometrikStatusWidget extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isRegistered ? 'Verifikasi' : 'Daftar',
+                  isRegistered == true ? 'Verifikasi' : 'Daftar',
                   style: TextStyle(
                     color: primaryRed,
                     fontWeight: FontWeight.w600,
@@ -127,7 +138,7 @@ class AbsensiBiometrikCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return GestureDetector(
       onTap: onCardTap,

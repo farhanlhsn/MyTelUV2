@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/validators.dart';
+import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminUserManagementPage extends StatefulWidget {
   const AdminUserManagementPage({super.key});
@@ -133,6 +137,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
     final namaController = TextEditingController();
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
+    final nimNipController = TextEditingController();
+    final nimNipFieldKey = GlobalKey<FormFieldState<String>>();
+    final emailController = TextEditingController();
     String selectedRole = 'MAHASISWA';
     bool isSubmitting = false;
     bool obscurePassword = true;
@@ -180,24 +187,13 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     controller: usernameController,
                     decoration: InputDecoration(
                       labelText: 'Username *',
-                      hintText: 'Contoh: john.doe',
+                      hintText: 'Contoh: john_doe',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      errorMaxLines: 2,
+                      errorMaxLines: 3,
                     ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Username tidak boleh kosong';
-                      }
-                      if (value.trim().length < 3) {
-                        return 'Username minimal 3 karakter';
-                      }
-                      if (value.contains(' ')) {
-                        return 'Username tidak boleh mengandung spasi';
-                      }
-                      return null;
-                    },
+                    validator: Validators.username,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -205,7 +201,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                     obscureText: obscurePassword,
                     decoration: InputDecoration(
                       labelText: 'Password *',
-                      hintText: 'Minimal 6 karakter',
+                      hintText: 'Minimal 8 karakter, huruf dan angka',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -224,15 +220,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                         },
                       ),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Password tidak boleh kosong';
-                      }
-                      if (value.length < 6) {
-                        return 'Password minimal 6 karakter';
-                      }
-                      return null;
-                    },
+                    validator: Validators.password,
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -251,8 +239,48 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       DropdownMenuItem(value: 'DOSEN', child: Text('Dosen')),
                       DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
                     ],
-                    onChanged: (value) =>
-                        setDialogState(() => selectedRole = value!),
+                    onChanged: (value) {
+                      setDialogState(() => selectedRole = value!);
+                      // The NIM / NIP rule depends on the role: re-check only that field.
+                      if (nimNipController.text.isNotEmpty) {
+                        nimNipFieldKey.currentState?.validate();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: nimNipFieldKey,
+                    controller: nimNipController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: selectedRole == 'MAHASISWA'
+                          ? 'NIM (opsional)'
+                          : 'NIP/NIDN (opsional)',
+                      hintText: selectedRole == 'MAHASISWA'
+                          ? '11-12 digit angka'
+                          : '8-20 digit angka',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    validator: (value) =>
+                        Validators.nimNip(value, role: selectedRole),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    decoration: InputDecoration(
+                      labelText: 'Email (opsional)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      errorMaxLines: 2,
+                    ),
+                    validator: Validators.email,
                   ),
                 ],
               ),
@@ -279,6 +307,8 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                           username: usernameController.text.trim(),
                           password: passwordController.text,
                           role: selectedRole,
+                          nimNip: nimNipController.text.trim(),
+                          email: emailController.text.trim(),
                         );
                         if (success && context.mounted) {
                           Navigator.pop(context);
@@ -288,7 +318,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -315,15 +345,20 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
     required String username,
     required String password,
     required String role,
+    String? nimNip,
+    String? email,
   }) async {
     try {
+      // Public /register only creates students; an admin creates any role through this endpoint.
       final response = await _dio.post<dynamic>(
-        '/api/auth/register',
+        '/api/v1/auth/admin/users',
         data: {
           'nama': nama,
           'username': username,
           'password': password,
           'role': role,
+          if (nimNip != null && nimNip.isNotEmpty) 'nim_nip': nimNip,
+          if (email != null && email.isNotEmpty) 'email': email,
         },
       );
 
@@ -381,7 +416,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               obscureText: obscurePassword,
               decoration: InputDecoration(
                 labelText: 'Password Baru *',
-                hintText: 'Minimal 6 karakter',
+                hintText: 'Minimal 8 karakter',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -396,15 +431,8 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                   },
                 ),
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Password tidak boleh kosong';
-                }
-                if (value.length < 6) {
-                  return 'Password minimal 6 karakter';
-                }
-                return null;
-              },
+              // The server's admin reset only checks the length (min 8).
+              validator: Validators.passwordLength,
             ),
           ),
           actions: [
@@ -436,7 +464,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -484,8 +512,9 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -494,7 +523,8 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -570,7 +600,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                 items: const [
                                   DropdownMenuItem(
                                     value: 'ALL',
-                                    child: Text('All'),
+                                    child: Text('Semua'),
                                   ),
                                   DropdownMenuItem(
                                     value: 'MAHASISWA',
@@ -602,18 +632,18 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE63946).withOpacity(0.1),
+                          color: AppColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.people, color: Color(0xFFE63946)),
+                            const Icon(Icons.people, color: AppColors.primary),
                             const SizedBox(width: 12),
                             Text(
                               'Total User: $_totalUsers',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFE63946),
+                                color: AppColors.primary,
                               ),
                             ),
                           ],
@@ -627,7 +657,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                       child: _isLoading
                           ? const Center(
                               child: CircularProgressIndicator(
-                                color: Color(0xFFE63946),
+                                color: AppColors.primary,
                               ),
                             )
                           : _error != null
@@ -678,9 +708,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                         style: TextStyle(color: Colors.white),
                                       ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFFE63946,
-                                        ),
+                                        backgroundColor: AppColors.primary,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
                                             8,
@@ -738,7 +766,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                                       ),
                                       child: Center(
                                         child: CircularProgressIndicator(
-                                          color: Color(0xFFE63946),
+                                          color: AppColors.primary,
                                         ),
                                       ),
                                     );
@@ -755,11 +783,12 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
   Widget _buildUserCard(Map<String, dynamic> user) {
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final username = user['username'] as String? ?? '-';
     final role = user['role'] as String? ?? 'MAHASISWA';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
@@ -841,7 +870,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                         role,
                         style: TextStyle(
                           color: roleColor,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -863,7 +892,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
 
           // Reset password button
           IconButton(
-            icon: const Icon(Icons.lock_reset, color: Color(0xFFE63946)),
+            icon: const Icon(Icons.lock_reset, color: AppColors.primary),
             tooltip: 'Reset Password',
             onPressed: () => _showResetPasswordDialog(user),
           ),

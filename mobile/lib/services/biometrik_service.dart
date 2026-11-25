@@ -1,9 +1,32 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import '../models/biometrik_status.dart';
+import '../utils/error_helper.dart';
 import 'api_client.dart';
 
 class BiometrikService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  BiometrikService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
+
+  /// Whether the logged-in user has a face enrolled (GET /api/v1/biometrik/status).
+  /// Throws an Exception with a displayable message when the status cannot be read.
+  Future<BiometrikStatus> getStatusBiometrikSaya() async {
+    try {
+      final Response<dynamic> response = await _dio.get<dynamic>(
+        '/api/v1/biometrik/status',
+      );
+
+      final body = response.data;
+      final status = BiometrikStatus.fromJson(body is Map ? body['data'] : null);
+      if (status == null) {
+        throw Exception('Status biometrik tidak dapat dibaca');
+      }
+      return status;
+    } on DioException catch (e) {
+      throw Exception(ErrorHelper.parseError(e));
+    }
+  }
 
   /// Integration Guide for Developers:
   /// To trigger the randomized active liveness flow using 'smart_liveliness_detection'

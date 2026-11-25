@@ -7,8 +7,13 @@ import '../services/api_client.dart';
 import '../services/notification_service.dart';
 import '../models/user.dart';
 import '../utils/error_helper.dart';
+import '../utils/jadwal_cache.dart';
+import '../utils/user_scoped_controllers.dart';
 import 'package:mobile/utils/logger.dart';
 import '../app/auth_middleware.dart';
+import 'auth_result.dart';
+
+export 'auth_result.dart';
 
 class AuthController extends GetxController {
   final RxBool isLoading = false.obs;
@@ -16,16 +21,22 @@ class AuthController extends GetxController {
   final FlutterSecureStorage _secureStorage;
   final Future<void> Function() _registerNotificationToken;
   final Future<void> Function() _unregisterNotificationToken;
+  final Future<void> Function(int? idUser) _clearNotificationInbox;
+  final Future<void> Function() _clearScheduleCache;
 
   AuthController({
     AuthService? authService, 
     FlutterSecureStorage? secureStorage,
     Future<void> Function()? registerNotificationToken,
     Future<void> Function()? unregisterNotificationToken,
+    Future<void> Function(int? idUser)? clearNotificationInbox,
+    Future<void> Function()? clearScheduleCache,
   }) : _authService = authService ?? AuthService(),
        _secureStorage = secureStorage ?? const FlutterSecureStorage(),
        _registerNotificationToken = registerNotificationToken ?? NotificationService.registerToken,
-       _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken;
+       _unregisterNotificationToken = unregisterNotificationToken ?? NotificationService.unregisterToken,
+       _clearNotificationInbox = clearNotificationInbox ?? NotificationService.clearInbox,
+       _clearScheduleCache = clearScheduleCache ?? JadwalCache.clear;
 
   Future<bool> login(String username, String password) async {
     if (username.isEmpty || password.isEmpty) {
@@ -55,6 +66,10 @@ class AuthController extends GetxController {
 
       final UserModel user = UserModel.fromMap(data);
 
+      // A restored or interrupted session can leave controllers from the previous user alive.
+      // Clear them before the new credentials can be read by any controller.
+      await deleteUserScopedControllers();
+
       // Simpan token dan data user baru
       await _secureStorage.write(key: 'token', value: token);
       if (refreshToken.isNotEmpty) {
@@ -65,7 +80,7 @@ class AuthController extends GetxController {
       await _secureStorage.write(key: 'nama', value: user.nama);
       await _secureStorage.write(key: 'role', value: user.role);
 
-      await AuthMiddleware.loadCredentials();
+      await AuthMiddleware.loadCredentials(storage: _secureStorage);
 
       debugLog(
         '✅ Saved new token for user: ${user.username} (ID: ${user.idUser})',
@@ -92,15 +107,16 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<bool> register(
+  /// Public registration: the server always creates a MAHASISWA.
+  Future<AuthResult> register(
     String username,
     String password,
-    String nama,
-    String role,
-    {String? nimNip}
-  ) async {
-    if (username.isEmpty || password.isEmpty || nama.isEmpty || role.isEmpty) {
-      return false;
+    String nama, {
+    String? nimNip,
+    String? email,
+  }) async {
+    if (username.isEmpty || password.isEmpty || nama.isEmpty) {
+      return const AuthResult.failure('Nama, username, dan password wajib diisi');
     }
     isLoading.value = true;
     try {
@@ -108,22 +124,19 @@ class AuthController extends GetxController {
         username: username,
         password: password,
         nama: nama,
-        role: role,
         nimNip: nimNip,
+        email: email,
       );
 
       if (result['status'] == 'success') {
-        return true;
+        return AuthResult.success(result['message']?.toString() ?? 'Akun berhasil dibuat');
       }
-      return false;
-    } on DioException catch (e) {
-      debugLog('❌ Register failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Registrasi Gagal');
-      return false;
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Registrasi gagal. Silakan coba lagi.',
+      );
     } catch (e) {
-      debugLog('❌ Register unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Registrasi Gagal');
-      return false;
+      debugLog('❌ Register failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
@@ -132,6 +145,8 @@ class AuthController extends GetxController {
   Future<bool> logout() async {
     try {
       final String? refreshToken = await _secureStorage.read(key: 'refresh_token');
+      // Whose inbox to clear: read before the user data is removed below
+      final int? idUser = int.tryParse(await _secureStorage.read(key: 'id_user') ?? '');
 
       // Call backend logout to clear FCM token server-side
       await _authService.logout(refreshToken: refreshToken);
@@ -153,6 +168,19 @@ class AuthController extends GetxController {
       // Unregister FCM token locally
       await _unregisterNotificationToken();
 
+      // The notification inbox is local to this phone: it must not outlive the session
+      await _clearNotificationInbox(idUser);
+
+      // Whoever logs in next on this phone must not see this user's Home, scans or profile, nor
+      // their saved schedule (the offline copy). The user is logged out already: a cache that cannot
+      // be cleared must not turn this into a failed logout.
+      await deleteUserScopedControllers();
+      try {
+        await _clearScheduleCache();
+      } catch (e) {
+        debugLog('Failed to clear the saved schedule: $e');
+      }
+
       return true;
     } catch (e) {
       debugLog('❌ Logout failed: $e');
@@ -161,44 +189,56 @@ class AuthController extends GetxController {
       isLoading.value = false;
     }
   }
-  Future<bool> forgotPassword(String username) async {
-    if (username.isEmpty) return false;
+
+  Future<AuthResult> forgotPassword(String username) async {
+    if (username.isEmpty) {
+      return const AuthResult.failure('Username atau email wajib diisi');
+    }
     isLoading.value = true;
     try {
       final result = await _authService.forgotPassword(username);
-      return result['status'] == 'success';
-    } on DioException catch (e) {
-      debugLog('❌ Forgot password failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Gagal Kirim Link');
-      return false;
+      if (result['status'] == 'success') {
+        return AuthResult.success(result['message']?.toString() ?? '');
+      }
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Terjadi kesalahan saat mengirim permintaan reset.',
+      );
     } catch (e) {
-      debugLog('❌ Forgot password unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Gagal Kirim Link');
-      return false;
+      debugLog('❌ Forgot password failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
   }
 
-  Future<bool> resetPassword(String token, String newPassword) async {
-    if (token.isEmpty || newPassword.isEmpty) return false;
+  Future<AuthResult> resetPassword(String token, String newPassword) async {
+    if (token.isEmpty || newPassword.isEmpty) {
+      return const AuthResult.failure('Token dan password baru wajib diisi');
+    }
     isLoading.value = true;
     try {
       final result = await _authService.resetPassword(
-        token: token, 
-        newPassword: newPassword
+        token: token,
+        newPassword: newPassword,
       );
-      return result['status'] == 'success';
-    } on DioException catch (e) {
-      debugLog('❌ Reset password failed: ${e.message}');
-      ErrorHelper.showError(e, title: 'Reset Password Gagal');
-      return false;
+      if (result['status'] == 'success') {
+        return AuthResult.success(result['message']?.toString() ?? '');
+      }
+      return AuthResult.failure(
+        result['message']?.toString() ?? 'Reset password gagal. Silakan coba lagi.',
+      );
     } catch (e) {
-      debugLog('❌ Reset password unexpected error: $e');
-      ErrorHelper.showError(e, title: 'Reset Password Gagal');
-      return false;
+      debugLog('❌ Reset password failed: $e');
+      return _failureOf(e);
     } finally {
       isLoading.value = false;
     }
+  }
+
+  AuthResult _failureOf(Object error) {
+    return AuthResult.failure(
+      ErrorHelper.parseError(error),
+      isConnectionError: ErrorHelper.isConnectionError(error),
+    );
   }
 }

@@ -2,12 +2,13 @@ import 'package:mobile/utils/logger.dart';
 import 'package:dio/dio.dart';
 
 import 'api_client.dart';
-import 'package:mobile/utils/logger.dart';
 
 
 
 class AuthService {
-  final Dio _dio = ApiClient.dio;
+  final Dio _dio;
+
+  AuthService({Dio? dio}) : _dio = dio ?? ApiClient.dio;
 
   Future<Map<String, dynamic>> login({
     required String username,
@@ -25,7 +26,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -39,26 +40,29 @@ class AuthService {
         requestOptions: response.requestOptions,
         response: response,
         type: DioExceptionType.badResponse,
-        message: 'Invalid response format from server',
+        message: 'Format respons server tidak valid.',
       );
     }
   }
 
+  /// Public registration. The server always creates a MAHASISWA, so no role is sent.
   Future<Map<String, dynamic>> register({
     required String username,
     required String password,
     required String nama,
-    required String role,
     String? nimNip,
+    String? email,
   }) async {
     final Map<String, dynamic> data = {
       'username': username,
       'password': password,
       'nama': nama,
-      'role': role,
     };
     if (nimNip != null && nimNip.isNotEmpty) {
       data['nim_nip'] = nimNip;
+    }
+    if (email != null && email.isNotEmpty) {
+      data['email'] = email;
     }
 
     final Response<dynamic> response = await _dio.post<dynamic>(
@@ -73,7 +77,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -92,7 +96,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -115,7 +119,25 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
+    );
+  }
+
+  /// Turns push notifications on or off for the logged-in user (the server stops sending to them).
+  Future<Map<String, dynamic>> updatePushPreference({required bool enabled}) async {
+    final Response<dynamic> response = await _dio.put<dynamic>(
+      '/api/v1/auth/preferences',
+      data: <String, dynamic>{'push_notifications_enabled': enabled},
+    );
+
+    if (response.data is Map<String, dynamic>) {
+      return response.data as Map<String, dynamic>;
+    }
+    throw DioException(
+      requestOptions: response.requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -142,7 +164,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 
@@ -162,7 +184,7 @@ class AuthService {
       requestOptions: response.requestOptions,
       response: response,
       type: DioExceptionType.badResponse,
-      message: 'Invalid response format from server',
+      message: 'Format respons server tidak valid.',
     );
   }
 }

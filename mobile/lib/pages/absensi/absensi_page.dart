@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../models/kelas_hari_ini.dart';
 import '../../services/akademik_service.dart';
+import '../../utils/attendance_status.dart';
+import '../../utils/date_helper.dart';
+import '../../utils/error_helper.dart';
 import '../biometrik/biometrik_verification_page.dart';
+import '../common/error_retry_view.dart';
 import '../../controllers/anomali_controller.dart';
+import '../../utils/app_theme.dart';
 
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
@@ -26,7 +32,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
   String? _filterType; // null, 'AMAN', 'KRITIS'
   final TextEditingController _searchController = TextEditingController();
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
 
   @override
   void initState() {
@@ -75,7 +81,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
       if (_filterDate != null) {
         matchDate = sessions.any((session) {
           try {
-            final sessionDate = DateTime.parse(session['tanggal'].toString()).toLocal();
+            final sessionDate = toWib(DateTime.parse(session['tanggal'].toString()));
             return sessionDate.year == _filterDate!.year &&
                 sessionDate.month == _filterDate!.month &&
                 sessionDate.day == _filterDate!.day;
@@ -90,7 +96,11 @@ class _AbsensiPageState extends State<AbsensiPage> {
   }
 
   Future<void> _loadHistory() async {
-    setState(() => _isLoading = true);
+    // Clear the previous error first, otherwise a successful retry would still show it
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final data = await _akademikService.getAbsensiKuHistory();
@@ -99,14 +109,16 @@ class _AbsensiPageState extends State<AbsensiPage> {
       } catch (e) {
         debugPrint('Gagal memuat setting anomali: $e');
       }
+      if (!mounted) return;
       setState(() {
         _historyData = data;
         _threshold = _anomaliController.thresholdJarangHadir.value;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -122,12 +134,13 @@ class _AbsensiPageState extends State<AbsensiPage> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -169,21 +182,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 60, color: Colors.red.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Gagal memuat data',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 8),
-            TextButton(onPressed: _loadHistory, child: const Text('Coba Lagi')),
-          ],
-        ),
-      );
+      return ErrorRetryView(message: _errorMessage!, onRetry: _loadHistory);
     }
 
     if (_historyData.isEmpty) {
@@ -285,7 +284,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
               _buildModernChip(
                 label: _filterDate == null
                     ? 'Tanggal Sesi'
-                    : '${_filterDate!.day.toString().padLeft(2, '0')}/${_filterDate!.month.toString().padLeft(2, '0')}/${_filterDate!.year}',
+                    : formatTanggalAngka(_filterDate!),
                 icon: Icons.calendar_today_outlined,
                 isActive: _filterDate != null,
                 primaryColor: primaryColor,
@@ -568,7 +567,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ],
                   const SizedBox(height: 6),
                   Text(
-                    '${stats?['total_hadir'] ?? 0}/${stats?['total_sesi'] ?? 0} sesi hadir',
+                    sesiHadirText(stats),
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                   ),
                 ],
@@ -596,6 +595,39 @@ class _AbsensiPageState extends State<AbsensiPage> {
   }
 }
 
+/// A history row carries neither `require_face` nor the geofence of its session, so the active
+/// session is looked up among today's classes to open the right flow (GPS-only or face). When it is
+/// not found (e.g. offline) the face flow, the one this button always used, opens.
+Future<void> _openAbsenSesi(int idSesiAbsensi) async {
+  Get.dialog(
+    const Center(child: CircularProgressIndicator()),
+    barrierDismissible: false,
+  );
+
+  KelasHariIniModel? found;
+  try {
+    final (kelasList, _) = await AkademikService().getKelasHariIni();
+    for (final kelas in kelasList) {
+      if (kelas.activeSesiAbsensi?.idSesiAbsensi == idSesiAbsensi) {
+        found = kelas;
+        break;
+      }
+    }
+  } catch (e) {
+    debugPrint('Gagal mencari sesi absensi: $e');
+  }
+
+  Get.back(); // close the loading dialog
+
+  final KelasHariIniModel? selected = found;
+  Get.to(
+    () => selected != null
+        ? BiometrikAbsenPage.forKelas(selected)
+        : BiometrikAbsenPage(idSesiAbsensi: idSesiAbsensi),
+    arguments: {'id_sesi_absensi': idSesiAbsensi},
+  );
+}
+
 class AbsensiDetailPage extends StatelessWidget {
   final String kelasName;
   final int idKelas;
@@ -612,7 +644,7 @@ class AbsensiDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
 
     return Scaffold(
       backgroundColor: primaryRed,
@@ -622,12 +654,13 @@ class AbsensiDetailPage extends StatelessWidget {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
+                    onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 8),
                   const Expanded(
@@ -700,6 +733,7 @@ class AbsensiDetailPage extends StatelessWidget {
                           ],
                         ),
                       ),
+                    if (stats != null) _buildStatsBreakdown(),
 
                     const SizedBox(height: 15),
 
@@ -751,16 +785,56 @@ class AbsensiDetailPage extends StatelessWidget {
     );
   }
 
+  /// Telat / Izin / Sakit of the class, only the ones that happened ("Hadir" above includes telat).
+  Widget _buildStatsBreakdown() {
+    int count(String key) => (stats?[key] as num?)?.toInt() ?? 0;
+    final List<(String, int)> parts = <(String, int)>[
+      ('TELAT', count('total_telat')),
+      ('IZIN', count('total_izin')),
+      ('SAKIT', count('total_sakit')),
+    ].where(((String, int) part) => part.$2 > 0).toList();
+    if (parts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          for (final (String status, int total) in parts)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  attendanceStatusIcon(status),
+                  size: 14,
+                  color: attendanceStatusColor(status),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${attendanceStatusLabel(status)}: $total',
+                  style: TextStyle(fontSize: 12, color: attendanceStatusColor(status)),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSessionItem(Map<String, dynamic> session) {
-    final bool hadir = session['hadir'] == true;
-    final Color statusColor = hadir ? Colors.green : Colors.red;
-    final String statusText = hadir ? 'Hadir' : 'Tidak Hadir';
+    final String? status = attendanceStatusOf(session);
+    // Open flag of the session (status_sesi); an older answer only has is_active
+    final bool sessionOpen = session['status_sesi'] == true || session['is_active'] == true;
+    final Color statusColor = attendanceStatusColor(status);
+    final String statusText = attendanceStatusLabel(status, sessionOpen: sessionOpen);
     final int? idSesiAbsensi = _readSessionId(session);
     final bool isActiveSession = session['is_active'] == true;
+    final String keterangan = session['keterangan']?.toString().trim() ?? '';
 
     DateTime? tanggal;
     try {
-      tanggal = DateTime.parse(session['tanggal'].toString()).toLocal();
+      tanggal = DateTime.parse(session['tanggal'].toString());
     } catch (_) {}
 
     return Padding(
@@ -768,7 +842,7 @@ class AbsensiDetailPage extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            hadir ? Icons.check_circle : Icons.cancel,
+            attendanceStatusIcon(status),
             color: statusColor,
             size: 24,
           ),
@@ -778,23 +852,34 @@ class AbsensiDetailPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tanggal != null ? _formatDate(tanggal) : '-',
+                  tanggal != null ? formatTanggal(tanggal) : '-',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     fontWeight: FontWeight.w500,
                     fontSize: 13,
                   ),
                 ),
-                if (hadir && session['waktu_absen'] != null)
+                if (isPresentAttendance(status) && session['waktu_absen'] != null)
                   Text(
                     'Absen: ${_formatTime(session['waktu_absen'].toString())}',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                if (keterangan.isNotEmpty)
+                  Text(
+                    keterangan,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
               ],
             ),
           ),
           _buildSessionAction(
-            hadir: hadir,
+            hasRecord: status != null,
             isActiveSession: isActiveSession,
             statusColor: statusColor,
             statusText: statusText,
@@ -806,13 +891,13 @@ class AbsensiDetailPage extends StatelessWidget {
   }
 
   Widget _buildSessionAction({
-    required bool hadir,
+    required bool hasRecord,
     required bool isActiveSession,
     required Color statusColor,
     required String statusText,
     required int? idSesiAbsensi,
   }) {
-    final Color primaryRed = const Color(0xFFE63946);
+    final Color primaryRed = AppColors.primary;
     final statusBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
@@ -829,7 +914,8 @@ class AbsensiDetailPage extends StatelessWidget {
       ),
     );
 
-    if (hadir || !isActiveSession || idSesiAbsensi == null) {
+    // Any status means the dosen or the student already settled this session: no check-in button
+    if (hasRecord || !isActiveSession || idSesiAbsensi == null) {
       return statusBadge;
     }
 
@@ -843,12 +929,7 @@ class AbsensiDetailPage extends StatelessWidget {
         SizedBox(
           height: 32,
           child: OutlinedButton.icon(
-            onPressed: () {
-              Get.to(
-                () => BiometrikAbsenPage(idSesiAbsensi: selectedSesiId),
-                arguments: {'id_sesi_absensi': selectedSesiId},
-              );
-            },
+            onPressed: () => _openAbsenSesi(selectedSesiId),
             icon: const Icon(Icons.face_retouching_natural, size: 16),
             label: const Text('Absen'),
             style: OutlinedButton.styleFrom(
@@ -880,16 +961,9 @@ class AbsensiDetailPage extends StatelessWidget {
     return null;
   }
 
-  String _formatDate(DateTime date) {
-    final days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return '${days[date.weekday % 7]}, ${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
   String _formatTime(String isoTime) {
     try {
-      final dt = DateTime.parse(isoTime).toLocal();
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return formatJam(DateTime.parse(isoTime));
     } catch (_) {
       return '-';
     }

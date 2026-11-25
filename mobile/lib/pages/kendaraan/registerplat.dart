@@ -1,9 +1,17 @@
-import 'dart:io';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:mobile/services/kendaraan_service.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile/app/routes.dart';
+import 'package:mobile/services/kendaraan_service.dart';
+import 'package:mobile/utils/input_formatters.dart';
+import 'package:mobile/utils/kendaraan_helper.dart';
+import 'package:mobile/utils/validators.dart';
+
+import 'widgets/foto_upload_field.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 // Mengubah StatelessWidget menjadi StatefulWidget
 class RegisterPlatPage extends StatefulWidget {
@@ -14,6 +22,8 @@ class RegisterPlatPage extends StatefulWidget {
 }
 
 class _RegisterPlatPageState extends State<RegisterPlatPage> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
   // Controllers
   final TextEditingController platController = TextEditingController();
   final TextEditingController namaKendaraanController = TextEditingController();
@@ -24,85 +34,19 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
   String? _belakangImagePath;
   String? _stnkImagePath;
 
+  // Photos only show their "wajib" error once the user tried to submit
+  bool _submitted = false;
+
   // Loading state
   bool _isLoading = false;
 
   final ImagePicker _picker = ImagePicker();
 
-  // Show image source selection bottom sheet
-  Future<void> _showImageSourceSheet(String type) async {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Pilih Sumber Foto',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE63946).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.camera_alt, color: Color(0xFFE63946)),
-                  ),
-                  title: const Text('Kamera'),
-                  subtitle: const Text('Ambil foto langsung'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickImage(type, ImageSource.camera);
-                  },
-                ),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE63946).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.photo_library, color: Color(0xFFE63946)),
-                  ),
-                  title: const Text('Galeri'),
-                  subtitle: const Text('Pilih dari galeri'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickImage(type, ImageSource.gallery);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   // Pick image from gallery or camera
-  Future<void> _pickImage(String type, ImageSource source) async {
+  Future<void> _pickImage(String type) async {
+    final ImageSource? source = await showFotoSourceSheet(context);
+    if (source == null) return;
+
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -111,7 +55,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
         imageQuality: 85,
       );
 
-      if (image != null) {
+      if (image != null && mounted) {
         setState(() {
           if (type.contains('Depan')) {
             _depanImagePath = image.path;
@@ -124,51 +68,42 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
           }
         });
       }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error memilih gambar: $e')));
+    } catch (_) {
+      _showSnackBar('Gagal memilih foto. Silakan coba lagi.', isError: true);
     }
   }
 
-  void _showErrorSnackBar(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Center(
-          child: Text(
-            'Data Tidak Lengkap, Silahkan Melakukan Pengisian Ulang',
-            style: TextStyle(
-              backgroundColor: Color.fromARGB(255, 255, 17, 0),
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? AppColors.danger : null,
+          duration: const Duration(seconds: 4),
         ),
-        backgroundColor: const Color.fromARGB(255, 255, 0, 0),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(
-          bottom: screenHeight * 0.85,
-          right: 40,
-          left: 40,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
+      );
+  }
+
+  String? _fotoError(String? path) {
+    return _submitted && path == null ? 'Foto wajib dipilih' : null;
   }
 
   // Submit form ke backend
-  Future<void> _onSubmit(BuildContext context) async {
-    // Validasi input
-    if (platController.text.trim().isEmpty ||
-        namaKendaraanController.text.trim().isEmpty ||
-        _depanImagePath == null ||
-        _sampingImagePath == null ||
-        _belakangImagePath == null ||
-        _stnkImagePath == null) {
-      _showErrorSnackBar(context);
+  Future<void> _onSubmit() async {
+    FocusScope.of(context).unfocus();
+
+    final bool formValid = _formKey.currentState?.validate() ?? false;
+    final bool photosValid =
+        _depanImagePath != null &&
+        _sampingImagePath != null &&
+        _belakangImagePath != null &&
+        _stnkImagePath != null;
+    setState(() => _submitted = true);
+
+    if (!formValid || !photosValid) {
+      _showSnackBar('Lengkapi data yang ditandai terlebih dahulu.', isError: true);
       return;
     }
 
@@ -179,7 +114,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
     try {
       // Call API untuk register kendaraan
       await KendaraanService.registerKendaraan(
-        platNomor: platController.text.trim(),
+        platNomor: Validators.normalizePlat(platController.text),
         namaKendaraan: namaKendaraanController.text.trim(),
         fotoKendaraanPaths: [
           _depanImagePath!,
@@ -188,6 +123,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
         ],
         fotoSTNKPath: _stnkImagePath!,
       );
+      if (!mounted) return;
 
       setState(() {
         _isLoading = false;
@@ -201,24 +137,11 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
-
-      String errorMessage = e.toString();
-      if (errorMessage.toLowerCase().contains('limit') || errorMessage.toLowerCase().contains('maximum')) {
-        errorMessage = 'Maaf, Anda telah mencapai batas pendaftaran maksimal 3 kendaraan.';
-      } else {
-        errorMessage = 'Gagal mendaftarkan kendaraan: $e';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      _showSnackBar(kendaraanErrorMessage(e), isError: true);
     }
   }
 
@@ -229,10 +152,35 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
     super.dispose();
   }
 
+  InputDecoration _fieldDecoration({
+    required String label,
+    required String hint,
+    required Color focusedColor,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      errorMaxLines: 2,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.grey, width: 1.0),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.grey, width: 1.0),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: focusedColor, width: 2.0),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
-    const Color focusedBorderColor = Color(0xFFFF6B6B);
+    const Color primaryColor = AppColors.primary;
+    const Color focusedBorderColor = AppColors.primary;
 
     return Scaffold(
       body: Stack(
@@ -246,8 +194,9 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
             child: Row(
               children: [
                 IconButton(
+                  tooltip: 'Kembali',
                   icon: const Icon(
-                    Icons.arrow_back_ios_new,
+                    appBackIcon,
                     color: Colors.white,
                     size: 20.0,
                   ),
@@ -258,7 +207,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                   },
                 ),
                 const Text(
-                  'Register Plat',
+                  'Daftarkan Plat',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -282,101 +231,129 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
               ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'Register Your Plat',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Lengkapi data kendaraan Anda',
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Illustration
-                    Center(
-                      child: Image.asset('assets/images/Illustration.png'),
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Form Fields
-                    _buildTextField(
-                      'Nama Kendaraan (e.g., HONDA VARIO)',
-                      focusedBorderColor,
-                      namaKendaraanController,
-                      keyboardType: TextInputType.text,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildTextField(
-                      'Nomor Plat',
-                      focusedBorderColor,
-                      platController,
-                      keyboardType: TextInputType.text,
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Image upload fields with preview
-                    _buildImageUploadField(
-                      'Foto Motor (Tampak Depan)',
-                      _depanImagePath,
-                      'Depan',
-                    ),
-                    const SizedBox(height: 15),
-                    _buildImageUploadField(
-                      'Foto Motor (Tampak Samping)',
-                      _sampingImagePath,
-                      'Samping',
-                    ),
-                    const SizedBox(height: 15),
-                    _buildImageUploadField(
-                      'Foto Motor (Tampak Belakang)',
-                      _belakangImagePath,
-                      'Belakang',
-                    ),
-                    const SizedBox(height: 15),
-                    _buildImageUploadField(
-                      'Foto STNK',
-                      _stnkImagePath,
-                      'STNK',
-                    ),
-                    const SizedBox(height: 40),
-
-                    // --- Tombol Daftar ---
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : () => _onSubmit(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'Daftarkan Plat Anda',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
                         ),
-                        child: _isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
-                            : const Text(
-                                'Daftarkan',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Lengkapi data kendaraan Anda',
+                        style: TextStyle(fontSize: 14, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Illustration
+                      Center(
+                        child: Image.asset('assets/images/Illustration.png'),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // Form Fields
+                      TextFormField(
+                        controller: namaKendaraanController,
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.words,
+                        textInputAction: TextInputAction.next,
+                        decoration: _fieldDecoration(
+                          label: 'Nama Kendaraan',
+                          hint: 'Contoh: Honda Vario',
+                          focusedColor: focusedBorderColor,
+                        ),
+                        validator: Validators.namaKendaraan,
+                      ),
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: platController,
+                        keyboardType: TextInputType.text,
+                        textCapitalization: TextCapitalization.characters,
+                        textInputAction: TextInputAction.done,
+                        autocorrect: false,
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[A-Za-z0-9 ]'),
+                          ),
+                          const UpperCaseTextFormatter(),
+                          LengthLimitingTextInputFormatter(12),
+                        ],
+                        decoration: _fieldDecoration(
+                          label: 'Nomor Plat',
+                          hint: 'Contoh: D 1234 ABC',
+                          focusedColor: focusedBorderColor,
+                        ),
+                        validator: Validators.platNomor,
+                      ),
+                      const SizedBox(height: 15),
+
+                      // Image upload fields with preview
+                      FotoUploadField(
+                        label: 'Foto Motor (Tampak Depan)',
+                        imagePath: _depanImagePath,
+                        errorText: _fotoError(_depanImagePath),
+                        onTap: () => _pickImage('Depan'),
+                      ),
+                      const SizedBox(height: 15),
+                      FotoUploadField(
+                        label: 'Foto Motor (Tampak Samping)',
+                        imagePath: _sampingImagePath,
+                        errorText: _fotoError(_sampingImagePath),
+                        onTap: () => _pickImage('Samping'),
+                      ),
+                      const SizedBox(height: 15),
+                      FotoUploadField(
+                        label: 'Foto Motor (Tampak Belakang)',
+                        imagePath: _belakangImagePath,
+                        errorText: _fotoError(_belakangImagePath),
+                        onTap: () => _pickImage('Belakang'),
+                      ),
+                      const SizedBox(height: 15),
+                      FotoUploadField(
+                        label: 'Foto STNK',
+                        imagePath: _stnkImagePath,
+                        errorText: _fotoError(_stnkImagePath),
+                        onTap: () => _pickImage('STNK'),
+                      ),
+                      const SizedBox(height: 40),
+
+                      // --- Tombol Daftar ---
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _onSubmit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: _isLoading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Text(
+                                  'Daftarkan',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -385,126 +362,21 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
       ),
     );
   }
-
-  Widget _buildTextField(
-    String hintText,
-    Color focusedColor,
-    TextEditingController controller, {
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        hintText: hintText,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 15,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.grey, width: 1.0),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.grey, width: 1.0),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: focusedColor, width: 2.0),
-        ),
-      ),
-    );
-  }
-
-  // Build image upload field with preview thumbnail
-  Widget _buildImageUploadField(
-    String label,
-    String? imagePath,
-    String type,
-  ) {
-    const Color primaryColor = Color(0xFFE63946);
-    
-    return GestureDetector(
-      onTap: () => _showImageSourceSheet(type),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: imagePath != null ? primaryColor : Colors.grey,
-            width: imagePath != null ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          color: imagePath != null ? primaryColor.withOpacity(0.05) : null,
-        ),
-        child: Row(
-          children: [
-            // Thumbnail preview or icon
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.grey[200],
-              ),
-              child: imagePath != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(imagePath),
-                        fit: BoxFit.cover,
-                        width: 60,
-                        height: 60,
-                      ),
-                    )
-                  : Icon(
-                      Icons.add_a_photo,
-                      size: 28,
-                      color: Colors.grey[500],
-                    ),
-            ),
-            const SizedBox(width: 12),
-            // Label and status
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: imagePath != null ? primaryColor : Colors.grey[700],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    imagePath != null
-                        ? '✓ Foto terpilih'
-                        : 'Tap untuk memilih foto',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: imagePath != null ? Colors.green : Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Action icon
-            Icon(
-              imagePath != null ? Icons.check_circle : Icons.folder_open,
-              color: imagePath != null ? Colors.green : Colors.grey,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // --- SUCCESS PAGE ---
+// Shared by registering a plate and by resubmitting a rejected one (the copy is configurable).
 class RegisterPlatBerhasilPage extends StatefulWidget {
-  const RegisterPlatBerhasilPage({super.key});
+  final String appBarTitle;
+  final String title;
+  final String message;
+
+  const RegisterPlatBerhasilPage({
+    super.key,
+    this.appBarTitle = 'Daftarkan Plat',
+    this.title = 'Pendaftaran Plat Berhasil!',
+    this.message = 'Pengajuan Anda sedang diproses',
+  });
 
   @override
   State<RegisterPlatBerhasilPage> createState() =>
@@ -513,32 +385,44 @@ class RegisterPlatBerhasilPage extends StatefulWidget {
 
 class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
   int _countdown = 3;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _startCountdown();
-  }
-
-  void _startCountdown() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && _countdown > 1) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_countdown > 1) {
         setState(() {
           _countdown--;
         });
-        _startCountdown();
-      } else if (mounted && _countdown == 1) {
-        Get.offAllNamed(AppRoutes.home);
-        Future.delayed(const Duration(milliseconds: 500), () {
-          Get.toNamed(AppRoutes.userHistoriPengajuan);
-        });
+      } else {
+        timer.cancel();
+        _goToHistory(delay: const Duration(milliseconds: 500));
       }
     });
   }
 
   @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _goToHistory({required Duration delay}) {
+    _timer?.cancel();
+    Get.offAllNamed(AppRoutes.home);
+    Future.delayed(delay, () {
+      Get.toNamed(AppRoutes.userHistoriPengajuan);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFFC5F57);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       body: Stack(
@@ -551,11 +435,17 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
             padding: const EdgeInsets.only(top: 40, left: 10),
             child: Row(
               children: [
-                const Icon(Icons.arrow_back, color: Colors.white),
-                const SizedBox(width: 10),
-                const Text(
-                  'Register Plat',
-                  style: TextStyle(
+                IconButton(
+                  tooltip: 'Kembali ke beranda',
+                  icon: const Icon(appBackIcon, color: Colors.white),
+                  onPressed: () {
+                    _timer?.cancel();
+                    Get.offAllNamed(AppRoutes.home);
+                  },
+                ),
+                Text(
+                  widget.appBarTitle,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -606,10 +496,10 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
                     const SizedBox(height: 20),
 
                     // --- Teks Berhasil ---
-                    const Text(
-                      'Register Plat Berhasil!!',
+                    Text(
+                      widget.title,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: primaryColor,
@@ -617,10 +507,10 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    const Text(
-                      'Pengajuan Anda sedang diproses',
+                    Text(
+                      widget.message,
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
                     ),
                     const SizedBox(height: 40),
 
@@ -631,7 +521,7 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
+                        color: primaryColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: primaryColor, width: 1),
                       ),
@@ -644,12 +534,14 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
                             size: 20,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Menuju histori pengajuan dalam $_countdown detik...',
-                            style: const TextStyle(
-                              color: primaryColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
+                          Flexible(
+                            child: Text(
+                              'Menuju histori pengajuan dalam $_countdown detik...',
+                              style: const TextStyle(
+                                color: primaryColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ],
@@ -659,12 +551,8 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
 
                     // --- Tombol Manual ke History ---
                     TextButton(
-                      onPressed: () {
-                        Get.offAllNamed(AppRoutes.home);
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          Get.toNamed(AppRoutes.userHistoriPengajuan);
-                        });
-                      },
+                      onPressed: () =>
+                          _goToHistory(delay: const Duration(milliseconds: 300)),
                       child: const Text(
                         'Lihat Sekarang →',
                         style: TextStyle(

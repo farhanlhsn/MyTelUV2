@@ -1,13 +1,37 @@
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
-const { sendPushNotification } = require('../utils/firebase');
+const { sendUserNotification } = require('../utils/firebase');
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
+const { normalizePlate } = require('../utils/plate');
+
+// Best effort: removing superseded files from R2 must never fail (or delay) the request.
+const discardFiles = (urls) => {
+    for (const url of urls.filter(Boolean)) {
+        (async () => {
+            try {
+                await deleteFile(url);
+            } catch (error) {
+                console.error(`Failed to delete superseded file: ${error.message}`);
+            }
+        })();
+    }
+};
 
 exports.registerKendaraan = asyncHandler(async (req, res) => {
-    const { plat_nomor, nama_kendaraan } = req.body;
+    const { nama_kendaraan } = req.body;
+    // The Zod schema already normalises the plate; do it here as well so uniqueness is always checked on one canonical form
+    const plat_nomor = normalizePlate(req.body.plat_nomor);
 
     const id_user = req.user.id_user;
+
+    if (!plat_nomor) {
+        return res.status(400).json({
+            status: "error",
+            message: "Plat nomor tidak valid"
+        });
+    }
 
     // Ambil files dari req.files object
     const fotoKendaraanFiles = req.files.fotoKendaraan || [];
@@ -18,7 +42,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (!fotoKendaraanFiles || fotoKendaraanFiles.length < 3) {
         return res.status(400).json({
             status: "error",
-            message: `Exactly 3 fotoKendaraan are required (you uploaded ${fotoKendaraanFiles.length})`
+            message: `Wajib melampirkan tepat 3 foto kendaraan (Anda mengunggah ${fotoKendaraanFiles.length})`
         });
     }
 
@@ -26,7 +50,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (!fotoSTNKFile) {
         return res.status(400).json({
             status: "error",
-            message: "fotoSTNK is required"
+            message: "Foto STNK wajib dilampirkan"
         });
     }
 
@@ -35,12 +59,16 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         where: { plat_nomor }
     });
 
-    if (existingKendaraan) {
+    if (existingKendaraan && !existingKendaraan.deletedAt) {
         return res.status(409).json({
             status: "error",
-            message: "Plat nomor already registered"
+            message: "Plat nomor sudah terdaftar"
         });
     }
+
+    // plat_nomor is unique at the database level, so a plate whose row was soft-deleted can only be re-registered by
+    // reusing that row (see the save step below)
+    const reusableKendaraan = existingKendaraan || null;
 
     // Cek batas maksimal kendaraan per user (kecuali yang ditolak/rejected)
     const maxKendaraan = parseInt(process.env.MAX_KENDARAAN_PER_USER) || 3;
@@ -57,7 +85,7 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
     if (userKendaraanCount >= maxKendaraan) {
         return res.status(400).json({
             status: "error",
-            message: `User has reached the maximum limit of ${maxKendaraan} vehicles`
+            message: `Pengguna sudah mencapai batas maksimal ${maxKendaraan} kendaraan`
         });
     }
 
@@ -73,9 +101,10 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             );
             uploadedFotoKendaraan.push(result.fileUrl);
         } catch (error) {
+            console.error('Failed to upload fotoKendaraan:', error.message);
             return res.status(500).json({
                 status: "error",
-                message: `Failed to upload fotoKendaraan: ${error.message}`
+                message: GENERIC_SERVER_ERROR
             });
         }
     }
@@ -91,31 +120,46 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
         );
         uploadedFotoSTNK = result.fileUrl;
     } catch (error) {
+        console.error('Failed to upload fotoSTNK:', error.message);
         return res.status(500).json({
             status: "error",
-            message: `Failed to upload fotoSTNK: ${error.message}`
+            message: GENERIC_SERVER_ERROR
         });
     }
 
     // Simpan ke database
+    let kendaraan;
     try {
-        const kendaraan = await prisma.kendaraan.create({
-            data: {
-                plat_nomor,
-                nama_kendaraan,
-                id_user: id_user, // Menggunakan id_user dari token (req.user)
-                fotoKendaraan: uploadedFotoKendaraan,
-                fotoSTNK: uploadedFotoSTNK,
-                statusVerif: false,
-                status_pengajuan: 'MENUNGGU'
-            },
-        });
-
-        res.status(201).json({
-            status: "success",
-            message: "Kendaraan registered successfully",
-            data: kendaraan
-        });
+        if (reusableKendaraan) {
+            // Reuse the soft-deleted row: new owner, back to MENUNGGU, no feedback. The deletedAt filter makes a
+            // concurrent second registration of the same plate fail (P2025) instead of taking the row over twice.
+            kendaraan = await prisma.kendaraan.update({
+                where: { id_kendaraan: reusableKendaraan.id_kendaraan, deletedAt: { not: null } },
+                data: {
+                    id_user, // Menggunakan id_user dari token (req.user)
+                    nama_kendaraan,
+                    fotoKendaraan: uploadedFotoKendaraan,
+                    fotoSTNK: uploadedFotoSTNK,
+                    statusVerif: false,
+                    status_pengajuan: 'MENUNGGU',
+                    feedback: null,
+                    deletedAt: null,
+                    createdAt: new Date() // the admin pending queue is ordered by createdAt, newest first
+                }
+            });
+        } else {
+            kendaraan = await prisma.kendaraan.create({
+                data: {
+                    plat_nomor,
+                    nama_kendaraan,
+                    id_user: id_user, // Menggunakan id_user dari token (req.user)
+                    fotoKendaraan: uploadedFotoKendaraan,
+                    fotoSTNK: uploadedFotoSTNK,
+                    statusVerif: false,
+                    status_pengajuan: 'MENUNGGU'
+                },
+            });
+        }
     } catch (error) {
         // Cleanup uploaded files on database failure
         for (const fotoUrl of uploadedFotoKendaraan) {
@@ -131,11 +175,30 @@ exports.registerKendaraan = asyncHandler(async (req, res) => {
             console.error(`Failed to cleanup foto STNK: ${cleanupError.message}`);
         }
 
+        // Lost a race for the same plate (unique violation, or the soft-deleted row was reused first)
+        if (error.code === 'P2002' || error.code === 'P2025') {
+            return res.status(409).json({
+                status: "error",
+                message: "Plat nomor sudah terdaftar"
+            });
+        }
+
+        console.error('Failed to save kendaraan:', error.message);
         return res.status(500).json({
             status: "error",
-            message: `Failed to save kendaraan: ${error.message}`
+            message: GENERIC_SERVER_ERROR
         });
     }
+
+    if (reusableKendaraan) {
+        discardFiles([...(reusableKendaraan.fotoKendaraan || []), reusableKendaraan.fotoSTNK]);
+    }
+
+    res.status(201).json({
+        status: "success",
+        message: "Kendaraan berhasil didaftarkan",
+        data: kendaraan
+    });
 });
 
 exports.getKendaraan = asyncHandler(async (req, res) => {
@@ -160,7 +223,7 @@ exports.getKendaraan = asyncHandler(async (req, res) => {
             createdAt: 'desc'
         }
     });
-    res.status(200).json({ status: "success", message: "Kendaraan retrieved successfully", data: kendaraan });
+    res.status(200).json({ status: "success", message: "Data kendaraan berhasil diambil", data: kendaraan });
 });
 
 exports.deleteKendaraan = asyncHandler(async (req, res) => {
@@ -172,7 +235,16 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
         where: { id_kendaraan: parseInt(id_kendaraan), id_user, deletedAt: null }
     });
     if (!kendaraan || kendaraan.deletedAt) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
+    }
+
+    // Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus. Ini menjamin bahwa menolak permintaan hapus
+    // (rejectKendaraan) selalu mengembalikan kendaraan ke keadaan DISETUJUI yang benar.
+    if (kendaraan.status_pengajuan !== 'DISETUJUI') {
+        return res.status(409).json({
+            status: "error",
+            message: "Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus"
+        });
     }
 
     // Set status to MENUNGGU dengan format feedback khusus untuk permintaan penghapusan
@@ -185,7 +257,7 @@ exports.deleteKendaraan = asyncHandler(async (req, res) => {
         }
     });
 
-    res.status(200).json({ status: "success", message: "Kendaraan deletion request submitted successfully" });
+    res.status(200).json({ status: "success", message: "Permintaan penghapusan kendaraan berhasil diajukan" });
 });
 
 exports.verifyKendaraan = asyncHandler(async (req, res) => {
@@ -194,11 +266,11 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
         where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user), deletedAt: null }
     });
     if (!kendaraan) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
     }
 
     if (kendaraan.statusVerif) {
-        return res.status(400).json({ status: "error", message: "Kendaraan already verified" });
+        return res.status(400).json({ status: "error", message: "Kendaraan sudah diverifikasi" });
     }
 
     // Jika ini adalah permintaan hapus kendaraan
@@ -213,23 +285,18 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
         // Kirim notifikasi penghapusan disetujui ke user
         try {
-            const user = await prisma.user.findUnique({
-                where: { id_user: parseInt(id_user) },
-                select: { fcm_token: true }
-            });
-            if (user?.fcm_token) {
-                await sendPushNotification(
-                    user.fcm_token,
-                    '🗑️ Kendaraan Dihapus',
-                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} telah disetujui admin.`,
-                    { type: 'KENDARAAN_DELETED', id_kendaraan: id_kendaraan.toString() }
-                );
-            }
+            // Skipped by the helper when the user turned push off or the account is deactivated
+            await sendUserNotification(
+                parseInt(id_user),
+                '🗑️ Kendaraan Dihapus',
+                `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} telah disetujui admin.`,
+                { type: 'KENDARAAN_DELETED', id_kendaraan: id_kendaraan.toString() }
+            );
         } catch (notifError) {
             console.error('Failed to send notification:', notifError.message);
         }
 
-        return res.status(200).json({ status: "success", message: "Kendaraan deletion approved and deleted successfully", data: updatedKendaraan });
+        return res.status(200).json({ status: "success", message: "Penghapusan kendaraan disetujui dan kendaraan berhasil dihapus", data: updatedKendaraan });
     }
 
     const updatedKendaraan = await prisma.kendaraan.update({
@@ -243,23 +310,18 @@ exports.verifyKendaraan = asyncHandler(async (req, res) => {
 
     // Send push notification to user
     try {
-        const user = await prisma.user.findUnique({
-            where: { id_user: parseInt(id_user) },
-            select: { fcm_token: true }
-        });
-        if (user?.fcm_token) {
-            await sendPushNotification(
-                user.fcm_token,
-                '✅ Kendaraan Disetujui',
-                `Kendaraan ${kendaraan.plat_nomor} (${kendaraan.nama_kendaraan}) telah disetujui!`,
-                { type: 'KENDARAAN_APPROVED', id_kendaraan: id_kendaraan.toString() }
-            );
-        }
+        // Skipped by the helper when the user turned push off or the account is deactivated
+        await sendUserNotification(
+            parseInt(id_user),
+            '✅ Kendaraan Disetujui',
+            `Kendaraan ${kendaraan.plat_nomor} (${kendaraan.nama_kendaraan}) telah disetujui!`,
+            { type: 'KENDARAAN_APPROVED', id_kendaraan: id_kendaraan.toString() }
+        );
     } catch (notifError) {
         console.error('Failed to send notification:', notifError.message);
     }
 
-    res.status(200).json({ status: "success", message: "Kendaraan verified successfully", data: updatedKendaraan });
+    res.status(200).json({ status: "success", message: "Kendaraan berhasil diverifikasi", data: updatedKendaraan });
 });
 
 exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
@@ -276,8 +338,10 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
     }
 
     if (search) {
+        // Plates are stored normalised, so match the normalised term (and the raw one, for rows saved before that)
+        const plateTerms = [...new Set([normalizePlate(search), search].filter(Boolean))];
         whereClause.OR = [
-            { plat_nomor: { contains: search, mode: 'insensitive' } },
+            ...plateTerms.map((term) => ({ plat_nomor: { contains: term, mode: 'insensitive' } })),
             { nama_kendaraan: { contains: search, mode: 'insensitive' } },
             {
                 user: {
@@ -313,7 +377,7 @@ exports.getAllUnverifiedKendaraan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "All unverified kendaraan retrieved successfully",
+        message: "Semua kendaraan yang belum diverifikasi berhasil diambil",
         data: unverifiedKendaraan,
         pagination: buildPaginationMeta(total, page, limit)
     });
@@ -331,7 +395,7 @@ exports.getAllKendaraan = asyncHandler(async (req, res) => {
     });
     res.status(200).json({
         status: "success",
-        message: "All kendaraan retrieved successfully",
+        message: "Semua data kendaraan berhasil diambil",
         data: kendaraan,
         pagination: buildPaginationMeta(total, page, limit)
     });
@@ -362,7 +426,7 @@ exports.getHistoriPengajuan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Histori pengajuan retrieved successfully",
+        message: "Riwayat pengajuan berhasil diambil",
         data: kendaraan
     });
 });
@@ -374,7 +438,7 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     if (!feedback || feedback.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Feedback is required when rejecting"
+            message: "Alasan penolakan wajib diisi"
         });
     }
 
@@ -385,11 +449,13 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
     if (!kendaraan) {
         return res.status(404).json({
             status: "error",
-            message: "Kendaraan not found"
+            message: "Kendaraan tidak ditemukan"
         });
     }
 
-    // Jika ini adalah penolakan permintaan hapus kendaraan
+    // Jika ini adalah penolakan permintaan hapus kendaraan.
+    // deleteKendaraan hanya menerima permintaan dari kendaraan DISETUJUI (statusVerif true), jadi mengembalikan
+    // DISETUJUI + statusVerif true di sini selalu memulihkan keadaan sebelum permintaan diajukan.
     if (kendaraan.feedback && kendaraan.feedback.startsWith('DELETE_REQUEST:')) {
         const updatedKendaraan = await prisma.kendaraan.update({
             where: { id_kendaraan: parseInt(id_kendaraan), id_user: parseInt(id_user) },
@@ -402,29 +468,24 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
 
         // Kirim notifikasi penolakan penghapusan ke user
         try {
-            const user = await prisma.user.findUnique({
-                where: { id_user: parseInt(id_user) },
-                select: { fcm_token: true }
-            });
-            if (user?.fcm_token) {
-                await sendPushNotification(
-                    user.fcm_token,
-                    '❌ Pembatalan Penghapusan Kendaraan',
-                    `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} ditolak admin. Alasan: ${feedback}`,
-                    { type: 'KENDARAAN_DELETE_REJECTED', id_kendaraan: id_kendaraan.toString() }
-                );
-            }
+            // Skipped by the helper when the user turned push off or the account is deactivated
+            await sendUserNotification(
+                parseInt(id_user),
+                '❌ Pembatalan Penghapusan Kendaraan',
+                `Permintaan penghapusan kendaraan ${kendaraan.plat_nomor} ditolak admin. Alasan: ${feedback}`,
+                { type: 'KENDARAAN_DELETE_REJECTED', id_kendaraan: id_kendaraan.toString() }
+            );
         } catch (notifError) {
             console.error('Failed to send notification:', notifError.message);
         }
 
-        return res.status(200).json({ status: "success", message: "Kendaraan deletion request rejected", data: updatedKendaraan });
+        return res.status(200).json({ status: "success", message: "Permintaan penghapusan kendaraan ditolak", data: updatedKendaraan });
     }
 
     if (kendaraan.status_pengajuan === 'DISETUJUI') {
         return res.status(400).json({
             status: "error",
-            message: "Cannot reject already approved kendaraan"
+            message: "Kendaraan yang sudah disetujui tidak dapat ditolak"
         });
     }
 
@@ -439,25 +500,20 @@ exports.rejectKendaraan = asyncHandler(async (req, res) => {
 
     // Send push notification to user about rejection
     try {
-        const user = await prisma.user.findUnique({
-            where: { id_user: parseInt(id_user) },
-            select: { fcm_token: true }
-        });
-        if (user?.fcm_token) {
-            await sendPushNotification(
-                user.fcm_token,
-                '❌ Kendaraan Ditolak',
-                `Kendaraan ${kendaraan.plat_nomor} ditolak. Alasan: ${feedback}`,
-                { type: 'KENDARAAN_REJECTED', id_kendaraan: id_kendaraan.toString(), feedback: feedback }
-            );
-        }
+        // Skipped by the helper when the user turned push off or the account is deactivated
+        await sendUserNotification(
+            parseInt(id_user),
+            '❌ Kendaraan Ditolak',
+            `Kendaraan ${kendaraan.plat_nomor} ditolak. Alasan: ${feedback}`,
+            { type: 'KENDARAAN_REJECTED', id_kendaraan: id_kendaraan.toString(), feedback: feedback }
+        );
     } catch (notifError) {
         console.error('Failed to send notification:', notifError.message);
     }
 
     res.status(200).json({
         status: "success",
-        message: "Kendaraan rejected successfully",
+        message: "Kendaraan berhasil ditolak",
         data: updatedKendaraan
     });
 });
@@ -471,11 +527,11 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
     });
 
     if (!kendaraan) {
-        return res.status(404).json({ status: "error", message: "Kendaraan not found" });
+        return res.status(404).json({ status: "error", message: "Kendaraan tidak ditemukan" });
     }
 
     if (kendaraan.status_pengajuan !== 'DITOLAK') {
-        return res.status(400).json({ status: "error", message: "Only rejected vehicles can be resubmitted" });
+        return res.status(400).json({ status: "error", message: "Hanya kendaraan yang ditolak yang dapat diajukan ulang" });
     }
 
     const fotoKendaraanFiles = req.files?.fotoKendaraan || [];
@@ -490,7 +546,7 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
 
     if (fotoKendaraanFiles.length > 0) {
         if (fotoKendaraanFiles.length < 3) {
-            return res.status(400).json({ status: "error", message: "If updating vehicle photos, you must provide exactly 3 photos" });
+            return res.status(400).json({ status: "error", message: "Jika mengubah foto kendaraan, lampirkan tepat 3 foto" });
         }
         
         const uploadedFotoKendaraan = [];
@@ -519,7 +575,7 @@ exports.resubmitKendaraan = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Kendaraan resubmitted successfully",
+        message: "Kendaraan berhasil diajukan ulang",
         data: updatedKendaraan
     });
 });

@@ -22,15 +22,6 @@ if (process.env.NODE_ENV === 'production') {
     prisma = global.__prisma;
 }
 
-// Logging untuk query Prisma
-if (process.env.NODE_ENV !== 'production') {
-    prisma.$on('query', (e) => {
-        console.log(`Query: ${e.query}`);
-        console.log(`Params: ${e.params}`);
-        console.log(`Duration: ${e.duration}ms`);
-    });
-}
-  
   prisma.$on('warn', (e) => {
     console.warn(`Prisma Warning: ${e.message}`);
   });

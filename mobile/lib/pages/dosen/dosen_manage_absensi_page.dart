@@ -2,11 +2,16 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../../services/dosen_service.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
+import '../common/error_retry_view.dart';
 import '../common/geofence_picker_page.dart';
 import 'dosen_sesi_detail_page.dart';
+import '../../utils/app_theme.dart';
 
 /// Get Downloads directory path
 Future<Directory> _getDownloadsDirectory() async {
@@ -43,7 +48,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
   Map<int, List<Map<String, dynamic>>> _sesiMap = {};
   Map<int, bool> _loadingSesi = {};
 
-  final Color primaryRed = const Color(0xFFE63946);
+  final Color primaryRed = AppColors.primary;
 
   @override
   void initState() {
@@ -52,17 +57,23 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
   }
 
   Future<void> _loadKelas() async {
-    setState(() => _isLoading = true);
+    // Clear the previous error first, otherwise a successful retry would still show it
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final kelas = await _dosenService.getKelasDiampu();
+      if (!mounted) return;
       setState(() {
         _kelasList = kelas;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -73,15 +84,21 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     try {
       final sesiList = await _dosenService.getSesiAbsensi(idKelas);
+      if (!mounted) return;
       setState(() {
         _sesiMap[idKelas] = sesiList;
         _loadingSesi[idKelas] = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadingSesi[idKelas] = false;
       });
-      ErrorHelper.showError('Gagal memuat sesi: $e');
+      ErrorHelper.showErrorWithRetry(
+        e,
+        title: 'Gagal Memuat Sesi',
+        onRetry: () => _loadSesiForKelas(idKelas),
+      );
     }
   }
 
@@ -103,12 +120,23 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
     final matakuliah = kelas['matakuliah'] as Map<String, dynamic>?;
     final namaMk = matakuliah?['nama_matakuliah'] ?? '';
 
-    int durasiMenit = 30;
+    final durasiController = TextEditingController(text: '30');
     bool requireFace = false;
     double? selectedLat;
     double? selectedLng;
     int selectedRadius = 100;
     String? locationName;
+
+    // Why the "Buka Absensi" button is disabled (null = it can be pressed).
+    String? disabledReason() {
+      if (selectedLat == null) {
+        return 'Pilih lokasi geofence terlebih dahulu untuk membuka sesi.';
+      }
+      if (Validators.durasiMenit(durasiController.text) != null) {
+        return 'Perbaiki durasi (1-240 menit) untuk membuka sesi.';
+      }
+      return null;
+    }
 
     showDialog(
       context: context,
@@ -121,10 +149,16 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
               children: [
                 // Durasi
                 TextFormField(
-                  initialValue: durasiMenit.toString(),
-                  decoration: const InputDecoration(labelText: 'Durasi (menit)'),
+                  controller: durasiController,
+                  decoration: const InputDecoration(
+                    labelText: 'Durasi (menit)',
+                    helperText: 'Antara 1 dan 240 menit',
+                  ),
                   keyboardType: TextInputType.number,
-                  onChanged: (v) => durasiMenit = int.tryParse(v) ?? 30,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: Validators.durasiMenit,
+                  onChanged: (_) => setDialogState(() {}),
                 ),
                 const SizedBox(height: 16),
 
@@ -180,6 +214,16 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                   activeColor: primaryRed,
                   contentPadding: EdgeInsets.zero,
                 ),
+
+                // Tell the user why the button below is greyed out
+                if (disabledReason() != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      disabledReason()!,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -189,11 +233,11 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
               child: const Text('Batal'),
             ),
             ElevatedButton(
-              onPressed: selectedLat == null
+              onPressed: disabledReason() != null
                   ? null
                   : () => _openAbsensi(
                         idKelas: idKelas,
-                        durasiMenit: durasiMenit,
+                        durasiMenit: int.parse(durasiController.text.trim()),
                         latitude: selectedLat!,
                         longitude: selectedLng!,
                         radiusMeter: selectedRadius,
@@ -237,7 +281,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
       if (result['status'] == 'success') {
         ErrorHelper.showSuccess(
-          'Sesi absensi dibuka sampai ${selesai.hour}:${selesai.minute.toString().padLeft(2, '0')}',
+          'Sesi absensi dibuka sampai ${formatWibTime(selesai)} WIB',
         );
         // Refresh sesi list
         _loadSesiForKelas(idKelas);
@@ -272,7 +316,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -299,7 +343,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
 
     } catch (e) {
       Get.back();
-      ErrorHelper.showError('Gagal download: $e');
+      ErrorHelper.showError(e, title: 'Gagal Mengunduh');
     }
   }
 
@@ -312,12 +356,13 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Get.back(),
-                    child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                  IconButton(
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
+                    onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
                   const Text(
@@ -345,7 +390,10 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _errorMessage != null
-                        ? Center(child: Text(_errorMessage!))
+                        ? ErrorRetryView(
+                            message: _errorMessage!,
+                            onRetry: _loadKelas,
+                          )
                         : _kelasList.isEmpty
                             ? _buildEmptyState()
                             : _buildKelasList(),
@@ -472,7 +520,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                           color: primaryRed,
                         ),
                         label: Text(
-                          isExpanded ? 'Tutup' : 'History',
+                          isExpanded ? 'Tutup' : 'Riwayat',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryRed),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -607,9 +655,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    mulai != null
-                        ? '${mulai.day}/${mulai.month}/${mulai.year} ${mulai.hour.toString().padLeft(2, '0')}:${mulai.minute.toString().padLeft(2, '0')}'
-                        : '-',
+                    mulai != null ? formatWibDateTime(mulai) : '-',
                     style: const TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 13,

@@ -1,8 +1,12 @@
 const winston = require('winston');
 const path = require('path');
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '..', 'logs');
+// Audit log directory. AUDIT_LOG_DIR lets deployments point it at a mounted volume (the production
+// compose mounts a named volume on /app/logs); the default is backend/logs, i.e. /app/logs in the image.
+const resolveAuditLogDir = (env = process.env) =>
+    (env.AUDIT_LOG_DIR && env.AUDIT_LOG_DIR.trim()) || path.join(__dirname, '..', 'logs');
+
+const logsDir = resolveAuditLogDir();
 
 // Audit logger for sensitive actions
 const auditLogger = winston.createLogger({
@@ -68,4 +72,4 @@ const logAudit = ({ action, performedBy, targetUserId = null, details = null, ip
     });
 };
 
-module.exports = { logAudit, BIOMETRIK_ACTIONS };
+module.exports = { logAudit, BIOMETRIK_ACTIONS, resolveAuditLogDir };

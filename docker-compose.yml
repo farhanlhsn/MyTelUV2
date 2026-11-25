@@ -1,6 +1,13 @@
 # Docker Compose for MyTelUV2
 # Development configuration
 
+# Rotate container logs so they cannot fill the disk (json-file keeps unbounded logs by default)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Node.js Backend API
   backend:
@@ -12,14 +19,22 @@ services:
       - "5050:5050"
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Jakarta
       - PORT=5050
       - FACE_API_URL=http://face-recognition:5051
       - PLATE_API_URL=http://plate-recognition:5001
       - ANOMALY_SERVICE_URL=http://anomaly-detection:5003
+      # API keys the backend sends (X-API-Key) to the AI services; each service needs the same value
+      - FACE_API_KEY=${FACE_API_KEY}
+      - PLATE_API_KEY=${PLATE_API_KEY}
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
+      # Audit log directory (the backend-logs volume is mounted here)
+      - AUDIT_LOG_DIR=/app/logs
     env_file:
       - .env
     volumes:
       - ./backend/uploads:/app/uploads
+      - backend-logs:/app/logs
     depends_on:
       face-recognition:
         condition: service_healthy
@@ -29,6 +44,8 @@ services:
         condition: service_healthy
     networks:
       - myteluv2-network
+    mem_limit: 512m
+    logging: *default-logging
     restart: unless-stopped
 
   # Face Recognition Service (InsightFace)
@@ -39,11 +56,17 @@ services:
     container_name: myteluv2-face-recognition
     ports:
       - "5051:5051"
+    environment:
+      - TZ=Asia/Jakarta
+      # Without a key the service answers 503 (fail closed)
+      - FACE_API_KEY=${FACE_API_KEY}
     volumes:
-      # Persist InsightFace models to avoid re-downloading
-      - insightface-models:/root/.insightface
+      # Persist InsightFace models to avoid re-downloading (the service runs as appuser)
+      - insightface-models:/home/appuser/.insightface
     networks:
       - myteluv2-network
+    mem_limit: 2g
+    logging: *default-logging
     restart: unless-stopped
 
   # Plate Recognition Service (YOLOv8)
@@ -54,11 +77,16 @@ services:
     container_name: myteluv2-plate-recognition
     ports:
       - "5001:5001"
+    environment:
+      - TZ=Asia/Jakarta
+      - PLATE_API_KEY=${PLATE_API_KEY}
     volumes:
       # Persist YOLO models
       - ./backend/python-service/plate_recognition/models:/app/models
     networks:
       - myteluv2-network
+    mem_limit: 1g
+    logging: *default-logging
     restart: unless-stopped
 
   # Anomaly Detection Service (Isolation Forest)
@@ -69,6 +97,9 @@ services:
     container_name: myteluv2-anomaly-detection
     ports:
       - "5003:5003"
+    environment:
+      - TZ=Asia/Jakarta
+      - ANOMALY_API_KEY=${ANOMALY_API_KEY}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5003/health"]
       interval: 30s
@@ -77,6 +108,8 @@ services:
       retries: 3
     networks:
       - myteluv2-network
+    mem_limit: 512m
+    logging: *default-logging
     restart: unless-stopped
 
 networks:
@@ -86,3 +119,5 @@ networks:
 volumes:
   insightface-models:
     name: myteluv2-insightface-models
+  backend-logs:
+    name: myteluv2-backend-logs

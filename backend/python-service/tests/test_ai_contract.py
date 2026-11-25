@@ -6,14 +6,26 @@ the three Python AI services (Face Recognition, Plate Recognition, Anomaly
 Detection) remain stable over time.
 
 Only standard-library modules are used (urllib, io, json, uuid, unittest).
+
+The services are expected to run with TEST_MODE=true (that is the only way to
+get the stub responses; the old per-request X-Test-Mode header is gone).  When
+a service has an API key configured, export the same key to this process
+(FACE_API_KEY / PLATE_API_KEY / ANOMALY_API_KEY) and it is sent as X-API-Key.
+TestAIServiceApiKeys additionally imports each service in-process (Flask test
+client) to check the API-key and test-mode rules under every env combination.
 """
 
+import importlib.util
 import io
 import json
+import os
+import sys
 import unittest
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
+from unittest import mock
 
 # ---------------------------------------------------------------------------
 # Minimal valid JPEG bytes (JFIF header + empty quantisation table + EOI)
@@ -68,6 +80,14 @@ class TestAIContract(unittest.TestCase):
     PLATE_SERVICE_URL = "http://localhost:5001"
     ANOMALY_SERVICE_URL = "http://localhost:5003"
 
+    # Env var holding the API key of each service. Unset/empty (CI, TEST_MODE) means
+    # the service accepts requests without a key, so none is sent.
+    API_KEY_ENV_BY_URL = {
+        FACE_SERVICE_URL: "FACE_API_KEY",
+        PLATE_SERVICE_URL: "PLATE_API_KEY",
+        ANOMALY_SERVICE_URL: "ANOMALY_API_KEY",
+    }
+
     # -----------------------------------------------------------------------
     # Low-level helpers
     # -----------------------------------------------------------------------
@@ -76,6 +96,9 @@ class TestAIContract(unittest.TestCase):
         """
         Send an HTTP request and return (status_code, parsed_body).
 
+        * X-API-Key is added from the service's API-key env var (see
+          API_KEY_ENV_BY_URL) when that variable is set and the caller did not
+          pass the header itself.
         * If *data* is a dict it is JSON-encoded and Content-Type is set to
           application/json automatically.
         * If *data* is bytes it is sent as-is; the caller must supply the
@@ -89,6 +112,10 @@ class TestAIContract(unittest.TestCase):
         """
         url = f"{base_url}{path}"
         req_headers = dict(headers or {})
+
+        api_key = os.environ.get(self.API_KEY_ENV_BY_URL.get(base_url, ""), "")
+        if api_key:
+            req_headers.setdefault("X-API-Key", api_key)
 
         req_data = None
         if data is not None:
@@ -132,7 +159,7 @@ class TestAIContract(unittest.TestCase):
         :param files:         dict of ``{name: (filename, data_bytes,
                               content_type)}`` for file uploads.
         :param extra_headers: additional HTTP headers, e.g.
-                              ``{"X-Test-Mode": "true"}``.
+                              ``{"X-API-Key": "..."}``.
         :returns:             ``(status_code, response_dict)`` — same contract
                               as :meth:`_make_request`.
         """
@@ -247,12 +274,11 @@ class TestAIContract(unittest.TestCase):
     # -----------------------------------------------------------------------
 
     def test_face_detect_single_in_test_mode(self):
-        """POST /detect-face with a dummy JPEG + X-Test-Mode: true must return a full embedding."""
+        """POST /detect-face with a dummy JPEG (service started with TEST_MODE=true) must return a full embedding."""
         status, body = self._make_multipart_request(
             self.FACE_SERVICE_URL,
             "/detect-face",
             files={"image": ("test.jpg", MINIMAL_JPEG, "image/jpeg")},
-            extra_headers={"X-Test-Mode": "true"},
         )
         self._skip_if_unavailable(status, body, "Face Recognition (5051)")
         self.assertEqual(
@@ -449,12 +475,11 @@ class TestAIContract(unittest.TestCase):
     # -----------------------------------------------------------------------
 
     def test_plate_recognize_in_test_mode(self):
-        """POST /api/recognize-plate with a dummy JPEG + X-Test-Mode: true must return plate data."""
+        """POST /api/recognize-plate with a dummy JPEG (service started with TEST_MODE=true) must return plate data."""
         status, body = self._make_multipart_request(
             self.PLATE_SERVICE_URL,
             "/api/recognize-plate",
             files={"image": ("test.jpg", MINIMAL_JPEG, "image/jpeg")},
-            extra_headers={"X-Test-Mode": "true"},
         )
         self._skip_if_unavailable(status, body, "Plate Recognition (5001)")
         self.assertEqual(
@@ -885,6 +910,453 @@ class TestAIContract(unittest.TestCase):
                 str,
                 f"{loc}.description must be str, got {type(anomaly['description'])}",
             )
+
+
+# ---------------------------------------------------------------------------
+# In-process checks of the API-key / test-mode rules
+# ---------------------------------------------------------------------------
+
+SERVICES_DIR = Path(__file__).resolve().parent.parent
+_LOADED_SERVICES = {}
+_KEEP_ALIVE = []
+
+
+def _load_service(service_dir_name):
+    """
+    Import ``<service_dir_name>/app.py`` in-process (with TEST_MODE=true, so no
+    model is loaded) and return the module; its ``app`` is a Flask app that can
+    be driven through ``app.test_client()``.
+    """
+    if service_dir_name in _LOADED_SERVICES:
+        return _LOADED_SERVICES[service_dir_name]
+
+    service_dir = SERVICES_DIR / service_dir_name
+    spec = importlib.util.spec_from_file_location(
+        f"ai_contract_{service_dir_name}_app", service_dir / "app.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    saved_streams = (sys.stdout, sys.stderr)
+    sys.path.insert(0, str(service_dir))  # face app: ``from face_processor import ...``
+    try:
+        # patch.dict restores os.environ afterwards, so nothing a service loads from
+        # a .env file at import time leaks into the process.
+        with mock.patch.dict(os.environ, {"TEST_MODE": "true"}):
+            spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(service_dir))
+        # The face app replaces sys.stdout/sys.stderr with UTF-8 wrappers when imported.
+        # Keep those wrappers alive (closing one would close the real stream beneath it)
+        # and put the original streams back.
+        _KEEP_ALIVE.extend([sys.stdout, sys.stderr])
+        sys.stdout, sys.stderr = saved_streams
+
+    _LOADED_SERVICES[service_dir_name] = module
+    return module
+
+
+class TestAIServiceApiKeys(unittest.TestCase):
+    """
+    API-key and test-mode rules shared by the three Python services.
+
+    The services read ``TEST_MODE`` and their ``*_API_KEY`` from the environment
+    on every request, so each case below sets both with ``mock.patch.dict`` and
+    calls the Flask test client directly. ``/openapi.json`` is used as the
+    protected probe: it is behind the key check on every service and needs no
+    request body.
+
+    Rules under test:
+        * key configured + missing/wrong X-API-Key  -> 401
+        * key configured + correct X-API-Key        -> allowed
+        * key unset + TEST_MODE=true                -> allowed (CI)
+        * key unset + not TEST_MODE                 -> 503 "service not configured" (fail closed)
+        * /health never needs a key
+        * test mode comes only from the TEST_MODE env, never from an X-Test-Mode header
+    """
+
+    KEY = "contract-test-api-key"
+
+    # (service directory, env var holding that service's API key)
+    SERVICES = (
+        ("face_recognition", "FACE_API_KEY"),
+        ("plate_recognition", "PLATE_API_KEY"),
+        ("anomaly_detection", "ANOMALY_API_KEY"),
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            for service_dir_name, _ in cls.SERVICES:
+                _load_service(service_dir_name)
+        except ImportError as exc:  # Flask / numpy / pandas not installed here
+            raise unittest.SkipTest(f"Cannot import the AI services in-process: {exc}")
+
+    def _call(
+        self,
+        service_dir_name,
+        key_env,
+        path,
+        *,
+        key,
+        test_mode,
+        method="GET",
+        headers=None,
+        **kwargs,
+    ):
+        """Call ``path`` on the service's Flask test client with the given env.
+        ``key=""`` simulates an unset API key (CI exports it as an empty string)."""
+        module = _load_service(service_dir_name)
+        with mock.patch.dict(os.environ, {key_env: key, "TEST_MODE": test_mode}):
+            return module.app.test_client().open(
+                path, method=method, headers=headers or {}, **kwargs
+            )
+
+    def test_missing_key_with_key_configured_returns_401(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key=self.KEY,
+                    test_mode="false",
+                )
+                self.assertEqual(resp.status_code, 401, resp.get_data(as_text=True))
+
+    def test_missing_key_returns_401_even_in_test_mode_when_key_configured(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key=self.KEY,
+                    test_mode="true",
+                )
+                self.assertEqual(resp.status_code, 401, resp.get_data(as_text=True))
+
+    def test_wrong_key_returns_401(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key=self.KEY,
+                    test_mode="false",
+                    headers={"X-API-Key": self.KEY + "-wrong"},
+                )
+                self.assertEqual(resp.status_code, 401, resp.get_data(as_text=True))
+
+    def test_non_ascii_key_header_returns_401_not_500(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key=self.KEY,
+                    test_mode="false",
+                    headers={"X-API-Key": "kunci-é"},
+                )
+                self.assertEqual(resp.status_code, 401, resp.get_data(as_text=True))
+
+    def test_correct_key_is_allowed(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key=self.KEY,
+                    test_mode="false",
+                    headers={"X-API-Key": self.KEY},
+                )
+                self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+
+    def test_key_unset_with_test_mode_is_allowed(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key="",
+                    test_mode="true",
+                )
+                self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+
+    def test_key_unset_without_test_mode_fails_closed_with_503(self):
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key="",
+                    test_mode="false",
+                )
+                self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+                self.assertEqual(
+                    resp.get_json().get("error"), "service not configured"
+                )
+
+    def test_key_unset_without_test_mode_503_even_if_a_key_header_is_sent(self):
+        """An empty configured key must never match a client-supplied header."""
+        for service_dir_name, key_env in self.SERVICES:
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/openapi.json",
+                    key="",
+                    test_mode="false",
+                    headers={"X-API-Key": "anything"},
+                )
+                self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+
+    def test_face_and_anomaly_health_needs_no_key(self):
+        for service_dir_name, key_env in (
+            ("face_recognition", "FACE_API_KEY"),
+            ("anomaly_detection", "ANOMALY_API_KEY"),
+        ):
+            with self.subTest(service=service_dir_name):
+                resp = self._call(
+                    service_dir_name,
+                    key_env,
+                    "/health",
+                    key=self.KEY,
+                    test_mode="false",
+                )
+                self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+
+    # --- plate service specifics ------------------------------------------
+
+    def test_plate_health_needs_no_key_and_is_ready_in_test_mode(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None):
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="true",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        self.assertEqual(resp.get_json().get("status"), "ok")
+
+    def test_plate_health_is_503_while_the_model_is_not_loaded(self):
+        module = _load_service("plate_recognition")
+        # init_recognizer is stubbed (it would try to load the real model) and fails to load
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+        init_recognizer.assert_called_once_with()
+
+    def test_plate_health_retries_a_failed_load_and_recovers(self):
+        module = _load_service("plate_recognition")
+
+        def load_model():
+            module.recognizer = mock.Mock()
+
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(
+            module, "init_recognizer", side_effect=load_model
+        ) as init_recognizer:
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        self.assertEqual(resp.get_json().get("status"), "ok")
+        init_recognizer.assert_called_once_with()
+
+    def test_plate_health_stays_503_when_the_retry_raises(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(
+            module, "init_recognizer", side_effect=RuntimeError("model file corrupt")
+        ):
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+
+    def test_plate_health_retry_is_rate_limited(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
+            for _ in range(3):
+                resp = self._call(
+                    "plate_recognition",
+                    "PLATE_API_KEY",
+                    "/health",
+                    key=self.KEY,
+                    test_mode="false",
+                )
+                self.assertEqual(resp.status_code, 503, resp.get_data(as_text=True))
+        # Three probes right after each other: only the first re-attempts the load
+        self.assertEqual(init_recognizer.call_count, 1)
+
+    def test_plate_health_does_not_retry_in_test_mode(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", None), mock.patch.object(
+            module, "_last_load_attempt", None
+        ), mock.patch.object(module, "init_recognizer") as init_recognizer:
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="true",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        init_recognizer.assert_not_called()
+
+    def test_plate_health_is_ok_once_the_model_is_loaded(self):
+        module = _load_service("plate_recognition")
+        with mock.patch.object(module, "recognizer", mock.Mock()):
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/health",
+                key=self.KEY,
+                test_mode="false",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        self.assertEqual(resp.get_json().get("status"), "ok")
+
+    def test_plate_parking_process_never_forwards_without_a_valid_key(self):
+        """/api/parking/process (and the legacy /api/parking/entry alias) forward to the
+        backend with the edge secret, so a configured, matching X-API-Key is mandatory
+        even in TEST_MODE."""
+        module = _load_service("plate_recognition")
+        cases = (
+            # (configured key, X-API-Key header sent)
+            ("", None),  # key unset (TEST_MODE) and none sent
+            (self.KEY, None),
+            (self.KEY, self.KEY + "-wrong"),
+        )
+        for path in ("/api/parking/process", "/api/parking/entry"):
+            for configured_key, sent_key in cases:
+                with self.subTest(
+                    path=path, configured=bool(configured_key), sent=sent_key
+                ):
+                    headers = {"X-API-Key": sent_key} if sent_key else {}
+                    with mock.patch.object(
+                        module.http_requests, "post"
+                    ) as mocked_post:
+                        resp = self._call(
+                            "plate_recognition",
+                            "PLATE_API_KEY",
+                            path,
+                            key=configured_key,
+                            test_mode="true",
+                            method="POST",
+                            headers=headers,
+                            data={"parkiran_id": "1", "gate_type": "MASUK"},
+                        )
+                    self.assertEqual(resp.status_code, 401, resp.get_data(as_text=True))
+                    mocked_post.assert_not_called()
+
+    def test_plate_parking_process_forwards_with_edge_secret_given_a_valid_key(self):
+        module = _load_service("plate_recognition")
+        backend_reply = mock.Mock(status_code=200)
+        backend_reply.json.return_value = {"gate_action": "ALLOW"}
+        with mock.patch.object(module, "EDGE_DEVICE_SECRET", "edge-secret"):
+            with mock.patch.object(
+                module.http_requests, "post", return_value=backend_reply
+            ) as mocked_post:
+                resp = self._call(
+                    "plate_recognition",
+                    "PLATE_API_KEY",
+                    "/api/parking/process",
+                    key=self.KEY,
+                    test_mode="true",
+                    method="POST",
+                    headers={"X-API-Key": self.KEY},
+                    data={"parkiran_id": "1", "gate_type": "MASUK"},
+                )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        self.assertEqual(resp.get_json().get("gate_action"), "ALLOW")
+        mocked_post.assert_called_once()
+        self.assertEqual(
+            mocked_post.call_args.kwargs["headers"], {"X-Edge-Secret": "edge-secret"}
+        )
+
+    # --- test mode comes from the environment only -------------------------
+
+    def test_x_test_mode_header_does_not_enable_face_test_mode(self):
+        module = _load_service("face_recognition")
+        processor = mock.Mock()
+        processor.compare_embeddings.return_value = {
+            "similarity": 0.1,
+            "is_same_person": False,
+            "threshold": 0.6,
+        }
+        with mock.patch.object(module, "face_processor", processor):
+            resp = self._call(
+                "face_recognition",
+                "FACE_API_KEY",
+                "/compare",
+                key=self.KEY,
+                test_mode="false",
+                method="POST",
+                headers={"X-API-Key": self.KEY, "X-Test-Mode": "true"},
+                json={"embedding1": [0.1] * 512, "embedding2": [0.2] * 512},
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        # The processor answered; the 0.85 / is_same_person=True stub did not.
+        self.assertEqual(resp.get_json().get("similarity"), 0.1)
+        processor.compare_embeddings.assert_called_once()
+
+    def test_x_test_mode_header_does_not_enable_plate_test_mode(self):
+        import cv2
+        import numpy as np
+
+        module = _load_service("plate_recognition")
+        recognizer = mock.Mock()
+        recognizer.recognize.return_value = {
+            "success": True,
+            "plate_text": "D1234AB",
+            "confidence": 0.5,
+            "character_count": 6,
+        }
+        ok, jpeg = cv2.imencode(".jpg", np.zeros((8, 8, 3), dtype=np.uint8))
+        self.assertTrue(ok)
+        with mock.patch.object(module, "recognizer", recognizer):
+            resp = self._call(
+                "plate_recognition",
+                "PLATE_API_KEY",
+                "/api/recognize-plate",
+                key=self.KEY,
+                test_mode="false",
+                method="POST",
+                headers={"X-API-Key": self.KEY, "X-Test-Mode": "true"},
+                data={"image": (io.BytesIO(jpeg.tobytes()), "plate.jpg")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        # The recognizer answered; the 'B1234XYZ' stub did not.
+        self.assertEqual(resp.get_json().get("plate_text"), "D1234AB")
+        recognizer.recognize.assert_called_once()
 
 
 if __name__ == "__main__":

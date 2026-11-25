@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import '../../controllers/notification_controller.dart';
+import '../../utils/date_helper.dart';
+import '../../utils/notification_router.dart';
+import '../../utils/app_theme.dart';
 
 class NotificationListPage extends StatefulWidget {
   const NotificationListPage({super.key});
@@ -11,7 +13,9 @@ class NotificationListPage extends StatefulWidget {
 }
 
 class _NotificationListPageState extends State<NotificationListPage> {
-  final NotificationController _controller = Get.find<NotificationController>();
+  final NotificationController _controller = Get.isRegistered<NotificationController>()
+      ? Get.find<NotificationController>()
+      : Get.put(NotificationController());
   String _selectedCategory = 'Semua';
 
   @override
@@ -22,29 +26,15 @@ class _NotificationListPageState extends State<NotificationListPage> {
 
   String _formatDate(String isoString) {
     try {
-      final DateTime date = DateTime.parse(isoString);
-      final DateTime now = DateTime.now();
-      final Duration diff = now.difference(date);
-
-      if (diff.inMinutes < 1) {
-        return 'Baru saja';
-      } else if (diff.inHours < 1) {
-        return '${diff.inMinutes}m lalu';
-      } else if (diff.inDays < 1) {
-        return DateFormat('HH:mm').format(date);
-      } else if (diff.inDays < 7) {
-        return DateFormat('EEEE, HH:mm').format(date);
-      } else {
-        return DateFormat('dd MMM yyyy').format(date);
-      }
+      return formatWaktuRelatif(DateTime.parse(isoString));
     } catch (_) {
-      return '';
+      return 'Waktu tidak tersedia';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -52,7 +42,8 @@ class _NotificationListPageState extends State<NotificationListPage> {
         backgroundColor: primaryColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          tooltip: 'Kembali',
+          icon: const Icon(appBackIcon, color: Colors.white),
           onPressed: () => Get.back(),
         ),
         title: const Text(
@@ -135,7 +126,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
                       'Hapus Semua Notifikasi',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    content: const Text('Apakah Anda yakin ingin menghapus semua histori notifikasi Anda? Action ini tidak dapat diurungkan.'),
+                    content: const Text('Apakah Anda yakin ingin menghapus semua histori notifikasi Anda? Tindakan ini tidak dapat diurungkan.'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -176,25 +167,11 @@ class _NotificationListPageState extends State<NotificationListPage> {
               final allNotifs = _controller.notifications;
 
               // Filter list based on selected category tag
-              List<Map<String, dynamic>> filteredList;
-              if (_selectedCategory == 'Akademik') {
-                filteredList = allNotifs
-                    .where((n) => n['type'] == 'ABSENSI_NOTIFICATION')
-                    .toList();
-              } else if (_selectedCategory == 'Kendaraan') {
-                filteredList = allNotifs
-                    .where((n) {
-                      final String type = n['type'] ?? '';
-                      return type == 'PARKING_NOTIFICATION' || type.startsWith('KENDARAAN_');
-                    })
-                    .toList();
-              } else if (_selectedCategory == 'Sosial') {
-                filteredList = allNotifs
-                    .where((n) => n['type'] == 'SOCIAL_NOTIFICATION')
-                    .toList();
-              } else {
-                filteredList = allNotifs;
-              }
+              final List<Map<String, dynamic>> filteredList = _selectedCategory == 'Semua'
+                  ? allNotifs.toList()
+                  : allNotifs
+                      .where((n) => notificationCategory(n['type']) == _selectedCategory)
+                      .toList();
 
               return _buildNotificationList(filteredList);
             }),
@@ -218,27 +195,32 @@ class _NotificationListPageState extends State<NotificationListPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.filter_list_alt, size: 18, color: Colors.orange),
-              const SizedBox(width: 8),
-              Text(
-                'Filter: $label',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange,
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.filter_list_alt, size: 18, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Filter: $label',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          GestureDetector(
-            onTap: () {
+          IconButton(
+            tooltip: 'Hapus filter',
+            onPressed: () {
               setState(() {
                 _selectedCategory = 'Semua';
               });
             },
-            child: Container(
+            icon: Container(
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
@@ -298,7 +280,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
 
     return RefreshIndicator(
       onRefresh: () => _controller.loadNotifications(),
-      color: const Color(0xFFE63946),
+      color: AppColors.primary,
       child: ListView.separated(
         padding: const EdgeInsets.all(16.0),
         itemCount: list.length,
@@ -342,15 +324,18 @@ class _NotificationListPageState extends State<NotificationListPage> {
   Widget _buildNotificationCard(Map<String, dynamic> notif) {
     final String title = notif['title'] ?? 'Notifikasi';
     final String body = notif['body'] ?? '';
-    final String date = notif['timestamp'] ?? DateTime.now().toIso8601String();
+    final String date = notif['timestamp'] ?? '';
     final String type = notif['type'] ?? 'general';
 
     Color themeColor;
     IconData iconData;
 
-    if (type == 'ABSENSI_NOTIFICATION') {
+    if (type == NotificationTypes.absensi) {
       themeColor = const Color(0xFF009688); // Teal
       iconData = Icons.assignment_turned_in_rounded;
+    } else if (type == NotificationTypes.jadwalPengganti) {
+      themeColor = const Color(0xFFFF9800); // Orange
+      iconData = Icons.event_repeat_rounded;
     } else if (type == 'PARKING_NOTIFICATION') {
       themeColor = const Color(0xFF2196F3); // Blue
       iconData = Icons.local_parking_rounded;
@@ -386,69 +371,81 @@ class _NotificationListPageState extends State<NotificationListPage> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Styled Icon Badge
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: themeColor.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                iconData,
-                color: themeColor,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          // Same router as a tap on the push notification itself
+          onTap: () => openNotification(dataOfInboxEntry(notif)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Styled Icon Badge
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: themeColor.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    iconData,
+                    color: themeColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
 
-            // Content Text
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // Content Text
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.5,
-                            color: Colors.black87,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.5,
+                                color: Colors.black87,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _formatDate(date),
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(height: 6),
                       Text(
-                        _formatDate(date),
+                        body,
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade400,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                          height: 1.45,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    body,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

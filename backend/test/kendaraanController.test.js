@@ -26,14 +26,15 @@ jest.mock('../utils/r2FileHandler', () => ({
     fileExists: jest.fn(),
 }));
 
+// Push goes through sendUserNotification(id_user, ...), which checks the user's push preference itself
 jest.mock('../utils/firebase', () => ({
-    sendPushNotification: jest.fn(),
+    sendUserNotification: jest.fn(),
 }));
 
 // Import modules
 const prisma = require('../utils/prisma');
 const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler');
-const { sendPushNotification } = require('../utils/firebase');
+const { sendUserNotification } = require('../utils/firebase');
 const kendaraanController = require('../controllers/kendaraanController');
 
 // Helper functions
@@ -101,7 +102,7 @@ describe('Kendaraan Controller Tests', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                message: expect.stringContaining('Exactly 3')
+                message: expect.stringContaining('tepat 3 foto kendaraan')
             }));
         });
 
@@ -114,7 +115,7 @@ describe('Kendaraan Controller Tests', () => {
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                message: 'fotoSTNK is required'
+                message: 'Foto STNK wajib dilampirkan'
             }));
         });
 
@@ -126,9 +127,173 @@ describe('Kendaraan Controller Tests', () => {
             await kendaraanController.registerKendaraan(req, res);
 
             expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Plat nomor sudah terdaftar' });
+        });
+
+        describe('plate normalisation and soft-deleted plates', () => {
+            beforeEach(() => {
+                uploadFile.mockReset().mockResolvedValue({ fileUrl: 'http://url.com/new.jpg' });
+                deleteFile.mockReset().mockResolvedValue(undefined);
+                prisma.kendaraan.findUnique.mockReset();
+                prisma.kendaraan.count.mockReset().mockResolvedValue(0);
+                prisma.kendaraan.create.mockReset().mockResolvedValue({ id_kendaraan: 1 });
+                prisma.kendaraan.update.mockReset().mockResolvedValue({ id_kendaraan: 7 });
+            });
+
+            test('checks uniqueness and saves against the normalised plate', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue(null);
+                const req = createMockReq({ plat_nomor: 'b 1234-xyz', nama_kendaraan: 'Motor' }, { id_user: 1 }, mockFiles);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(req, res);
+
+                expect(prisma.kendaraan.findUnique).toHaveBeenCalledWith({ where: { plat_nomor: 'B1234XYZ' } });
+                expect(prisma.kendaraan.create).toHaveBeenCalledWith({
+                    data: expect.objectContaining({ plat_nomor: 'B1234XYZ' })
+                });
+                expect(res.status).toHaveBeenCalledWith(201);
+            });
+
+            test('rejects a plate that is empty once normalised, before touching the database', async () => {
+                const req = createMockReq({ plat_nomor: '--- ', nama_kendaraan: 'Motor' }, { id_user: 1 }, mockFiles);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(req, res);
+
+                expect(res.status).toHaveBeenCalledWith(400);
+                expect(prisma.kendaraan.findUnique).not.toHaveBeenCalled();
+                expect(uploadFile).not.toHaveBeenCalled();
+            });
+
+            test('still answers 409 when the existing plate row is active', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue({ id_kendaraan: 9, id_user: 2, deletedAt: null });
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expect(res.status).toHaveBeenCalledWith(409);
+                expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Plat nomor sudah terdaftar' });
+                expect(prisma.kendaraan.create).not.toHaveBeenCalled();
+                expect(prisma.kendaraan.update).not.toHaveBeenCalled();
+            });
+
+            test('re-registering a soft-deleted plate reuses that row for the new owner', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue({
+                    id_kendaraan: 7,
+                    id_user: 2,
+                    plat_nomor: 'D1234ABC',
+                    deletedAt: new Date('2026-01-01T00:00:00Z'),
+                    statusVerif: false,
+                    status_pengajuan: 'DISETUJUI',
+                    feedback: 'DELETE_REQUEST: dijual',
+                    fotoKendaraan: ['http://old/1.jpg', 'http://old/2.jpg', 'http://old/3.jpg'],
+                    fotoSTNK: 'http://old/stnk.jpg'
+                });
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expect(prisma.kendaraan.create).not.toHaveBeenCalled();
+                expect(prisma.kendaraan.update).toHaveBeenCalledWith({
+                    where: { id_kendaraan: 7, deletedAt: { not: null } },
+                    data: {
+                        id_user: 1,
+                        nama_kendaraan: 'Motor',
+                        fotoKendaraan: ['http://url.com/new.jpg', 'http://url.com/new.jpg', 'http://url.com/new.jpg'],
+                        fotoSTNK: 'http://url.com/new.jpg',
+                        statusVerif: false,
+                        status_pengajuan: 'MENUNGGU',
+                        feedback: null,
+                        deletedAt: null,
+                        createdAt: expect.any(Date)
+                    }
+                });
+                expect(res.status).toHaveBeenCalledWith(201);
+            });
+
+            test('a reused row gets createdAt = now so it appears at the top of the admin pending queue', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue({
+                    id_kendaraan: 7,
+                    id_user: 2,
+                    deletedAt: new Date('2026-01-01T00:00:00Z'),
+                    createdAt: new Date('2025-01-01T00:00:00Z'),
+                    fotoKendaraan: [],
+                    fotoSTNK: 'http://old/stnk.jpg'
+                });
+                const before = Date.now();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), createMockRes());
+
+                const { data } = prisma.kendaraan.update.mock.calls[0][0];
+                expect(data.createdAt).toBeInstanceOf(Date);
+                expect(data.createdAt.getTime()).toBeGreaterThanOrEqual(before);
+                expect(data.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
+            });
+
+            test('the new owner of a reused row is held to the per-user vehicle limit', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue({ id_kendaraan: 7, id_user: 2, deletedAt: new Date() });
+                prisma.kendaraan.count.mockResolvedValue(3);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expect(res.status).toHaveBeenCalledWith(400);
+                expect(prisma.kendaraan.update).not.toHaveBeenCalled();
+            });
+
+            test('removes the previous owner photos of a reused row after the update', async () => {
+                prisma.kendaraan.findUnique.mockResolvedValue({
+                    id_kendaraan: 7,
+                    id_user: 2,
+                    deletedAt: new Date(),
+                    fotoKendaraan: ['http://old/1.jpg'],
+                    fotoSTNK: 'http://old/stnk.jpg'
+                });
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), createMockRes());
+
+                expect(deleteFile).toHaveBeenCalledWith('http://old/1.jpg');
+                expect(deleteFile).toHaveBeenCalledWith('http://old/stnk.jpg');
+            });
+
+            test('a lost race on the unique plate (P2002) answers 409 and cleans up the uploads', async () => {
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+                prisma.kendaraan.findUnique.mockResolvedValue(null);
+                prisma.kendaraan.create.mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+                fileExists.mockResolvedValue(true);
+                const res = createMockRes();
+
+                try {
+                    await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                    expect(res.status).toHaveBeenCalledWith(409);
+                    expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Plat nomor sudah terdaftar' });
+                    expect(deleteFile).toHaveBeenCalled();
+                } finally {
+                    errorSpy.mockRestore();
+                }
+            });
+
+            test('a lost race on a reused row (P2025) answers 409', async () => {
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+                prisma.kendaraan.findUnique.mockResolvedValue({ id_kendaraan: 7, id_user: 2, deletedAt: new Date() });
+                prisma.kendaraan.update.mockRejectedValue(Object.assign(new Error('Record not found'), { code: 'P2025' }));
+                fileExists.mockResolvedValue(true);
+                const res = createMockRes();
+
+                try {
+                    await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                    expect(res.status).toHaveBeenCalledWith(409);
+                    expect(res.json).toHaveBeenCalledWith({ status: 'error', message: 'Plat nomor sudah terdaftar' });
+                } finally {
+                    errorSpy.mockRestore();
+                }
+            });
         });
 
         test('should cleanup files if db create fails', async () => {
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
             uploadFile.mockResolvedValue({ fileUrl: 'http://url.com/img.jpg' });
             prisma.kendaraan.findUnique.mockResolvedValue(null);
             prisma.kendaraan.create.mockRejectedValue(new Error('DB Error'));
@@ -137,10 +302,68 @@ describe('Kendaraan Controller Tests', () => {
             const req = createMockReq(mockBody, { id_user: 1 }, mockFiles);
             const res = createMockRes();
 
-            await kendaraanController.registerKendaraan(req, res);
+            try {
+                await kendaraanController.registerKendaraan(req, res);
 
-            expect(deleteFile).toHaveBeenCalled(); // Should attempt cleanup
-            expect(res.status).toHaveBeenCalledWith(500);
+                expect(deleteFile).toHaveBeenCalled(); // Should attempt cleanup
+                expect(res.status).toHaveBeenCalledWith(500);
+            } finally {
+                errorSpy.mockRestore();
+            }
+        });
+
+        describe('5xx responses never leak error.message', () => {
+            const leaky = new Error('connect ECONNREFUSED r2.internal.example:9000 password=hunter2');
+            let errorSpy;
+
+            beforeEach(() => {
+                errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+                prisma.kendaraan.findUnique.mockResolvedValueOnce(null); // plate is free
+                prisma.kendaraan.count.mockResolvedValueOnce(0);
+            });
+
+            afterEach(() => errorSpy.mockRestore());
+
+            const expectGeneric500 = (res) => {
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({
+                    status: 'error',
+                    message: 'Terjadi kesalahan pada server'
+                });
+                expect(JSON.stringify(res.json.mock.calls)).not.toMatch(/ECONNREFUSED|hunter2/);
+                expect(errorSpy).toHaveBeenCalled(); // the real error is logged, not returned
+            };
+
+            test('vehicle photo upload failure', async () => {
+                uploadFile.mockReset().mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
+
+            test('STNK upload failure', async () => {
+                const ok = { fileUrl: 'http://url.com/img.jpg' };
+                uploadFile.mockReset()
+                    .mockResolvedValueOnce(ok).mockResolvedValueOnce(ok).mockResolvedValueOnce(ok)
+                    .mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
+
+            test('database save failure', async () => {
+                uploadFile.mockReset().mockResolvedValue({ fileUrl: 'http://url.com/img.jpg' });
+                prisma.kendaraan.create.mockRejectedValueOnce(leaky);
+                const res = createMockRes();
+
+                await kendaraanController.registerKendaraan(createMockReq(mockBody, { id_user: 1 }, mockFiles), res);
+
+                expectGeneric500(res);
+            });
         });
     });
 
@@ -168,8 +391,8 @@ describe('Kendaraan Controller Tests', () => {
                 data: expect.objectContaining({ statusVerif: true })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Disetujui'),
                 expect.any(String),
                 expect.anything()
@@ -220,8 +443,8 @@ describe('Kendaraan Controller Tests', () => {
                 })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Kendaraan Dihapus'),
                 expect.any(String),
                 expect.anything()
@@ -256,6 +479,12 @@ describe('Kendaraan Controller Tests', () => {
                     feedback: 'Buram'
                 })
             });
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
+                expect.stringContaining('Ditolak'),
+                expect.any(String),
+                expect.objectContaining({ type: 'KENDARAAN_REJECTED' })
+            );
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -264,6 +493,29 @@ describe('Kendaraan Controller Tests', () => {
             const res = createMockRes();
             await kendaraanController.rejectKendaraan(req, res);
             expect(res.status).toHaveBeenCalledWith(400);
+        });
+
+        test('rejecting a delete request on an approved vehicle keeps it DISETUJUI and verified', async () => {
+            const req = createMockReq({ id_kendaraan: 1, id_user: 2, feedback: 'Masih dipakai' });
+            const res = createMockRes();
+
+            prisma.kendaraan.findUnique.mockResolvedValue({
+                id_kendaraan: 1,
+                plat_nomor: 'D1A',
+                status_pengajuan: 'DISETUJUI',
+                statusVerif: true,
+                feedback: 'DELETE_REQUEST: Ganti plat'
+            });
+            prisma.kendaraan.update.mockResolvedValue({});
+            prisma.user.findUnique.mockResolvedValue({ fcm_token: null });
+
+            await kendaraanController.rejectKendaraan(req, res);
+
+            const { data } = prisma.kendaraan.update.mock.calls[0][0];
+            expect(data.status_pengajuan).toBe('DISETUJUI');
+            expect(data.statusVerif).toBe(true);
+            expect(data).not.toHaveProperty('deletedAt');
+            expect(res.status).toHaveBeenCalledWith(200);
         });
 
         test('should reject vehicle deletion request and restore to DISETUJUI', async () => {
@@ -289,8 +541,8 @@ describe('Kendaraan Controller Tests', () => {
                 })
             });
 
-            expect(sendPushNotification).toHaveBeenCalledWith(
-                'token123',
+            expect(sendUserNotification).toHaveBeenCalledWith(
+                2,
                 expect.stringContaining('Pembatalan Penghapusan'),
                 expect.any(String),
                 expect.anything()
@@ -313,6 +565,8 @@ describe('Kendaraan Controller Tests', () => {
                 id_user: 1,
                 fotoKendaraan: ['url1', 'url2'],
                 fotoSTNK: 'urlStnk',
+                status_pengajuan: 'DISETUJUI',
+                statusVerif: true,
                 deletedAt: null
             });
 
@@ -327,6 +581,72 @@ describe('Kendaraan Controller Tests', () => {
                 }
             });
             expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test.each(['MENUNGGU', 'DITOLAK'])('refuses a deletion request for a %s vehicle with 409', async (status) => {
+            const req = createMockReq({ reason: 'Jual kendaraan' }, { id_user: 1 }, {}, { id_kendaraan: 1 });
+            const res = createMockRes();
+
+            prisma.kendaraan.findUnique.mockResolvedValue({
+                id_kendaraan: 1,
+                id_user: 1,
+                status_pengajuan: status,
+                statusVerif: false,
+                deletedAt: null
+            });
+
+            await kendaraanController.deleteKendaraan(req, res);
+
+            expect(prisma.kendaraan.update).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Hanya kendaraan yang sudah disetujui yang bisa diajukan hapus'
+            });
+        });
+
+        test("still answers 404 for a vehicle that is not the caller's", async () => {
+            const req = createMockReq({}, { id_user: 1 }, {}, { id_kendaraan: 1 });
+            const res = createMockRes();
+            prisma.kendaraan.findUnique.mockResolvedValue(null);
+
+            await kendaraanController.deleteKendaraan(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(prisma.kendaraan.update).not.toHaveBeenCalled();
+        });
+    });
+
+    /**
+     * ADMIN LIST SEARCH
+     */
+    describe('getAllUnverifiedKendaraan', () => {
+        beforeEach(() => {
+            prisma.kendaraan.count.mockReset().mockResolvedValue(0);
+            prisma.kendaraan.findMany.mockReset().mockResolvedValue([]);
+        });
+
+        test('searches the plate column with the normalised search term', async () => {
+            const req = createMockReq({}, { id_user: 1 }, {}, {}, { search: 'b 1234-x' });
+            const res = createMockRes();
+
+            await kendaraanController.getAllUnverifiedKendaraan(req, res);
+
+            const { where } = prisma.kendaraan.findMany.mock.calls[0][0];
+            expect(where.OR).toEqual(expect.arrayContaining([
+                { plat_nomor: { contains: 'B1234X', mode: 'insensitive' } }
+            ]));
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        test('a search that normalises to nothing does not add an empty plate clause', async () => {
+            const req = createMockReq({}, { id_user: 1 }, {}, {}, { search: '---' });
+            const res = createMockRes();
+
+            await kendaraanController.getAllUnverifiedKendaraan(req, res);
+
+            const { where } = prisma.kendaraan.findMany.mock.calls[0][0];
+            expect(JSON.stringify(where.OR)).not.toContain('"contains":""');
         });
     });
 });

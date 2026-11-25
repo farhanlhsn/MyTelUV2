@@ -1,24 +1,20 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 
-@GenerateNiceMocks([MockSpec<Dio>(), MockSpec<FlutterSecureStorage>()])
+@GenerateNiceMocks([MockSpec<Dio>()])
 import 'kendaraan_service_test.mocks.dart';
 
 void main() {
   late MockDio mockDio;
-  late MockFlutterSecureStorage mockSecureStorage;
 
   setUp(() {
     mockDio = MockDio();
-    mockSecureStorage = MockFlutterSecureStorage();
 
     KendaraanService.dio = mockDio;
-    KendaraanService.secureStorage = mockSecureStorage;
   });
 
   group('KendaraanService', () {

@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:dio/dio.dart';
+import '../../utils/app_theme.dart';
 
 /// Data hasil dari GeofencePickerPage
 class GeofenceData {
@@ -47,7 +48,7 @@ class _GeofencePickerPageState extends State<GeofencePickerPage> {
   String _locationName = '';
   bool _isLoading = false;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -208,8 +209,9 @@ class _GeofencePickerPageState extends State<GeofencePickerPage> {
               ),
               child: ListTile(
                 leading: IconButton(
+                  tooltip: 'Kembali',
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(appBackIcon),
                 ),
                 title: const Text(
                   'Pilih Lokasi Geofence',

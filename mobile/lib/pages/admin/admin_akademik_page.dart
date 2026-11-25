@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile/pages/admin/tabs/admin_matakuliah_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_kelas_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_peserta_tab.dart';
+import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminAkademikPage extends StatefulWidget {
   const AdminAkademikPage({super.key});
@@ -29,8 +31,9 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -39,7 +42,8 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -73,7 +77,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                labelColor: const Color(0xFFE63946),
+                labelColor: AppColors.primary,
                 unselectedLabelColor: Colors.white,
                 labelStyle: const TextStyle(
                   fontWeight: FontWeight.bold,
@@ -116,6 +120,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
             ),
           ],
         ),
+      ),
       ),
     );
   }

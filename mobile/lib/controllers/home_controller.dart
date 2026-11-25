@@ -2,14 +2,19 @@ import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/kelas.dart';
 import '../models/kelas_hari_ini.dart';
-import '../models/absensi.dart';
 import '../models/user.dart';
 import '../services/akademik_service.dart';
+import '../utils/attendance_status.dart';
+import '../utils/error_helper.dart';
 import '../utils/logger.dart';
 
 class HomeController extends GetxController {
-  final AkademikService _akademikService = AkademikService();
+  final AkademikService _akademikService;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  /// [akademikService] is for tests; the app uses the default one.
+  HomeController({AkademikService? akademikService})
+    : _akademikService = akademikService ?? AkademikService();
 
   // Observable states
   final RxBool isLoading = false.obs;
@@ -19,9 +24,10 @@ class HomeController extends GetxController {
 
   final RxList<PesertaKelasModel> kelasList = <PesertaKelasModel>[].obs;
   final RxList<KelasHariIniModel> kelasHariIniList = <KelasHariIniModel>[].obs;
-  final RxList<AbsensiModel> absensiList = <AbsensiModel>[].obs;
-  final RxMap<int, AbsensiStatsModel> absensiStats =
-      <int, AbsensiStatsModel>{}.obs;
+
+  /// Attendance of the student over all their classes, in percent (see [loadAbsensi]). Null until
+  /// the history was loaded once: an unknown value is not 0%.
+  final Rxn<double> kehadiranPercentage = Rxn<double>();
   final RxBool isKelasHariIniFromCache = false.obs;
 
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
@@ -50,7 +56,7 @@ class HomeController extends GetxController {
         );
       }
     } catch (e) {
-      errorMessage.value = 'Failed to load user data: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat data pengguna: ${ErrorHelper.parseError(e)}';
     }
   }
 
@@ -97,7 +103,7 @@ class HomeController extends GetxController {
       kelasHariIniList.value = kelas;
       isKelasHariIniFromCache.value = fromCache;
     } catch (e) {
-      errorMessage.value = 'Failed to load kelas hari ini: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat kelas hari ini: ${ErrorHelper.parseError(e)}';
       kelasHariIniList.value = [];
       isKelasHariIniFromCache.value = false;
     } finally {
@@ -112,46 +118,28 @@ class HomeController extends GetxController {
       final List<PesertaKelasModel> kelas = await _akademikService.getKelasKu();
       kelasList.value = kelas;
     } catch (e) {
-      errorMessage.value = 'Failed to load kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal memuat kelas: ${ErrorHelper.parseError(e)}';
       kelasList.value = [];
     } finally {
       isLoadingKelas.value = false;
     }
   }
 
-  // Load absensi mahasiswa
+  // Load the attendance percentage of the student. It comes from the same history the absensi page
+  // shows (the server's own counts: every closed session counts, also one the student missed without
+  // leaving a record; izin/sakit are left out), so Home and History say the same.
   Future<void> loadAbsensi() async {
     isLoadingAbsensi.value = true;
     try {
-      final List<AbsensiModel> absensi = await _akademikService.getAbsensiKu();
-      absensiList.value = absensi;
-      absensiStats.value = _buildAbsensiStats(absensi);
+      final List<Map<String, dynamic>> history =
+          await _akademikService.getAbsensiKuHistory();
+      kehadiranPercentage.value = overallAttendancePercentage(history);
     } catch (e) {
-      errorMessage.value = 'Failed to load absensi: ${e.toString()}';
-      absensiList.value = [];
-      absensiStats.value = {};
+      // The last percentage stays on screen (none yet if this was the first load)
+      errorMessage.value = 'Gagal memuat absensi: ${ErrorHelper.parseError(e)}';
     } finally {
       isLoadingAbsensi.value = false;
     }
-  }
-
-  Map<int, AbsensiStatsModel> _buildAbsensiStats(
-    List<AbsensiModel> absensiList,
-  ) {
-    final Map<int, Map<String, int>> countsByKelas = {};
-
-    for (final AbsensiModel absensi in absensiList) {
-      final counts = countsByKelas.putIfAbsent(
-        absensi.idKelas,
-        () => {'HADIR': 0, 'IJIN': 0, 'SAKIT': 0, 'ALPHA': 0},
-      );
-      counts[absensi.typeAbsensi] = (counts[absensi.typeAbsensi] ?? 0) + 1;
-    }
-
-    return countsByKelas.map(
-      (int idKelas, Map<String, int> counts) =>
-          MapEntry(idKelas, AbsensiStatsModel.fromJson(counts)),
-    );
   }
 
   // Get next class (kelas terdekat berdasarkan jadwal)
@@ -163,31 +151,9 @@ class HomeController extends GetxController {
     return kelasList.first;
   }
 
-  // Get absensi stats for a specific class
-  AbsensiStatsModel? getAbsensiStatsForKelas(int idKelas) {
-    return absensiStats[idKelas];
-  }
-
-  // Get total kehadiran percentage across all classes
-  double get totalKehadiranPercentage {
-    if (absensiStats.isEmpty) return 100.0;
-
-    int totalHadir = 0;
-    int totalAbsensi = 0;
-
-    for (final AbsensiStatsModel stats in absensiStats.values) {
-      totalHadir += stats.totalHadir;
-      totalAbsensi +=
-          stats.totalHadir +
-          stats.totalIjin +
-          stats.totalSakit +
-          stats.totalAlpha;
-    }
-
-    if (totalAbsensi == 0) return 100.0;
-
-    return (totalHadir / totalAbsensi * 100);
-  }
+  // Attendance percentage over all classes: null until the history was loaded, 0 when nothing is
+  // countable yet
+  double? get totalKehadiranPercentage => kehadiranPercentage.value;
 
   // Refresh all data
   Future<void> refreshData() async {
@@ -206,7 +172,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to daftar kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal mendaftar kelas: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;
@@ -225,7 +191,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to drop kelas: ${e.toString()}';
+      errorMessage.value = 'Gagal keluar dari kelas: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;
@@ -241,12 +207,13 @@ class HomeController extends GetxController {
   }) async {
     try {
       isLoading.value = true;
-      final bool success = await _akademikService.createAbsensi(
+      final Map<String, dynamic> body = await _akademikService.createAbsensi(
         idKelas: idKelas,
         idSesiAbsensi: idSesiAbsensi,
         latitude: latitude,
         longitude: longitude,
       );
+      final bool success = body['status'] == 'success';
 
       if (success) {
         await loadAbsensi(); // Reload absensi list
@@ -254,7 +221,7 @@ class HomeController extends GetxController {
 
       return success;
     } catch (e) {
-      errorMessage.value = 'Failed to create absensi: ${e.toString()}';
+      errorMessage.value = 'Gagal membuat absensi: ${ErrorHelper.parseError(e)}';
       return false;
     } finally {
       isLoading.value = false;

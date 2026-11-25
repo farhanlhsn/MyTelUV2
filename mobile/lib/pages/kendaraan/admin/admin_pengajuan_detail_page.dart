@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/services/kendaraan_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/app_theme.dart';
+import '../../common/red_header_background.dart';
 
 class AdminPengajuanDetailPage extends StatefulWidget {
   final PengajuanPlatModel pengajuan;
@@ -39,7 +40,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           ? 'Apakah Anda yakin ingin menyetujui penghapusan kendaraan ${widget.pengajuan.platNomor}?'
           : 'Apakah Anda yakin ingin menyetujui pengajuan kendaraan ${widget.pengajuan.platNomor}?',
       confirmText: isDeleteRequest ? 'SETUJUI HAPUS' : 'SETUJUI',
-      confirmColor: isDeleteRequest ? Colors.red : Colors.green,
+      confirmColor: isDeleteRequest ? AppColors.danger : Colors.green,
     );
 
     if (confirmed != true) return;
@@ -169,11 +170,11 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 hintText: hintText,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE63946)),
+                  borderSide: const BorderSide(color: AppColors.primary),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+                  borderSide: const BorderSide(color: AppColors.primary, width: 2),
                 ),
               ),
             ),
@@ -196,7 +197,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -214,8 +215,9 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -224,7 +226,8 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -262,7 +265,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 child: _isLoading
                     ? const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       )
                     : SingleChildScrollView(
@@ -297,6 +300,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -318,7 +322,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFF76F68),
+          color: AppColors.primary,
           width: 1.5,
         ),
         boxShadow: [
@@ -379,7 +383,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                   ),
                   Flexible(
                     child: Text(
-                      widget.pengajuan.userName ?? widget.pengajuan.userUsername ?? 'Unknown',
+                      widget.pengajuan.userName ?? widget.pengajuan.userUsername ?? 'Tanpa nama',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -500,13 +504,13 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                       color: Colors.grey[200],
                       child: const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[200],
-                      child: const Icon(Icons.error, color: Colors.red),
+                      child: const Icon(Icons.error, color: AppColors.danger),
                     ),
                   ),
                 ),
@@ -528,7 +532,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _currentImageIndex == index
-                    ? const Color(0xFFE63946)
+                    ? AppColors.primary
                     : Colors.grey[300],
               ),
             ),
@@ -565,14 +569,14 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           color: Colors.grey[200],
           child: const Center(
             child: CircularProgressIndicator(
-              color: Color(0xFFE63946),
+              color: AppColors.primary,
             ),
           ),
         ),
         errorWidget: (context, url, error) => Container(
           height: 200,
           color: Colors.grey[200],
-          child: const Icon(Icons.error, color: Colors.red),
+          child: const Icon(Icons.error, color: AppColors.danger),
         ),
       ),
     );
@@ -622,12 +626,12 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
             onPressed: _isLoading ? null : _handleReject,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFFE63946),
+              foregroundColor: AppColors.primary,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: const BorderSide(
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                   width: 2,
                 ),
               ),
@@ -649,7 +653,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleApprove,
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDeleteRequest ? Colors.red : Colors.green,
+              backgroundColor: isDeleteRequest ? AppColors.danger : Colors.green,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(

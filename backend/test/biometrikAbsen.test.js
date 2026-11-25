@@ -18,7 +18,8 @@ jest.mock('../utils/prisma', () => ({
     $queryRaw: jest.fn().mockResolvedValue([]),
 }));
 
-jest.mock('axios');
+// Python AI service calls go through the dedicated client (utils/pythonClient), not the global axios
+jest.mock('../utils/pythonClient', () => ({ pythonClient: { get: jest.fn(), post: jest.fn() } }));
 
 jest.mock('fs', () => ({
     ...jest.requireActual('fs'),
@@ -47,7 +48,7 @@ jest.mock('form-data', () => {
 
 // Import mocked modules
 const prisma = require('../utils/prisma');
-const axios = require('axios');
+const { pythonClient } = require('../utils/pythonClient');
 const fs = require('fs');
 const embeddingCache = require('../utils/embeddingCache');
 
@@ -84,7 +85,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        axios.post.mockReset();
+        pythonClient.post.mockReset();
         embeddingCache.invalidateCache();
         prisma.dataBiometrik.findUnique.mockReset();
         prisma.pesertaKelas.findMany.mockReset();
@@ -104,7 +105,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 1: No File Uploaded
      * ============================================
      * Path: 1→2→3→END
-     * Expected: Error 400 - Image file is required
+     * Expected: Error 400 - File gambar wajib diisi
      */
     describe('Path 1: No File Uploaded', () => {
         test('TC001 - Should return 400 when no file is uploaded', async () => {
@@ -117,7 +118,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Image file is required'
+                message: 'File gambar wajib diisi'
             });
         });
 
@@ -131,7 +132,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Image file is required'
+                message: 'File gambar wajib diisi'
             });
         });
     });
@@ -159,7 +160,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 2: Invalid Coordinates
      * ============================================
      * Path: 1→2→4→5→END
-     * Expected: Error 400 - Invalid coordinates
+     * Expected: Error 400 - Koordinat tidak valid
      */
     describe('Path 2: Invalid Coordinates', () => {
         test('TC002a - Should return 400 when latitude is NaN', async () => {
@@ -174,7 +175,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid coordinates'
+                message: 'Koordinat tidak valid'
             });
         });
 
@@ -190,7 +191,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Invalid coordinates'
+                message: 'Koordinat tidak valid'
             });
         });
 
@@ -248,7 +249,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      * PATH 3: Face Detection Failed
      * ============================================
      * Path: 1→2→4→6→7→8→END
-     * Expected: Error 400 - Face detection failed
+     * Expected: Error 400 - Gagal mendeteksi wajah
      */
     describe('Path 3: Face Detection Failed', () => {
         test('TC003 - Should return 400 when face detection fails', async () => {
@@ -259,7 +260,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: false, error: 'No face detected' }
             });
 
@@ -272,7 +273,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'No face detected'
+                message: expect.stringMatching(/Wajah tidak terdeteksi/)
             });
         });
 
@@ -284,7 +285,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: false, error: null }
             });
 
@@ -297,7 +298,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
-                message: 'Face detection failed'
+                message: 'Gagal mendeteksi wajah. Coba ambil foto ulang.'
             });
         });
     });
@@ -311,7 +312,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 4: User Not Registered Biometric', () => {
         test('TC004a - Should return 400 when user has no biometric data', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [0.1, 0.2, 0.3] }
             });
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce(null);
@@ -330,7 +331,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         });
 
         test('TC004b - Should return 400 when biometric is soft deleted', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [0.1, 0.2, 0.3] }
             });
             prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
@@ -361,7 +362,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 5: Face Not Matched', () => {
         test('TC005 - Should return 400 when face does not match', async () => {
-            axios.post.mockResolvedValueOnce({
+            pythonClient.post.mockResolvedValueOnce({
                 data: { success: true, embedding: [1, 0, 0] }
             });
 
@@ -383,8 +384,10 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
             expect(res.json).toHaveBeenCalledWith({
                 status: 'error',
                 message: 'Wajah tidak cocok',
-                similarity: 0
+                match: false
             });
+            // The raw score is an oracle for guessing a face, so it is never sent to the client.
+            expect(res.json.mock.calls[0][0]).not.toHaveProperty('similarity');
         });
     });
 
@@ -397,7 +400,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 6: Not Enrolled in Any Class', () => {
         test('TC006 - Should return 400 when user not enrolled in any class', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -434,7 +437,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 7: No Active Session', () => {
         test('TC007 - Should return 400 when no active session', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -472,7 +475,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 8: Already Marked Attendance', () => {
         test('TC008 - Should return 409 when already marked attendance', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -515,7 +518,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
      */
     describe('Path 9: Location Out of Area', () => {
         test('TC009 - Should return 403 when location is out of area', async () => {
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -565,7 +568,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC010 - Should return 201 when all checks pass with location', async () => {
             const now = new Date();
 
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -612,10 +615,53 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Algoritma Pemrograman',
                         ruangan: 'R.101',
                         type: 'HADIR',
-                        similarity: 1
+                        match: true
                     })
                 })
             );
+            expect(res.json.mock.calls[0][0].data).not.toHaveProperty('similarity');
+        });
+
+        test('TC010b - A check-in more than LATE_THRESHOLD_MINUTES (default 15) after the start is TELAT', async () => {
+            const previousThreshold = process.env.LATE_THRESHOLD_MINUTES;
+            delete process.env.LATE_THRESHOLD_MINUTES;
+            const now = new Date();
+
+            pythonClient.post.mockResolvedValueOnce({ data: { success: true, embedding: [0.1, 0.2, 0.3] } });
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1, id_user: 1, face_embedding: [0.1, 0.2, 0.3], deletedAt: null,
+                user: { id_user: 1, nama: 'John Doe', username: 'johndoe' }
+            });
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 1 }]);
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
+                id_sesi_absensi: 1, id_kelas: 1,
+                latitude: null, longitude: null, radius_meter: null,
+                type_absensi: 'LOKAL_ABSENSI',
+                mulai: new Date(now.getTime() - 20 * 60 * 1000),
+                selesai: new Date(now.getTime() + 60 * 60 * 1000),
+                kelas: { nama_kelas: 'Algoritma A', ruangan: 'R.101', matakuliah: { nama_matakuliah: 'Algoritma Pemrograman' } }
+            }]);
+            prisma.absensi.findFirst
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce({ id_absensi: 1, createdAt: now, status: 'TELAT' });
+            prisma.$executeRaw.mockResolvedValueOnce(1);
+
+            const res = createMockRes();
+            try {
+                await biometrikAbsen(createMockReq(), res, jest.fn());
+            } finally {
+                if (previousThreshold === undefined) delete process.env.LATE_THRESHOLD_MINUTES;
+                else process.env.LATE_THRESHOLD_MINUTES = previousThreshold;
+            }
+
+            expect(res.status).toHaveBeenCalledWith(201);
+            const [strings, ...values] = prisma.$executeRaw.mock.calls[0];
+            expect(strings.join('?')).toMatch(/"StatusKehadiran"/);
+            expect(values).toContain('TELAT');
+            expect(res.json.mock.calls[0][0].data).toMatchObject({ status: 'TELAT' });
+            // The impossible-travel check skips records that have no location (entered by a dosen)
+            const previousQuery = prisma.$queryRaw.mock.calls.find(([s]) => s.join('?').includes('koordinat[0]'));
+            expect(previousQuery[0].join('?')).toMatch(/koordinat IS NOT NULL/);
         });
     });
 
@@ -630,7 +676,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
         test('TC011 - Should return 201 when all checks pass without location', async () => {
             const now = new Date();
 
-            axios.post
+            pythonClient.post
                 .mockResolvedValueOnce({
                     data: { success: true, embedding: [0.1, 0.2, 0.3] }
                 })
@@ -675,10 +721,161 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                         kelas: 'Basis Data',
                         ruangan: 'R.202',
                         type: 'HADIR',
-                        similarity: 1
+                        match: true
                     })
                 })
             );
+        });
+    });
+
+    /**
+     * ============================================
+     * DUPLICATE INSERT RACE: the unique index (id_user, id_sesi_absensi) wins
+     * ============================================
+     */
+    describe('Duplicate insert race', () => {
+        const arrangeValidAttendance = () => {
+            pythonClient.post.mockResolvedValueOnce({
+                data: { success: true, embedding: [0.1, 0.2, 0.3] }
+            });
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce({
+                id_biometrik: 1, id_user: 1, face_embedding: [0.1, 0.2, 0.3], deletedAt: null,
+                user: { id_user: 1, nama: 'Jane Doe', username: 'janedoe' }
+            });
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([{ id_kelas: 2 }]);
+            prisma.sesiAbsensi.findMany.mockResolvedValueOnce([{
+                id_sesi_absensi: 2, id_kelas: 2,
+                latitude: null, longitude: null, radius_meter: null,
+                type_absensi: 'LOKAL_ABSENSI',
+                kelas: { nama_kelas: 'Database B', ruangan: 'R.202', matakuliah: { nama_matakuliah: 'Basis Data' } }
+            }]);
+            // The pre-check sees no row: the parallel request has not committed yet
+            prisma.absensi.findFirst.mockResolvedValueOnce(null);
+        };
+
+        test.each([
+            ['P2002', Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })],
+            ['P2010 / 23505', Object.assign(new Error('Raw query failed'), { code: 'P2010', meta: { code: '23505' } })]
+        ])('TC015 - a %s unique violation on insert is a 409, not a 500', async (_label, err) => {
+            arrangeValidAttendance();
+            prisma.$executeRaw.mockRejectedValueOnce(err);
+
+            const res = createMockRes();
+            const next = jest.fn();
+            await biometrikAbsen(createMockReq(), res, next);
+
+            expect(next).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Anda sudah melakukan absensi untuk sesi ini'
+            });
+        });
+
+        test('TC015b - other insert errors still propagate', async () => {
+            arrangeValidAttendance();
+            prisma.$executeRaw.mockRejectedValueOnce(new Error('db down'));
+
+            const next = jest.fn();
+            await biometrikAbsen(createMockReq(), createMockRes(), next);
+
+            expect(next).toHaveBeenCalledWith(expect.any(Error));
+        });
+    });
+
+    /**
+     * ============================================
+     * TEST MODE: only the TEST_MODE env var may bypass the face service
+     * ============================================
+     */
+    describe('Test mode is controlled by env only', () => {
+        const originalTestMode = process.env.TEST_MODE;
+        const originalFaceApiKey = process.env.FACE_API_KEY;
+
+        afterEach(() => {
+            if (originalTestMode === undefined) delete process.env.TEST_MODE;
+            else process.env.TEST_MODE = originalTestMode;
+            if (originalFaceApiKey === undefined) delete process.env.FACE_API_KEY;
+            else process.env.FACE_API_KEY = originalFaceApiKey;
+        });
+
+        const storedBiometric = {
+            id_biometrik: 1, id_user: 1, face_embedding: [0, 1, 0], deletedAt: null,
+            user: { id_user: 1, nama: 'Test User', username: 'testuser' }
+        };
+
+        test('TC012 - client x-test-mode header is ignored: the face service is called and a mismatch is rejected', async () => {
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            pythonClient.post.mockResolvedValueOnce({
+                data: { success: true, embedding: [1, 0, 0] }
+            });
+
+            const req = createMockReq({ headers: { 'x-test-mode': 'true' } });
+            const res = createMockRes();
+            const next = jest.fn();
+
+            await biometrikAbsen(req, res, next);
+
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
+            expect(pythonClient.post.mock.calls[0][0]).toMatch(/\/detect-face$/);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                message: 'Wajah tidak cocok'
+            }));
+            expect(prisma.pesertaKelas.findMany).not.toHaveBeenCalled();
+        });
+
+        test('TC012b - the face service call carries X-API-Key from FACE_API_KEY and no X-Test-Mode header', async () => {
+            process.env.FACE_API_KEY = 'face-secret-key';
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            pythonClient.post.mockResolvedValueOnce({ data: { success: true, embedding: [1, 0, 0] } });
+
+            await biometrikAbsen(createMockReq(), createMockRes(), jest.fn());
+
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
+            const sentHeaders = pythonClient.post.mock.calls[0][2].headers;
+            expect(sentHeaders['X-API-Key']).toBe('face-secret-key');
+            expect(Object.keys(sentHeaders).map((h) => h.toLowerCase())).not.toContain('x-test-mode');
+        });
+
+        test('TC013 - client x-test-mode header is ignored: a failed detection is rejected', async () => {
+            delete process.env.TEST_MODE;
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            pythonClient.post.mockResolvedValueOnce({
+                data: { success: false, error: 'No face detected' }
+            });
+
+            const req = createMockReq({ headers: { 'x-test-mode': 'true' } });
+            const res = createMockRes();
+
+            await biometrikAbsen(req, res, jest.fn());
+
+            expect(pythonClient.post).toHaveBeenCalledTimes(1);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: expect.stringMatching(/Wajah tidak terdeteksi/)
+            });
+        });
+
+        test('TC014 - TEST_MODE=true in the environment skips the face service', async () => {
+            process.env.TEST_MODE = 'true';
+            prisma.dataBiometrik.findUnique.mockResolvedValueOnce(storedBiometric);
+            prisma.pesertaKelas.findMany.mockResolvedValueOnce([]);
+
+            const req = createMockReq();
+            const res = createMockRes();
+
+            await biometrikAbsen(req, res, jest.fn());
+
+            expect(pythonClient.post).not.toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                status: 'error',
+                message: 'Anda tidak terdaftar di kelas manapun'
+            });
         });
     });
 
@@ -696,7 +893,7 @@ describe('biometrikAbsen - White Box Testing (Basis Path)', () => {
                 deletedAt: null,
                 user: { id_user: 1, nama: 'Test User', username: 'testuser' }
             });
-            axios.post.mockRejectedValueOnce(new Error('Service unavailable'));
+            pythonClient.post.mockRejectedValueOnce(new Error('Service unavailable'));
 
             const req = createMockReq();
             const res = createMockRes();

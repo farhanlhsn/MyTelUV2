@@ -1,0 +1,831 @@
+\documentclass[12pt,titlepage,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[indonesian]{babel}
+\usepackage{geometry}
+\geometry{top=3cm, bottom=3cm, left=3.5cm, right=3cm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{ragged2e}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{indentfirst}
+\usepackage{caption}
+
+\setlength{\parindent}{1.2cm}
+\setlength{\parskip}{0.25em}
+\setlist{itemsep=0.25em, topsep=0.4em}
+\captionsetup{font=small, labelfont=bf, justification=centering}
+\emergencystretch=2em
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    filecolor=black,      
+    urlcolor=black,
+    pdftitle={Laporan Akhir Gabungan Proyek WuzPay POS \& MyTelU V2},
+    pdfpagemode=UseOutlines,
+}
+
+% Konfigurasi Highlight Kode Program
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\scriptsize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    xleftmargin=0.5cm,
+    xrightmargin=0.1cm,
+    frame=single,
+    framerule=0.2pt
+}
+
+\lstset{style=mystyle}
+\lstdefinelanguage{JavaScript}{
+    keywords={const, let, var, function, return, if, else, for, await, async, try, catch, throw, new, class, import, from, true, false},
+    keywordstyle=\color{magenta},
+    sensitive=true,
+    comment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    string=[b]',
+    morestring=[b]",
+}
+
+\newcommand{\safeincludegraphics}[2][]{%
+    \IfFileExists{#2}{%
+        \includegraphics[#1]{#2}%
+    }{%
+        \fbox{\begin{minipage}[c][5cm][c]{0.85\textwidth}\centering\small Gambar belum tersedia: \texttt{\detokenize{#2}}\end{minipage}}%
+    }%
+}
+
+
+\begin{document}\pagenumbering{gobble}
+
+% ----------------------------------------------------------------------
+% HALAMAN COVER
+% ----------------------------------------------------------------------
+\begin{titlepage}
+    \begin{center}
+        \vspace*{1cm}
+        
+        \large\textbf{Final Project Documentation}\\
+        \large\textbf{MATA KULIAH: APLIKASI BERBASIS PLATFORM}\\
+        
+        \vspace{1.5cm}
+        
+        \Huge\textbf{WUZPAY POS \& MYTELU V2}\\
+        
+        \vspace{1.5cm}
+        
+        % Placeholder Logo Universitas
+        \begin{figure}[H]
+            \centering
+            % Ganti 'logo_universitas.png' dengan file logo universitas Anda
+            \safeincludegraphics[width=0.35\textwidth]{logo_universitas.png}
+            \label{fig:logo_univ}
+        \end{figure}
+        
+        \vspace{1.5cm}
+        
+        \large\textbf{IF - 47 - 06}\\
+        \large\textbf{Kelompok: 3}\\
+        \vspace{0.3cm}
+        \large
+        \begin{tabular}{c}
+            Ali Hizqil Syauqani --- 103012300036 \\
+            Daniandra Payudisty Ilham --- 103012300052 \\
+            M. Farhan Al Hasan --- 103012330007 \\
+            Raja Hanif Shirvani --- 103012300315 \\
+            Reyhan Agra Syihab --- 103012330066 \\
+            Athalah Zacky Maulana --- 103012330271\\
+        \end{tabular}
+        
+        \vfill
+        
+        \large\textbf{PROGRAM STUDI S1 INFORMATIKA}\\
+        \large\textbf{FAKULTAS INFORMATIKA}\\
+        \large\textbf{TELKOM UNIVERSITY}\\
+        \large\textbf{2026}\\
+        
+    \end{center}
+\end{titlepage}
+
+\clearpage
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+% ----------------------------------------------------------------------
+% BAB 1: PENDAHULUAN
+% ----------------------------------------------------------------------
+\chapter{Pendahuluan}
+
+\section{Latar Belakang}
+Sistem berbasis platform saat ini perlu dirancang agar tetap andal dalam operasional (\textit{high availability}) serta efisiensi berbasis kecerdasan buatan (\textit{artificial intelligence}). Laporan ini mendokumentasikan pengembangan dua proyek yang menerapkan kebutuhan tersebut, yaitu \textbf{WuzPay POS} dan \textbf{MyTelU V2}.
+
+Proyek pertama, \textbf{WuzPay POS}, dirancang untuk mengatasi masalah keandalan koneksi internet pada bisnis kuliner (F\&B) dan retail. Sistem pencatatan kasir konvensional terancam terhenti apabila jaringan internet padam, yang berdampak langsung pada terhambatnya antrean pembayaran dan kerugian finansial. Selain itu, pemasukan data transaksi belanja bahan baku ke dalam sistem inventaris secara manual rawan kesalahan (\textit{human error}). WuzPay mengatasi masalah ini dengan pendekatan \textit{Offline-First} yang tangguh serta otomasi entri nota belanja menggunakan teknologi AI OCR.
+
+Proyek kedua, \textbf{MyTelU V2}, dikembangkan untuk memodernisasi administrasi dan keamanan fasilitas di lingkungan kampus Telkom University menjadi sebuah ekosistem \textit{smart-campus} yang terintegrasi. Permasalahan utama yang dibahas dapat dikelompokkan ke dalam empat dimensi:
+
+\begin{enumerate}
+    \item \textbf{Kecurangan presensi kelas.} Sistem absensi konvensional sangat rentan terhadap berbagai bentuk manipulasi, antara lain titip absen oleh teman, pemalsuan identitas wajah (foto cetak/rekaman video), pemalsuan lokasi melalui aplikasi \textit{fake GPS}/\textit{mock location}, serta \textit{teleportation attack} (perubahan koordinat drastis dalam waktu singkat). MyTelU V2 menutup celah ini melalui verifikasi multi-lapis: pengenalan wajah biometrik \textit{InsightFace} 512D, \textit{Liveness Detection} berbasis \textit{one-time token}, pembatasan lokasi \textit{Haversine Geofencing}, deteksi \textit{mock location}, dan heuristik \textit{impossible travel} berbasis kecepatan perjalanan antar-presensi.
+    \item \textbf{Manajemen gerbang parkir manual.} Pintu masuk/keluar parkir kampus umumnya masih dijaga secara manual sehingga lambat, rawan kesalahan pencatatan, dan tidak dapat memberi tahu mahasiswa mengenai ketersediaan slot secara \textit{real-time}. MyTelU V2 mengotomatiskan palang gerbang menggunakan modul IoT \textit{edge device} (Raspberry Pi 2) yang mendeteksi plat nomor kendaraan (\textit{License Plate Recognition}/LPR) dengan model YOLOv8 ONNX, sekaligus menangkap wajah pengendara dengan detector YuNet untuk keperluan bukti keamanan. Kapasitas parkir diperbarui secara atomik dan disiarkan \textit{real-time} melalui WebSocket Socket.IO, serta diteruskan sebagai notifikasi \textit{push} Firebase Cloud Messaging (FCM) kepada pemilik kendaraan.
+    \item \textbf{Registrasi kendaraan yang rawan pemalsuan STNK.} Proses pencatatan kendaraan mahasiswa secara manual memungkinkan penggunaan STNK milik orang lain. MyTelU V2 mewajibkan unggah 3 foto kendaraan dan 1 foto STNK yang disimpan pada \textit{object storage} Cloudflare R2, kemudian diverifikasi secara \textit{approve/reject} oleh admin kampus dengan alasan \textit{feedback} yang dapat dilihat mahasiswa.
+    \item \textbf{Pemantauan pola kehadiran yang tidak wajar.} Rekap absensi yang besar membuat dosen sulit mendeteksi mahasiswa bermasalah secara manual. MyTelU V2 menyediakan analisis anomali asinkron yang memadukan aturan \textit{rule-based} (\textit{TIDAK\_HADIR\_BERULANG} dan \textit{KEHADIRAN\_GANDA}) dengan model \textit{unsupervised learning} \textit{Isolation Forest}, dijalankan melalui antrian \textit{background task} agar tidak memblokir permintaan HTTP.
+\end{enumerate}
+
+Dokumentasi gabungan ini menjelaskan bagaimana platform web dan mobile dapat dihubungkan dengan teknologi database lokal, microservices AI, dan modul IoT \textit{edge device} untuk menghasilkan layanan yang lebih andal dan aman.
+
+\section{Tujuan Proyek}
+Tujuan dari masing-masing pengembangan proyek adalah sebagai berikut:
+\subsection{WuzPay POS}
+\begin{enumerate}
+    \item Membangun sistem kasir POS berkemampuan \textit{Offline-First} menggunakan IndexedDB (\textit{Dexie.js}) dan \textit{Background Auto-Sync} agar operasional kasir tetap berjalan lancar saat internet padam.
+    \item Menyediakan fitur ekstraksi nota bahan baku belanja secara otomatis melalui mikroservis \textit{PaddleOCR} dan pemrosesan LLM untuk menghitung HPP secara presisi.
+    \item Mengurangi kesalahan inventaris dengan pemotongan stok bahan baku otomatis menggunakan logika \textit{Bill of Materials} (BOM) dalam transaksi database ACID.
+\end{enumerate}
+
+\subsection{MyTelU V2}
+\begin{enumerate}
+    \item Membangun sistem absensi biometrik wajah berlapis (\textit{InsightFace} 512D + \textit{Cosine Similarity}) yang dilindungi oleh \textit{Liveness Detection} berbasis \textit{one-time token}, pembatasan lokasi \textit{Haversine Geofencing}, deteksi \textit{mock location}, serta heuristik \textit{impossible travel} (kecepatan $>120$ km/jam dan lompatan GPS $>100$ m dalam $<10$ detik) untuk mencegah manipulasi presensi.
+    \item Mengotomatiskan palang gerbang parkir kampus dengan deteksi plat nomor YOLOv8 ONNX pada \textit{edge device} Raspberry Pi 2, dilengkapi deteksi wajah pengendara YuNet, deduplikasi deteksi berbasis \textit{Intersection over Union} (IoU), kontrol fisik GPIO relay, \textit{fallback} OCR ke \textit{Python microservice}, dan pembaruan kapasitas atomik yang disiarkan via Socket.IO serta FCM.
+    \item Mengimplementasikan alur registrasi kendaraan mahasiswa yang ketat dengan unggah 3 foto kendaraan + 1 foto STNK ke Cloudflare R2, verifikasi \textit{approve/reject} oleh admin lengkap dengan \textit{feedback}, serta batas maksimal kendaraan per pengguna yang dapat dikonfigurasi.
+    \item Mengimplementasikan pendeteksian anomali kehadiran secara asinkron melalui antrian \textit{background task}, memadukan aturan \textit{rule-based} (\textit{TIDAK\_HADIR\_BERULANG}, \textit{KEHADIRAN\_GANDA}) dengan threshold dinamis dari tabel \textit{SystemSetting} dan model \textit{unsupervised} \textit{Isolation Forest} (Python service port 5003).
+    \item Menyediakan modul akademik lengkap (mata kuliah, kelas, peserta, sesi absensi, jadwal pengganti) dan modul sosial kampus (postingan, \textit{like}, komentar, \textit{geotag}) dengan \textit{content moderation}.
+    \item Menerapkan keamanan dan reliabilitas backend kelas produksi: JWT dengan \textit{refresh token rotation}, \textit{password reset} via email, \textit{Circuit Breaker} untuk tiga AI \textit{microservice}, \textit{retry} \textit{exponential backoff}, \textit{rate limiter}, \textit{Helmet}, sanitasi input Zod, \textit{audit log}, \textit{embedding cache}, \textit{graceful shutdown}, serta \textit{scheduler node-cron} untuk penutupan sesi absensi kedaluwarsa otomatis.
+    \item Menyediakan dokumentasi API formal yang terautomasi: spesifikasi OpenAPI 3.0 yang dilayani melalui Swagger UI pada endpoint \texttt{/api-docs}, serta Postman Collection (\texttt{MyTelUV2\_Postman\_Collection.json}) beserta \textit{environment} companion untuk pengujian manual dan otomatisasi Newman.
+\end{enumerate}
+
+\section{Batasan Masalah}
+Batasan operasional dari gabungan kedua sistem ini meliputi:
+\begin{enumerate}
+    \item Pada WuzPay POS, kasir harus sudah masuk (\textit{logged in}) ke sistem saat online untuk menyimpan sesi lokal di \textit{local storage} sebelum dapat beroperasi penuh secara offline.
+    \item Proses pemindaian struk AI OCR pada WuzPay dan pengenalan wajah biometrik pada MyTelU membutuhkan koneksi internet aktif karena mendelegasikan pemrosesan ke model LLM eksternal (Groq/OpenAI) dan server AI.
+    \item Pintu gerbang parkir otomatis MyTelU V2 memerlukan koneksi internet stabil antara modul IoT Raspberry Pi dengan server Node.js utama kampus untuk mencocokkan plat nomor yang terdaftar di database PostgreSQL, melakukan \textit{fallback} OCR, serta menyiarkan pembaruan kapasitas via Socket.IO.
+    \item Deteksi wajah pengendara pada \textit{edge device} bersifat sebagai \textit{evidence capture} (bukti foto), bukan verifikasi identitas satu-ke-satu, sehingga pengendara berhelm tidak akan terdeteksi wajahnya dan sistem akan menyimpan \textit{full frame} sebagai \textit{fallback}.
+    \item Model LPR YOLOv8 yang berjalan pada Raspberry Pi 2 (ARMv7, 1 GB RAM) dioptimalkan untuk plat nomor format Indonesia; akurasi dapat menurun untuk format plat negara bagian lain.
+    \item Analisis anomali \textit{Isolation Forest} memerlukan jumlah sesi absensi yang cukup pada sebuah kelas agar menghasilkan pola yang bermakna; pada kelas baru dengan sedikit sesi, deteksi hanya mengandalkan aturan \textit{rule-based}.
+    \item Aplikasi mobile MyTelU V2 (\textit{Flutter Secure Storage}) tidak dapat diandalkan untuk alur login pada platform web/browser, sehingga pengujian autentikasi wajib dilakukan pada perangkat \textit{desktop}, \textit{emulator}, atau \textit{device} mobile asli.
+\end{enumerate}
+
+
+% ----------------------------------------------------------------------
+% BAB 2: ARSITEKTUR SISTEM DAN TEKNOLOGI
+% ----------------------------------------------------------------------
+\chapter{Arsitektur Sistem dan Teknologi}
+
+\section{Arsitektur Sistem WuzPay POS}
+WuzPay POS menggunakan arsitektur pilar ganda (\textit{double backend}) untuk pemisahan tugas.
+Frontend dibangun sebagai Progressive Web App (PWA) berbasis React 18, Vite, Tailwind CSS, dan Shadcn UI. Di sisi klien, database IndexedDB dikelola menggunakan wrapper \textit{Dexie.js} guna menampung cache katalog dan antrean transaksi offline.
+
+Core API Backend dibangun menggunakan framework Hono yang sangat cepat di atas runtime Deno / Node.js, terhubung ke database MongoDB Atlas menggunakan pustaka Mongoose. AI OCR Microservice dipisahkan sebagai server mandiri berbasis FastAPI Python untuk menangani computer vision PaddleOCR dan meneruskannya ke Groq API.
+
+\section{Arsitektur Sistem MyTelU V2}
+MyTelU V2 menggunakan arsitektur berorientasi layanan (\textit{Service-Oriented Architecture} / SOA) dengan komponen yang heterogen dan terdesentralisasi. Sistem terdiri dari lima lapisan utama: \textbf{klien mobile}, \textbf{core API backend}, \textbf{AI microservices Python}, \textbf{edge device IoT}, dan \textbf{layanan eksternal} (storage/notifications).
+
+\subsection{Klien Mobile}
+Aplikasi mobile dibangun dengan \textbf{Flutter} dan mengadopsi state management \textbf{GetX} yang menyatukan dependency injection, routing, dan reaktivitas. HTTP client memakai \textbf{Dio}, visualisasi data memakai \textbf{FL Chart}, sedangkan notifikasi \textit{push} memanfaatkan \textbf{Firebase Cloud Messaging} (FCM). Kredensial sesi disimpan aman menggunakan \textbf{Flutter Secure Storage}. URL API tidak dibundel di dalam aplikasi, melainkan disuntikkan lewat \texttt{--dart-define} (\texttt{API\_URL\_DEV}, \texttt{API\_URL\_PROD}, \texttt{ENV}) sehingga satu basis kode dapat di-\textit{build} untuk banyak lingkungan.
+
+\subsection{Core API Backend}
+Backend ditulis dengan \textbf{Express 5} di atas \textbf{Node.js}, menggunakan \textbf{Prisma ORM 6} untuk mengelola \textbf{PostgreSQL}. Sebagian field geospasial (kolom \texttt{koordinat} pada \texttt{parkiran} dan \texttt{absensi}) memakai tipe \texttt{point} asli PostgreSQL sehingga didekati via \texttt{\$queryRaw}/\texttt{\$executeRaw} dengan parameter terikat. Komunikasi \textit{real-time} ditangani oleh \textbf{Socket.IO} (misal event \texttt{parking\_update}), dokumentasi API oleh \textbf{swagger-ui-express}, dan keamanan HTTP oleh \textbf{Helmet}, \textbf{express-rate-limit}, serta \textbf{Zod} untuk validasi/sanitasi input. Logging terstruktur memakai \textbf{Winston}, penjadwalan tugas latar oleh \textbf{node-cron}, \textit{graceful shutdown} pada sinyal SIGTERM/SIGINT, dan laporan diekspor ke CSV/Excel/PDF melalui \textbf{json2csv}, \textbf{exceljs}, serta \textbf{pdfkit}.
+
+\subsection{AI Microservices Python}
+Tiga \textit{microservice} Python/Flask terpisah menangani beban AI agar dapat di-\textit{scale} secara independen:
+\begin{itemize}
+    \item \textbf{Face Recognition} (port 5051): Flask + Gunicorn, menghasilkan \textit{embedding} wajah 512D dengan \textit{InsightFace}, menyediakan endpoint \texttt{/detect-face}, \texttt{/detect-multiple}, dan \texttt{/find-match}.
+    \item \textbf{Plate Recognition} (port 5001): Flask + model YOLOv8 (\textit{license\_plate\_recognition.onnx}/\texttt{.pt}), melayani endpoint \texttt{/api/recognize-plate} sebagai \textit{fallback} OCR bagi \textit{edge device}.
+    \item \textbf{Anomaly Detection} (port 5003): Flask + \textbf{scikit-learn} (\textit{Isolation Forest}), melayani endpoint analisis anomali kehadiran.
+\end{itemize}
+Setiap \textit{microservice} dipanggi melalui \textbf{Circuit Breaker} dan \textbf{axios-retry} (\textit{exponential backoff}) sehingga kegagalan salah satu layanan tidak menjatuhkan backend utama.
+
+\subsection{Edge Device IoT}
+Perangkat \textbf{Raspberry Pi 2} (ARMv7, 1 GB RAM) berdiri di gerbang parkir. Skrip \texttt{plate\_detector.py} memakai \textbf{ONNX Runtime} untuk inferensi model deteksi plat, \textbf{OpenCV} untuk akuisisi kamera dan \textit{preprocessing} (letterbox, adaptive threshold, sharpening), serta \textbf{YuNet} (\texttt{cv2.FaceDetectorYN}) untuk menangkap wajah pengendara. Kontrol palang dilakukan via \textbf{RPi.GPIO} (relay pada pin BCM 17). Deteksi duplikat dieliminasi dengan \textit{Intersection over Union} (IoU $> 0{,}5$ dalam $<5$ detik). Komunikasi ke backend melalui header rahasia \texttt{X-Edge-Secret}.
+
+\subsection{Layanan Eksternal}
+Penyimpanan berkas biner (foto wajah, STNK, foto kendaraan, foto presensi, bukti parkir) memakai \textbf{Cloudflare R2} melalui \texttt{@aws-sdk/client-s3}. Notifikasi \textit{push} memakai \textbf{firebase-admin} (FCM), sedangkan \textit{reset password} mengirim email transaksional via \textbf{Nodemailer}.
+
+\subsection{Diagram Aliran Data}
+Aliran data utama MyTelU V2 dapat diringkas sebagai berikut:
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize, frame=single, breaklines=true, language=]
+Mobile (Flutter/GetX)
+   |  Dio HTTP + JWT
+   v
+Core API (Express 5 + Prisma) --> PostgreSQL (tipe point)
+   |                               ^  |
+   |  Circuit Breaker + Retry       |  |
+   v  + multipart/form-data         |  |
+Face AI (5051)   Plate AI (5001)    |  |
+   |                                 |  |
+   +--> Anomaly AI (5003) ----------+  |
+                                      |
+Edge Device (RPi 2, ONNX, YuNet) ----+
+   |  X-Edge-Secret + image/face_image
+   v
+POST /api/v1/parkir/edge-entry --> Socket.IO + FCM
+\end{lstlisting}
+
+\subsection{Dokumentasi API (OpenAPI/Swagger \& Postman Collection)}
+MyTelU V2 menyediakan dua kanal dokumentasi API formal sehingga setiap endpoint dapat diinspeksi, diuji, dan diintegrasikan oleh konsumen API secara terstandar.
+
+\textbf{OpenAPI 3.0 (Swagger UI).} Spesifikasi didefinisikan secara \textit{code-first} pada \texttt{backend/utils/swagger.js} dan dilayani oleh \texttt{swagger-ui-express} pada endpoint \texttt{/api-docs}. Spesifikasi mendeklarasikan dua \textit{server} (prefix \texttt{/api/v1} dan legacy \texttt{/api}), delapan \textit{tag} kategorisasi (\texttt{System}, \texttt{Auth}, \texttt{Biometrik}, \texttt{Kendaraan}, \texttt{Akademik}, \texttt{Parkir}, \texttt{Anomali}, \texttt{Posts}), serta dua skema keamanan: \texttt{bearerAuth} (JWT \texttt{Bearer}) dan \texttt{edgeSecretAuth} (\textit{header} \texttt{X-Edge-Secret}). Routing backend didaftarkan ganda via \texttt{registerRoutes('/api')} dan \texttt{registerRoutes('/api/v1')} sehingga endpoint konsisten pada kedua prefix.
+
+\textbf{Postman Collection.} Berkas \texttt{MyTelUV2\_Postman\_Collection.json} (nama: \textit{MyTelUV2 API Collection}) disertai \texttt{MyTelUV2\_Postman\_Environment.json} untuk variabel seperti \texttt{base\_url} dan \texttt{token}. Collection terbagi menjadi 10 folder: \texttt{Quick Links}, \texttt{Authentication}, \texttt{Akademik}, \texttt{Biometrik}, \texttt{Kendaraan}, \texttt{Parkir}, \texttt{Anomali}, \texttt{Posts}, \texttt{Auth Extras}, dan \texttt{AI Services}; cocok untuk pengujian manual maupun otomatisasi \textbf{Newman} pada pipeline CI/CD.
+
+\begin{table}[H]
+    \centering
+    \caption{Matriks Komponen \& Port MyTelU V2}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabularx}{\textwidth}{>{\bfseries}p{0.27\textwidth}p{0.20\textwidth}Y}
+        \toprule
+        Komponen & Port & Teknologi / Tanggung Jawab \\
+        \midrule
+        Core API Backend & 5050 & Express 5, Prisma 6, Socket.IO, Swagger UI \\
+        Face Recognition & 5051 & Flask + Gunicorn, InsightFace 512D embedding \\
+        Plate Recognition & 5001 & Flask, YOLOv8 ONNX, OCR plat nomor \\
+        Anomaly Detection & 5003 & Flask, scikit-learn Isolation Forest \\
+        PostgreSQL & 5432 & DB utama, tipe \texttt{point} geospasial, GiST index \\
+        Cloudflare R2 & --- & Object storage (S3 SDK) untuk semua berkas biner \\
+        Firebase FCM & --- & Push notification parkir \& sistem \\
+        Edge Device (RPi 2) & --- & ONNX Runtime, OpenCV, YuNet, RPi.GPIO \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:komponen_mytelu}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Pemetaan Tag OpenAPI $\rightarrow$ Modul Controller $\rightarrow$ Prefix Route}
+    \small
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabularx}{\textwidth}{>{\bfseries}p{0.18\textwidth}>{\ttfamily}p{0.22\textwidth}Y}
+        \toprule
+        Tag OpenAPI & Controller & Tanggung Jawab \\
+        \midrule
+        System & --- & Health check (\texttt{/health}), dokumentasi \texttt{/api-docs} \\
+        Auth & authController.js & Register, login, refresh, logout, profil, reset password, FCM token \\
+        Biometrik & biometrikController.js & Liveness token, add/edit/delete biometrik, verify, scan, absen \\
+        Kendaraan & kendaraanController.js & Registrasi kendaraan, verifikasi admin, CRUD kendaraan \\
+        Akademik & akademikController.js & Mata kuliah, kelas, peserta, sesi absensi, jadwal pengganti \\
+        Parkir & parkirController.js & Edge entry, histori, analitik, override, reconcile, export CSV \\
+        Anomali & anomaliController.js & Analisis anomali async, laporan, settings threshold, job status \\
+        Posts & postController.js & Postingan, like, komentar, content moderation \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:tag_openapi}
+\end{table}
+
+\section{Perbandingan Teknologi}
+\begin{table}[H]
+    \centering
+    \caption{Matriks Perbandingan Teknologi WuzPay POS vs MyTelU V2}
+    \small
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabularx}{\textwidth}{>{\bfseries}p{0.28\textwidth}YY}
+        \toprule
+        Spesifikasi & \textbf{WuzPay POS} & \textbf{MyTelU V2} \\
+        \midrule
+        Platform Frontend & Web App (React 18, Vite) & Mobile App (Flutter, GetX, Dio) \\
+        Local DB / Storage & IndexedDB (Dexie.js) & Flutter Secure Storage \\
+        Core Backend & Hono Web Framework & Express 5 (Node.js) \\
+        Runtime Engine & Deno / Node.js & Node.js \\
+        Database Utama & MongoDB Atlas (NoSQL) & PostgreSQL + tipe \texttt{point} (Prisma 6) \\
+        Penyimpanan File & Local Directory (Backend) & Cloudflare R2 (S3 SDK) \\
+        Layanan AI & PaddleOCR (Computer Vision) & InsightFace 512D, YOLOv8 ONNX, YuNet, Isolation Forest \\
+        Protokol Real-time & HTTP Polling / Sync Hook & Socket.IO (WebSockets) + FCM Push \\
+        Hardware / IoT & Tidak Ada & Raspberry Pi 2 (ONNX, OpenCV, RPi.GPIO relay) \\
+        Dokumentasi API & --- & OpenAPI 3.0 (Swagger UI) + Postman Collection \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:perbandingan_tech}
+\end{table}
+
+
+% ----------------------------------------------------------------------
+% BAB 3: PERAN PENGGUNA DAN MANAJEMEN AKSES
+% ----------------------------------------------------------------------
+\chapter{Peran Pengguna dan Manajemen Akses}
+
+\section{Matriks Otoritas Peran Pengguna (RBAC)}
+Kedua aplikasi menerapkan Role-Based Access Control (RBAC) secara ketat untuk melindungi data operasional dan administratif yang sensitif.
+
+\subsection{Peran pada WuzPay POS}
+\begin{itemize}
+    \item \textbf{Owner}: Memiliki hak akses penuh ke dashboard keuangan, laporan penjualan, analitik produk, pengelolaan formula resep bahan baku, perubahan hak akses izin staf, dan konsultasi interaktif dengan AI Assistant.
+    \item \textbf{Kasir}: Memiliki akses operasional terbatas hanya pada layar Point of Sale (POS), pencatatan antrean pesanan (\textit{pending orders}), simulasi pembayaran QRIS/Tunai, dan pengecekan stok bahan baku.
+\end{itemize}
+
+\subsection{Peran pada MyTelU V2}
+\begin{itemize}
+    \item \textbf{Mahasiswa}: Melakukan presensi biometrik berlapis (wajah + \textit{liveness token} + GPS + deteksi \textit{mock location}), melihat riwayat presensi pribadi, mendaftarkan kendaraan dengan mengunggah 3 foto kendaraan dan 1 foto STNK, melihat peta kapasitas parkir \textit{real-time}, membuat postingan sosial kampus (\textit{like}, komentar, \textit{geotag}), melihat jadwal mingguan dan jadwal pengganti, serta menerima notifikasi \textit{push} FCM.
+    \item \textbf{Dosen}: Mengelola sesi absensi aktif (lokal/remote dengan \textit{geofence} \& radius), memantau rekap absensi kelas secara real-time, membuat jadwal pengganti, memicu analisis anomali (mode sinkron atau asinkron via \texttt{?async=true}), serta menindaklanjuti laporan anomali (status \texttt{OPEN}/\texttt{REVIEWED}/\texttt{RESOLVED} + catatan dosen).
+    \item \textbf{Admin}: Memiliki kendali administratif penuh --- validasi (\textit{approve/reject}) pengajuan registrasi kendaraan dan STNK mahasiswa beserta \textit{feedback}, manajemen pengguna (\textit{soft delete}/reaktivasi, \textit{reset password}, pagination + search), CRUD parkiran, \textit{manual override} gerbang, \textit{reconcile} kapasitas, \textit{export} log parkir CSV, konfigurasi threshold anomali (\texttt{SystemSetting}), monitoring biometrik dan akademik.
+    \item \textbf{Edge Device (IoT)}: Perangkat kamera gerbang yang berkomunikasi menggunakan \textit{header rahasia} \texttt{X-Edge-Secret} untuk mengirimkan status deteksi plat masuk/keluar, foto plat, dan bukti wajah pengendara; backend merespons dengan instruksi \texttt{gate\_action} (\texttt{OPEN}/\texttt{DENY}) yang memicu relay GPIO palang gerbang secara fisik.
+\end{itemize}
+
+\begin{table}[H]
+    \centering
+    \caption{Matriks RBAC MyTelU V2 (Fitur $\times$ Peran)}
+    \scriptsize
+    \renewcommand{\arraystretch}{1.15}
+    \begin{tabularx}{\textwidth}{>{\RaggedRight\arraybackslash}p{0.42\textwidth}cccc}
+        \toprule
+        Fitur / Aksi & Mahasiswa & Dosen & Admin & Edge \\
+        \midrule
+        Presensi biometrik (absen) & \checkmark & --- & --- & --- \\
+        Minta liveness token & \checkmark & --- & --- & --- \\
+        Lihat riwayat absensi sendiri & \checkmark & \checkmark & \checkmark & --- \\
+        Buat/edit sesi absensi & --- & \checkmark & \checkmark & --- \\
+        Rekap absensi kelas & --- & \checkmark & \checkmark & --- \\
+        Jadwal pengganti & --- & \checkmark & \checkmark & --- \\
+        Analisis anomali (sync/async) & --- & \checkmark$^*$ & \checkmark & --- \\
+Tindak lanjut laporan anomali & --- & \checkmark$^*$ & \checkmark & --- \\
+        Konfigurasi threshold anomali & --- & --- & \checkmark & --- \\
+        Registrasi kendaraan + STNK & \checkmark & --- & --- & --- \\
+        Verifikasi kendaraan (approve/reject) & --- & --- & \checkmark & --- \\
+        Lihat histori parkir sendiri & \checkmark & \checkmark & \checkmark & --- \\
+        Lihat/CRUD parkiran & \checkmark$^\dagger$ & \checkmark$^\dagger$ & \checkmark & --- \\
+        Edge entry (gate\_action) & --- & --- & --- & \checkmark \\
+        Manual override gerbang & --- & --- & \checkmark & --- \\
+        Reconcile kapasitas + export CSV & --- & --- & \checkmark & --- \\
+        Postingan sosial + like + komentar & \checkmark & \checkmark & \checkmark & --- \\
+        Manajemen pengguna + reset password & --- & --- & \checkmark & --- \\
+        \bottomrule
+    \end{tabularx}
+    \par\raggedright\scriptsize $^*$ terbatas pada kelas yang diampu. \quad $^\dagger$ hanya baca (\texttt{GET}).
+    \label{tab:rbac_mytelu}
+\end{table}
+
+\section{Implementasi Teknis Otorisasi Rute}
+Di kedua aplikasi, token JWT divalidasi pada setiap request di sisi backend. Di sisi frontend, rute dilindungi dengan cara memeriksa peran (\textit{role}) pengguna sebelum merender komponen halaman.
+
+Pada WuzPay POS (React/React Router):
+\begin{lstlisting}[language=JavaScript]
+// Potongan logika proteksi di frontend WuzPay (App.tsx)
+const isAllowed = userPermissions.includes(activeMenu) || currentUser?.role === 'owner';
+if (!isAllowed) {
+  return (
+    <div className="flex flex-col items-center justify-center p-10 bg-white">
+      <ShieldCheck className="size-20 text-orange-600 mb-6" />
+      <h2 className="font-black text-3xl">Akses Dibatasi</h2>
+    </div>
+  );
+}
+\end{lstlisting}
+
+Pada MyTelU V2 (Express 5 \texttt{authMiddleware.js}), middleware \texttt{protect} memverifikasi JWT Bearer dan memuat \texttt{req.user}, lalu middleware \texttt{authorize(...roles)} membatasi peran. Token diambil hanya dari \textit{header} \texttt{Authorization} (bukan \textit{cookie/query}) dan pengguna yang telah di-\textit{soft-delete} ditolak:
+\begin{lstlisting}[language=JavaScript]
+// middlewares/authMiddleware.js - proteksi rute + RBAC
+exports.protect = asyncHandler(async (req, res, next) => {
+  let token;
+  if (req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  if (!token) {
+    return res.status(401).json({ status: "error",
+      message: 'Not authorized to access this route' });
+  }
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  req.user = await prisma.user.findUnique({
+    where: { id_user: decoded.id, deletedAt: null }, // tolak soft-deleted
+    select: { id_user: true, username: true, nama: true, role: true, nim_nip: true }
+  });
+  if (!req.user) {
+    return res.status(401).json({ status: "error",
+      message: 'User not found or has been deactivated' });
+  }
+  next();
+});
+
+// Batasi akses hanya untuk peran tertentu
+exports.authorize = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ status: "error",
+      message: `User role ${req.user.role} is not authorized` });
+  }
+  next();
+};
+\end{lstlisting}
+
+\noindent Rotasi \textit{refresh token} dilakukan transaksional di \texttt{authController.js}: token lama dihapus dan token baru dibuat dalam satu \texttt{\$transaction}, dengan masa berlaku 7 hari, sedangkan access token berlaku 1 jam:
+\begin{lstlisting}[language=JavaScript]
+// controllers/authController.js - refresh token rotation
+const token = jwt.sign({ id: user.id_user }, process.env.JWT_SECRET,
+                       { expiresIn: '1h' });
+const newRefreshToken = uuidv4();
+const expiresAt = new Date();
+expiresAt.setDate(expiresAt.getDate() + 7);
+await prisma.$transaction([
+  prisma.refreshToken.delete({ where: { id: existingToken.id } }),
+  prisma.refreshToken.create({
+    data: { token: newRefreshToken, id_user: existingToken.user.id_user, expiresAt }
+  })
+]);
+\end{lstlisting}
+
+
+% ----------------------------------------------------------------------
+% BAB 4: ANALISIS FITUR UNGGULAN DAN IMPLEMENTASI KODE
+% ----------------------------------------------------------------------
+\chapter{Analisis Fitur Unggulan dan Implementasi Kode}
+
+% --- BAGIAN WUZPAY ---
+\section{Fitur Unggulan WuzPay POS}
+
+\subsection{Kemampuan Offline-First dan Sinkronisasi Latar Belakang}
+WuzPay memanfaatkan database lokal IndexedDB lewat pustaka Dexie.js. Saat perangkat kasir offline, pesanan disimpan secara lokal ke dalam tabel \texttt{pendingTransactions}. Ketika jaringan internet pulih, sistem memicu sinkronisasi latar belakang sekuensial dengan interval 20 detik.
+\begin{lstlisting}[language=JavaScript]
+// Potongan kode sinkronisasi offline di App.tsx (WuzPay)
+const syncOfflineData = async () => {
+  if (!navigator.onLine) return;
+  const pendingTxs = await db.pendingTransactions.toArray();
+  if (pendingTxs.length === 0) return;
+
+  for (const tx of pendingTxs) {
+    try {
+       const response = await transactionsAPI.create(tx.payload, { disableOfflineQueue: true });
+       if (!response?.offline) {
+         await db.pendingTransactions.delete(tx.id);
+       }
+       await new Promise(r => setTimeout(r, 300)); // Jeda antar transaksi
+    } catch(e) {
+       console.warn("Gagal sinkronisasi:", e);
+    }
+  }
+};
+\end{lstlisting}
+
+\subsection{Pemindai Struk Belanja AI (Computer Vision + LLM)}
+Menggunakan Python FastAPI dan PaddleOCR di port \texttt{8001}. Gambar struk didekopel menjadi teks mentah oleh PaddleOCR, lalu dikirim ke model LLM Llama melalui Groq API dengan rekayasa prompt untuk menghasilkan format JSON murni.
+\begin{lstlisting}[language=Python]
+# Potongan penanganan OCR di main.py (WuzPay OCR Service)
+result = await asyncio.to_thread(ocr.ocr, temp_file, cls=True)
+extracted_lines = [line[1][0] for res in result if res is not None for line in res]
+raw_text = "\n".join(extracted_lines)
+parsed_json = await parse_with_openai(raw_text) # LLM parsing ke JSON
+\end{lstlisting}
+
+\subsection{Logika Inventaris Pintar (Bill of Materials - BOM)}
+Setiap pembuatan transaksi kasir, sistem menggunakan MongoDB Session (ACID transaction) untuk memotong stok bahan baku berdasarkan resep produk secara real-time. Jika stok bahan tidak mencukupi, transaksi dibatalkan (\textit{abortTransaction}) untuk mencegah selisih data fisik.
+\begin{lstlisting}[language=JavaScript]
+// Penggalan logika BOM di backend/routes/transactions.ts
+if (product.recipe && product.recipe.length > 0) {
+  for (const recipeItem of product.recipe) {
+    const ingredient = await Ingredient.findById(recipeItem.ingredient_id).session(session);
+    const amountToDeduct = recipeItem.amount_needed * qty;
+    const newStock = (ingredient.stock_quantity || 0) - amountToDeduct;
+    if (newStock < 0) {
+      throw new Error(`Stok "${ingredient.name}" tidak mencukupi.`);
+    }
+    ingredient.stock_quantity = newStock;
+    await ingredient.save({ session });
+  }
+}
+\end{lstlisting}
+
+% --- BAGIAN MYTELU ---
+\section{Fitur Unggulan MyTelU V2}
+
+\subsection{Absensi Biometrik Berlapis (\textit{Multi-Layer Anti-Spoofing})}
+Modul absensi (\texttt{biometrikController.js}, endpoint \texttt{POST /api/v1/biometrik/absen}) membentengi kecurangan melalui delapan lapisan verifikasi berurutan: (1) validasi input \texttt{id\_sesi\_absensi} dan koordinat, (2) penolakan \textit{mock location}, (3) verifikasi \textit{one-time liveness token} yang dihasilkan endpoint terpisah dan dikonsumsi sekali pakai, (4) deteksi wajah via \textit{InsightFace} 512D, (5) pencocokan \textit{Cosine Similarity} ambang \texttt{FACE\_SIMILARITY\_THRESHOLD} (default 0.6), (6) pengecekan keanggotaan kelas \& sesi aktif, (7) pembatasan \textit{Haversine Geofencing} berbasis radius sesi, dan (8) heuristik \textit{impossible travel} terhadap presensi sebelumnya.
+
+\begin{lstlisting}[language=JavaScript]
+// controllers/biometrikController.js - Cosine Similarity pada embedding 512D
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dot = 0.0, normA = 0.0, normB = 0.0;
+  for (let i = 0; i < vecA.length; i++) {
+    dot += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+// Haversine untuk geofence kelas (radius sesi)
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // meter
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+\end{lstlisting}
+
+Heuristik \textit{impossible travel} menilai kredibilitas berdasarkan kecepatan perjalanan antar-presensi: kecepatan $>120$ km/jam dengan jarak $>1000$ m $\rightarrow$ skor 0 (ditolak); kecepatan $>80$ km/jam $\rightarrow$ skor $-50$; dan lompatan GPS $>100$ m dalam $<10$ detik $\rightarrow$ skor $-80$. Absensi dengan skor kredibilitas $<50$ ditolak:
+\begin{lstlisting}[language=JavaScript]
+// Heuristik impossible travel (biometrikController.js)
+if (calculatedSpeedKmh > 120 && distMeters > 1000) {
+  credibilityScore = 0;
+  suspensionReason = `Impossible travel. Speed: ${calculatedSpeedKmh} km/h.`;
+} else if (calculatedSpeedKmh > 80 && distMeters > 1000) {
+  credibilityScore -= 50;
+  suspensionReason = `Suspicious speed: ${calculatedSpeedKmh} km/h.`;
+} else if (timeDiffSeconds < 10 && distMeters > 100) {
+  credibilityScore -= 80;
+  suspensionReason = "GPS jump detected (teleportation).";
+}
+\end{lstlisting}
+\textit{Endpoint-endpoint modul ini terdokumentasi pada tag \texttt{Biometrik} (Swagger UI \texttt{/api-docs}) dan dapat diuji melalui folder \texttt{Biometrik} pada Postman Collection.}
+
+\subsection{Sistem Parkir Cerdas dengan Edge Device IoT}
+Modul parkir menggabungkan inferensi \textit{edge} (Raspberry Pi 2) dan pemrosesan server. Skrip \texttt{edge\_device/plate\_detector.py} memakai \textbf{ONNX Runtime} untuk deteksi plat, \textbf{YuNet} (\texttt{cv2.FaceDetectorYN}) untuk menangkap wajah pengendara terbesar (\textit{evidence capture}), serta deduplikasi \textit{Intersection over Union} untuk mengeliminasi deteksi ganda dalam 5 detik:
+\begin{lstlisting}[language=Python]
+# edge_device/plate_detector.py - deduplikasi IoU + gate control
+if iou > 0.5 and time_diff < 5.0:
+    self.logger.info(f"Skipping duplicate (IoU: {iou:.2f})")
+    continue
+# Kirim plat + wajah ke server
+files = {'image': ('plate.jpg', plate_encoded.tobytes(), 'image/jpeg')}
+if face_img is not None:
+    files['face_image'] = ('face.jpg', face_encoded.tobytes(), 'image/jpeg')
+headers = {'X-Edge-Secret': self.config['server']['secret']}
+r = requests.post(f"{self.server_url}/api/v1/parkir/edge-entry",
+                  files=files, data={'parkiran_id': parkiran_id,
+                  'gate_type': gate_type, 'face_detected': str(face_detected).lower()},
+                  headers=headers, timeout=self.server_timeout)
+\end{lstlisting}
+
+Di sisi server (\texttt{parkirController.js}), \textit{edge entry} memvalidasi \texttt{X-Edge-Secret}, melakukan \textit{fallback} OCR ke \textit{Python microservice} bila plat tak terbaca, mencari kendaraan terverifikasi, lalu memperbarui kapasitas \textbf{secara atomik} (mencegah \textit{race condition}) dan menyiarkan event WebSocket \texttt{parking\_update} serta push FCM:
+\begin{lstlisting}[language=JavaScript]
+// controllers/parkirController.js - atomic capacity increment (MASUK)
+const updateResult = await prisma.$executeRaw`
+  UPDATE parkiran
+  SET live_kapasitas = live_kapasitas + 1, "updatedAt" = NOW()
+  WHERE id_parkiran = ${parsedParkiranId}
+    AND live_kapasitas < kapasitas AND "deletedAt" IS NULL`;
+if (updateResult === 0) {
+  return res.status(400).json({ status: "error",
+    message: `Parkiran penuh`, data: { gate_action: "DENY" } });
+}
+// Push FCM + WebSocket real-time
+sendParkingNotification(kendaraan.user.id_user, 'MASUK', {...}, parkiranData.nama_parkiran);
+io.emit('parking_update', { id_parkiran: parsedParkiranId,
+        live_kapasitas: parkiranData.live_kapasitas + 1, kapasitas: parkiranData.kapasitas });
+\end{lstlisting}
+Berkas plat dengan \textit{confidence} $<0{,}75$ diunggah ke R2 dan ditandai sebagai \textit{active learning} untuk \textit{retraining} model. Modul juga menyediakan \textit{manual override} admin, \textit{reconcile} kapasitas berbasis log aktual, dan \textit{export} CSV. \textit{Endpoint modul ini terdokumentasi pada tag \texttt{Parkir} dan folder \texttt{Parkir} pada Postman Collection.}
+
+\subsection{Deteksi Anomali Kehadiran Asinkron}
+Analisis anomali (\texttt{anomaliController.js}) memadukan aturan \textit{rule-based} dan model \textit{Isolation Forest}. Threshold dibaca dinamis dari tabel \texttt{SystemSetting} (\texttt{anomaly\_threshold\_jarang\_hadir} default 50\%, \texttt{anomaly\_threshold\_kehadiran\_ganda} default 10\%) sehingga admin dapat menyesuaikan tanpa \textit{redeploy}. Dua aturan utama: (a) \texttt{TIDAK\_HADIR\_BERULANG} --- mahasiswa dengan \textit{attendance rate} $\le$ threshold, dan (b) \texttt{KEHADIRAN\_GANDA} --- multiple check-in pada sesi yang sama $\ge$ threshold:
+\begin{lstlisting}[language=JavaScript]
+// controllers/anomaliController.js - rule TIDAK_HADIR_BERULANG
+const attendanceRate = totalSesi > 0 ? (jumlahHadir / totalSesi) : 1.0;
+if (attendanceRate <= thresholdJarangHadir) {
+  anomalies.push({
+    id_user: uid, type_anomali: 'TIDAK_HADIR_BERULANG',
+    confidence: 1.0 - (attendanceRate / thresholdJarangHadir),
+    description: `Kehadiran rendah: ${(attendanceRate*100).toFixed(0)}%`
+  });
+}
+\end{lstlisting}
+Untuk kelas besar, analisis dapat dijalankan asinkron via \texttt{?async=true} yang mengembalikan \texttt{jobId} dan memproses tugas melalui \texttt{globalAnomalyQueue} (\texttt{utils/TaskQueue.js}) agar tidak memblokir permintaan HTTP; status dapat di-poll lewat endpoint \texttt{/api/v1/anomali/job-status/:jobId}. Laporan lama di-\textit{soft delete} sebelum laporan baru disisipkan (\texttt{createMany}). Dosen/admin dapat menindaklanjuti dengan status \texttt{OPEN}/\texttt{REVIEWED}/\texttt{RESOLVED} beserta catatan. \textit{Service} Python (\texttt{anomaly\_detection/app.py}) menjalankan \textit{Isolation Forest} sebagai deteksi tambahan:
+\begin{lstlisting}[language=Python]
+# backend/python-service/anomaly_detection/app.py - Isolation Forest
+from sklearn.ensemble import IsolationForest
+clf = IsolationForest(contamination=0.1, random_state=42)
+predictions = clf.fit_predict(X)  # X = fitur [latency, timing, distance]
+outlier_indices = np.where(predictions == -1)[0]
+\end{lstlisting}
+\textit{Endpoint modul ini terdokumentasi pada tag \texttt{Anomali} dan folder \texttt{Anomali} pada Postman Collection.}
+
+\subsection{Registrasi Kendaraan \& Verifikasi STNK}
+Modul kendaraan (\texttt{kendaraanController.js}) mewajibkan multipart \texttt{fotoKendaraan} (minimum 3, maksimum 5) dan \texttt{fotoSTNK} (1). Semua berkas diunggah ke Cloudflare R2 pada folder \texttt{kendaraan}, dengan batas \texttt{MAX\_KENDARAAN\_PER\_USER} (default 3, tidak menghitung kendaraan yang \texttt{DITOLAK}). Plat nomor bersifat unik (\texttt{@unique}). Setelah unggah, status pengajuan adalah \texttt{MENUNGGU}; admin melakukan \textit{approve/reject} dengan \textit{feedback} yang terlihat oleh mahasiswa dan memicu notifikasi \textit{push} FCM:
+\begin{lstlisting}[language=JavaScript]
+// controllers/kendaraanController.js - validasi & upload R2
+if (fotoKendaraanFiles.length < 3) {
+  return res.status(400).json({ status: "error",
+    message: `Exactly 3 fotoKendaraan required (got ${fotoKendaraanFiles.length})` });
+}
+const result = await uploadFile(file.buffer, file.originalname,
+                               file.mimetype, 'kendaraan');
+uploadedFotoKendaraan.push(result.fileUrl);
+\end{lstlisting}
+\textit{Endpoint modul ini terdokumentasi pada tag \texttt{Kendaraan} dan folder \texttt{Kendaraan} pada Postman Collection.}
+
+\subsection{Keamanan \& Reliabilitas Backend Kelas Produksi}
+MyTelU V2 mengadopsi pola reliabilitas \textit{enterprise}: \textbf{Circuit Breaker} (\texttt{utils/CircuitBreaker.js}) melindungi backend dari kegagalan AI \textit{microservice} dengan tiga keadaan (\texttt{CLOSED}/\texttt{OPEN}/\texttt{HALF-OPEN}) dan \textit{recovery timeout}:
+\begin{lstlisting}[language=JavaScript]
+// utils/CircuitBreaker.js - proteksi cascade failure AI service
+if (this.state === 'OPEN') {
+  if (now - this.lastStateChanged >= this.recoveryTimeout) {
+    this.setState('HALF-OPEN');           // uji coba pemulihan
+  } else {
+    throw new Error(`Layanan ${this.serviceName} offline. Coba dalam ${secondsRemaining} detik.`);
+  }
+}
+// axios-retry exponential backoff untuk panggilan AI
+axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (e) => axiosRetry.isNetworkOrIdempotentRequestError(e) || e.code === 'ECONNABORTED' });
+\end{lstlisting}
+Lapisan keamanan lain: \textbf{JWT} (1 jam) + \textbf{refresh token rotation} (7 hari, transaksional), \textit{password reset} via email dengan token UUID 30 menit + anti-\textit{user-enumeration} (respons sama baik user ada/tidak), \textbf{Helmet} CSP, \textbf{express-rate-limit}, \textbf{Zod} untuk validasi/sanitasi input, \textbf{audit log} (\texttt{utils/auditLogger.js}) untuk aksi sensitif (\texttt{ADMIN\_RESET\_PASSWORD}, \texttt{ADMIN\_DEACTIVATE\_USER}, \texttt{ABSEN\_SUCCESS}), \textbf{embedding cache} (\texttt{utils/embeddingCache.js}) memakai \textit{node-cache} untuk mempercepat verifikasi wajah, serta \textbf{graceful shutdown} yang menutup HTTP server dan memutus Prisma pada SIGTERM/SIGINT. \textit{Endpoint modul ini terdokumentasi pada tag \texttt{Auth} dan folder \texttt{Authentication}/\texttt{Auth Extras} pada Postman Collection.}
+
+\subsection{Sosial Media Kampus (\textit{Posts})}
+Modul \texttt{postController.js} menyediakan \textit{feed} kampus dengan postingan, \textit{media} (unggah ke R2), \textit{geotag} (\textit{latitude}/\textit{longitude}/\textit{location\_name}), \textit{like} (unik per pasangan user-post), dan komentar. Konten masuk disaring oleh \texttt{utils/contentModerator.js} untuk mencegah konten tidak pantas. Endpoint \texttt{GET /api/v1/posts} mendukung pagination dan urutan terbaru. \textit{Endpoint modul ini terdokumentasi pada tag \texttt{Posts} dan folder \texttt{Posts} pada Postman Collection.}
+
+\subsection{Scheduler \& Tugas Latar Belakang}
+\texttt{utils/scheduler.js} memakai \textbf{node-cron} untuk menutup sesi absensi yang kedaluwarsa setiap menit, serta sekali saat \textit{startup} untuk sesi yang kedaluwarsa saat server mati:
+\begin{lstlisting}[language=JavaScript]
+// utils/scheduler.js - auto-close expired sessions
+cron.schedule('* * * * *', async () => { await closeExpiredSessions(); });
+// prisma.sesiAbsensi.updateMany({ where: { status: true, selesai: { lt: now } },
+//                                 data: { status: false } })
+\end{lstlisting}
+Selain itu, \texttt{server.js} menjalankan \textit{cleanup} berkas yatim di \texttt{uploads/} yang berusia $>1$ jam, dan \textit{periodic health check} ke \textit{Python service} setiap 5 menit pada lingkungan produksi. Endpoint \texttt{/health} mengekspos status database dan tiga AI \textit{microservice} sebagai sinyal \texttt{ok}/\texttt{degraded} untuk \textit{orchestrator} Docker.
+
+
+% ----------------------------------------------------------------------
+% BAB 5: TAMPILAN ANTARMUKA DAN SCREENSHOT
+% ----------------------------------------------------------------------
+\chapter{Tampilan Antarmuka dan Dokumentasi Screenshot}
+
+Bagian ini menyajikan rancangan visual antarmuka pengguna untuk kedua sistem. Gambar-gambar screenshot aplikasi dapat disesuaikan dan diunggah sesuai nama berkas yang tertera pada keterangan di bawah ini.
+
+\section{Dokumentasi Antarmuka WuzPay POS}
+
+\subsection{Halaman Login \& Dashboard Finansial}
+Layar masuk kasir dan visualisasi data finansial penjualan outlet retail WuzPay POS.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.9\textwidth]{ss_dashboard_wuzpay.png}
+    \caption{Tampilan Dashboard Finansial Penjualan WuzPay POS}
+    \label{fig:ss_dashboard_wuzpay}
+\end{figure}
+
+\subsection{Layar Transaksi Kasir (POS Screen)}
+Antarmuka utama kasir operasional WuzPay untuk memproses menu dan metode pembayaran.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.9\textwidth]{ss_pos.png}
+    \caption{Layar Point of Sale Utama WuzPay POS}
+    \label{fig:ss_pos}
+\end{figure}
+
+\subsection{Modul AI OCR Receipt Scanner \& AI Assistant}
+Halaman upload nota belanja HPP inventaris WuzPay serta panel chat konsultasi chatbot AI.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.9\textwidth]{ss_receipt_scan_wuzpay.png}
+    \caption{Pemindaian Nota Struk Belanja Menggunakan AI OCR}
+    \label{fig:ss_receipt_scan_wuzpay}
+\end{figure}
+
+\section{Dokumentasi Antarmuka MyTelU V2}
+
+\subsection{Autentikasi (Login, Register, Lupa Password, OTP, Reset)}
+Rangkaian layar onboarding dan pemulihan akun mahasiswa: login, registrasi, lupa password dengan OTP, dan reset password via token email.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.32\textwidth]{ss_login_mytelu.png}\hfill
+    \safeincludegraphics[width=0.32\textwidth]{ss_register_mytelu.png}\hfill
+    \safeincludegraphics[width=0.32\textwidth]{ss_forgot_password_mytelu.png}
+    \caption{Layar Autentikasi MyTelU V2: Login, Register, dan Lupa Password}
+    \label{fig:ss_auth_mytelu}
+\end{figure}
+
+\subsection{Halaman Beranda \& Peta Parkir Mobile}
+Halaman home mahasiswa yang menampilkan \textit{live} slot parkir kampus, peta visual koordinat parkiran, serta umpan postingan sosial kampus.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_home_mytelu.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_maps_mytelu.png}
+    \caption{Layar Beranda \& Peta Parkir Real-time MyTelU V2}
+    \label{fig:ss_home_mytelu}
+\end{figure}
+
+\subsection{Modul Absensi Wajah Biometrik (Liveness Kamera)}
+Layar verifikasi wajah mahasiswa pada aplikasi mobile yang menggabungkan \textit{Liveness Detection} berbasis \textit{one-time token}, pemindaian wajah InsightFace, dan pengecekan \textit{geofence} GPS kelas.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_absen.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_biometrik_verify_mytelu.png}
+    \caption{Layar Presensi Biometrik \& Verifikasi Wajah MyTelU V2}
+    \label{fig:ss_absen}
+\end{figure}
+
+\subsection{Jadwal Mingguan \& Jadwal Pengganti}
+Tampilan jadwal kuliah mingguan mahasiswa serta form pengajuan jadwal pengganti oleh dosen.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_jadwal_mingguan_mytelu.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_jadwal_pengganti_mytelu.png}
+    \caption{Jadwal Mingguan \& Form Jadwal Pengganti MyTelU V2}
+    \label{fig:ss_jadwal}
+\end{figure}
+
+\subsection{Registrasi Kendaraan \& Status Pengajuan}
+Layar pendaftaran kendaraan (unggah 3 foto kendaraan + STNK) dan daftar status pengajuan dengan \textit{feedback} admin.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_pengajuan_kendaraan_mytelu.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_status_pengajuan_mytelu.png}
+    \caption{Registrasi Kendaraan \& Status Pengajuan Mahasiswa}
+    \label{fig:ss_kendaraan_mhs}
+\end{figure}
+
+\subsection{Modul Sosial Kampus (Postingan, Like, Komentar)}
+Feed sosial kampus dengan pembuatan postingan (\textit{geotag}), interaksi \textit{like}, dan halaman komentar.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_post_feed_mytelu.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_comments_mytelu.png}
+    \caption{Feed Sosial Kampus \& Halaman Komentar MyTelU V2}
+    \label{fig:ss_posts}
+\end{figure}
+
+\subsection{Dashboard Rekap Dosen \& Manajemen Sesi Absensi}
+Portal dosen untuk memantau visualisasi rekap kehadiran mahasiswa, membuat/mengelola sesi absensi (lokal/remote), serta memicu analisis anomali.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.45\textwidth]{ss_dosen_manage_absensi.png}\hfill
+    \safeincludegraphics[width=0.45\textwidth]{ss_dosen_sesi_detail.png}
+    \caption{Dashboard Dosen: Manajemen Sesi \& Rekap Absensi}
+    \label{fig:ss_dashboard_dosen}
+\end{figure}
+
+\subsection{Verifikasi Registrasi STNK Mahasiswa (Panel Admin)}
+Portal admin kampus untuk menyetujui atau menolak berkas STNK dan foto fisik kendaraan mahasiswa lengkap dengan \textit{feedback} penolakan.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.9\textwidth]{ss_admin_verifikasi.png}
+    \caption{Panel Validasi Registrasi Kendaraan Mahasiswa oleh Admin}
+    \label{fig:ss_admin_verifikasi}
+\end{figure}
+
+\subsection{Panel Admin: Manajemen Pengguna, Anomali, Biometrik, Akademik}
+Layar administratif admin: manajemen pengguna (\textit{soft delete}/reaktivasi/\textit{reset password}), dashboard anomali \& konfigurasi threshold, monitoring biometrik, serta pengelolaan akademik (kelas/mata kuliah/peserta) dan parkiran.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.32\textwidth]{ss_admin_user_management.png}\hfill
+    \safeincludegraphics[width=0.32\textwidth]{ss_admin_anomali_config.png}\hfill
+    \safeincludegraphics[width=0.32\textwidth]{ss_admin_biometrik.png}
+    \caption{Panel Admin: User Management, Anomali Config, \& Monitoring Biometrik}
+    \label{fig:ss_admin_panels}
+\end{figure}
+
+\subsection{Dokumentasi API Swagger UI \& Postman Collection}
+Antarmuka dokumentasi API formal: Swagger UI pada endpoint \texttt{/api-docs} dan struktur folder Postman Collection.
+\begin{figure}[H]
+    \centering
+    \safeincludegraphics[width=0.9\textwidth]{ss_swagger_ui_mytelu.png}
+    \caption{Swagger UI (OpenAPI 3.0) MyTelU V2 pada \texttt{/api-docs}}
+    \label{fig:ss_swagger}
+\end{figure}
+
+
+% ----------------------------------------------------------------------
+% BAB 6: PENUTUP
+% ----------------------------------------------------------------------
+\chapter{Penutup}
+
+\section{Kesimpulan}
+Berdasarkan implementasi dan pengujian pada kedua proyek, beberapa hal yang dapat disimpulkan adalah sebagai berikut:
+\begin{enumerate}
+    \item WuzPay POS mampu menjaga transaksi ritel tetap berjalan saat koneksi internet bermasalah dengan memanfaatkan penyimpanan lokal IndexedDB (\textit{Dexie.js}) dan sinkronisasi latar belakang. Logika \textit{Bill of Materials} (BOM) dalam transaksi database juga membantu menjaga akurasi pemotongan stok bahan baku.
+    \item MyTelU V2 membuat proses presensi kelas menjadi jauh lebih aman melalui pertahanan berlapis: pengenalan wajah biometrik \textit{InsightFace} 512D dengan \textit{Cosine Similarity}, \textit{Liveness Detection} berbasis \textit{one-time token}, pembatasan lokasi \textit{Haversine Geofencing}, deteksi \textit{mock location}, serta heuristik \textit{impossible travel} yang menilai kecepatan perjalanan antar-presensi.
+    \item Otomatisasi gerbang parkir berhasil menggabungkan komputasi \textit{edge} (YOLOv8 ONNX + YuNet pada Raspberry Pi 2) dengan pemrosesan server (\textit{fallback} OCR, atomic capacity update, WebSocket \texttt{parking\_update}, dan push FCM), sehingga pengendara terverifikasi mendapatkan palang otomatis dan mahasiswa lain melihat kapasitas \textit{real-time}.
+    \item Modul registrasi kendaraan dengan unggah 3 foto kendaraan + STNK ke Cloudflare R2 serta verifikasi \textit{approve/reject} admin mempersempit peluang pemalsuan STNK, didukung batas \texttt{MAX\_KENDARAAN\_PER\_USER} dan \textit{feedback} yang transparan.
+    \item Pemaduan aturan \textit{rule-based} (\textit{TIDAK\_HADIR\_BERULANG}, \textit{KEHADIRAN\_GANDA}) dengan threshold dinamis dari \texttt{SystemSetting} dan model \textit{unsupervised} \textit{Isolation Forest} --- dijalankan asinkron via \texttt{TaskQueue} --- berhasil mendeteksi pola presensi tidak wajar tanpa pelabelan data manual dan tanpa memblokir permintaan HTTP.
+    \item Adopsi pola reliabilitas \textit{enterprise} (Circuit Breaker, axios-retry exponential backoff, refresh token rotation, audit log, embedding cache, graceful shutdown, scheduler node-cron) serta dokumentasi API formal (OpenAPI 3.0/Swagger UI + Postman Collection) membuat backend MyTelU V2 lebih tangguh dan mudah diintegrasikan.
+\end{enumerate}
+
+\section{Saran Pengembangan}
+Agar platform WuzPay POS dan MyTelU V2 dapat dikembangkan lebih lanjut, beberapa saran yang dapat dipertimbangkan adalah:
+\begin{enumerate}
+    \item Integrasi WebSockets pada WuzPay: Mengganti sistem HTTP periodic polling dengan WebSockets untuk sinkronisasi antrean pesanan real-time antar-kasir dalam satu outlet.
+    \item \textbf{Pembatasan Privasi Biometrik Mobile (MyTelU V2):} Mengimplementasikan \textit{Federated Learning} atau pemrosesan \textit{embedding} wajah secara lokal pada perangkat mahasiswa (mis. \textit{on-device} InsightFace TFLite) sehingga hanya vektor 512D yang dikirim, meminimalkan pengiriman gambar wajah mentah ke server.
+    \item \textbf{Kuantisasi \& Edge Autonomy LPR (MyTelU V2):} Melakukan kuantisasi penuh (INT8) model YOLOv8 LPR dan menjalankan OCR karakter sepenuhnya di Raspberry Pi 2 melalui ONNX Runtime, sehingga palang gerbang tetap berfungsi meskipun koneksi ke server AI eksternal terputus.
+    \item \textbf{Pipeline MLOps Active Learning OCR (MyTelU V2):} Membangun otomatisasi \textit{retraining} berkelanjutan dari berkas plat \textit{low-confidence} ($<0{,}75$) yang telah ditandai di R2, dengan validasi \textit{human-in-the-loop} sebelum model baru di-\textit{deploy}.
+    \item \textbf{Ekspansi LPR Multi-Propinsi:} Memperluas dataset pelatihan LPR untuk mencakup format plat nomor seluruh provinsi Indonesia serta plat khusus (CD, R, B XX), guna meningkatkan akurasi OCR pada populasi kendaraan kampus yang beragam.
+    \item \textbf{Verifikasi Identitas Pengendara (MyTelU V2):} Meningkatkan \textit{evidence capture} wajah YuNet menjadi verifikasi satu-ke-satu terhadap \textit{embedding} pemilik kendaraan terdaftar, untuk mencegah pinjam-kendaraan antar-mahasiswa.
+    \item \textbf{Integrasi SSO Telkom University:} Menghubungkan modul autentikasi dengan \textit{Single Sign-On} institusi (mis. CAS/OIDC) sehingga NIM/NIP dan peran otomatis tersinkronisasi tanpa registrasi manual.
+    \item \textbf{Observability \& Tracing Terdistribusi:} Menambahkan OpenTelemetry tracing end-to-end (mobile $\rightarrow$ backend $\rightarrow$ AI service $\rightarrow$ edge) dan ekspor metrik Circuit Breaker ke Prometheus/Grafana untuk pemantauan SLI/SLO produksi.
+\end{enumerate}
+
+\end{document}

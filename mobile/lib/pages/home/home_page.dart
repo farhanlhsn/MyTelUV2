@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:mobile/pages/home/maps_page.dart';
 import 'package:mobile/pages/home/post_page.dart';
 import 'package:mobile/pages/home/settings_page.dart';
+import 'package:mobile/pages/biometrik/biometrik_status_page.dart';
 import 'package:mobile/pages/biometrik/biometrik_verification_page.dart';
 import 'package:mobile/pages/dosen/dosen_manage_absensi_page.dart';
 import 'package:mobile/pages/absensi/absensi_page.dart';
-import 'package:mobile/pages/home/notification_list_page.dart';
+import 'package:mobile/pages/home/kelas_hari_ini_card.dart';
 
 import '../../controllers/home_controller.dart';
+import '../../models/kelas_hari_ini.dart';
 import '../../controllers/notification_controller.dart';
 import '../../app/routes.dart';
+import '../../utils/attendance_status.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -31,6 +36,9 @@ class _HomePageState extends State<HomePage> {
   late final MapController _mapController;
   final Set<int> _mountedTabIndexes = <int>{0};
   final Map<int, Widget> _tabPages = <int, Widget>{};
+  final RxBool _scheduleFailed = false.obs;
+  late final Worker _scheduleLoadingWorker;
+  late final Worker _scheduleErrorWorker;
 
   // --- FUNGSI BARU UNTUK MENU PARKIR ---
   void _showParkingOptions() {
@@ -55,7 +63,7 @@ class _HomePageState extends State<HomePage> {
               ListTile(
                 leading: const Icon(
                   Icons.pie_chart,
-                  color: Color(0xFFE63946),
+                  color: AppColors.primary,
                 ), // Icon Chart untuk Analitik
                 title: const Text('Analitik Ketersediaan Parkir'),
                 subtitle: const Text('Cek slot parkir yang tersedia'),
@@ -68,7 +76,7 @@ class _HomePageState extends State<HomePage> {
 
               // Opsi 2: Histori Parkir
               ListTile(
-                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.history, color: AppColors.primary),
                 title: const Text('Histori Parkir'),
                 subtitle: const Text('Lihat riwayat parkir kendaraan'),
                 onTap: () {
@@ -88,6 +96,17 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _pageController = PageController(viewportFraction: 0.9);
     _mapController = MapController();
+    _captureScheduleError(_homeController.errorMessage.value);
+    // Parallel requests share errorMessage; capture a schedule failure immediately.
+    _scheduleErrorWorker = ever<String>(
+      _homeController.errorMessage,
+      _captureScheduleError,
+    );
+    _scheduleLoadingWorker = ever<bool>(_homeController.isLoadingKelasHariIni, (
+      loading,
+    ) {
+      if (loading) _scheduleFailed.value = false;
+    });
     // Tab 0 (Home) is always built eagerly — it's the landing tab
     _tabPages[0] = _buildHomeContent();
   }
@@ -108,41 +127,54 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _scheduleLoadingWorker.dispose();
+    _scheduleErrorWorker.dispose();
     _pageController.dispose();
+    _mapController.dispose();
     super.dispose();
+  }
+
+  void _captureScheduleError(String message) {
+    if (message.startsWith('Gagal memuat kelas hari ini:')) {
+      _scheduleFailed.value = true;
+    }
   }
 
   final List<Map<String, dynamic>> gridMenuItems = [
     {
-      'icon': Icons.badge_outlined,
+      'icon': Icons.two_wheeler,
       'label': 'Kendaraan',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': AppRoutes.userHistoriPengajuan,
     },
     {
       'icon': Icons.assignment_ind_outlined,
       'label': 'Absensi',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': AppRoutes.absensi,
     },
     {
-      'icon': Icons.qr_code_scanner,
+      'icon': Icons.face,
       'label': 'Biometrik',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': null,
     },
     {
       'icon': Icons.local_parking,
       'label': 'Parkir',
-      'color': const Color(0xFFE63946),
+      'color': AppColors.primary,
       'route': null,
     },
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
+    // The Home tab sits under a red header, the other tabs are white pages: the status bar icons
+    // follow, otherwise they stay white on white.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _selectedIndex == 0 ? statusBarOnRed : statusBarOnLight,
+      child: Scaffold(
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // Konten Halaman Utama
@@ -156,12 +188,11 @@ class _HomePageState extends State<HomePage> {
             }),
           ),
 
-          // Navigasi di bagian bawah
-          Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
-
           // Error snackbar listener (tiny Obx)
           _ErrorListener(controller: _homeController),
         ],
+      ),
+      bottomNavigationBar: SafeArea(top: false, child: _buildBottomNav()),
       ),
     );
   }
@@ -169,13 +200,33 @@ class _HomePageState extends State<HomePage> {
   // --- Widget untuk konten Halaman Home (Index 0) ---
   Widget _buildHomeContent() {
     return Container(
-      color: const Color(0xFFE63946),
-      child: Column(
-        children: [
-          _buildTopBar(),
-          _buildCardCarousel(),
-          Expanded(child: _buildGridSection()),
-        ],
+      color: AppColors.primary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Keep the original layout; short viewports can scroll past the carousel.
+          if (constraints.maxHeight < 500) {
+            return RefreshIndicator(
+              onRefresh: _homeController.refreshData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    _buildTopBar(),
+                    _buildCardCarousel(),
+                    _buildGridSection(scrollable: false),
+                  ],
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: [
+              _buildTopBar(),
+              _buildCardCarousel(),
+              Expanded(child: _buildGridSection()),
+            ],
+          );
+        },
       ),
     );
   }
@@ -189,12 +240,17 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         child: Obx(() {
           final userName = _homeController.currentUser.value?.nama ?? 'User';
-          final totalKehadiran = _homeController.totalKehadiranPercentage;
+          // Only a student has an attendance percentage (the others have no classes to attend)
+          final bool showKehadiran =
+              _homeController.currentUser.value?.role == 'MAHASISWA';
+          // Null until the history is loaded: the line then shows a dash, not a made-up number
+          final double? totalKehadiran =
+              _homeController.totalKehadiranPercentage;
 
           return Row(
             children: [
               Tooltip(
-                message: 'Lihat Profile',
+                message: 'Lihat Profil',
                 child: InkWell(
                   onTap: () {
                     Get.toNamed(AppRoutes.me);
@@ -202,10 +258,13 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(20),
                   splashColor: Colors.white.withOpacity(0.3),
                   highlightColor: Colors.white.withOpacity(0.1),
-                  child: const CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, color: Color(0xFFE63946)),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.white,
+                      child: Icon(Icons.person, color: AppColors.primary),
+                    ),
                   ),
                 ),
               ),
@@ -238,14 +297,15 @@ class _HomePageState extends State<HomePage> {
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              "Kehadiran: ${totalKehadiran.toStringAsFixed(1)}%",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 10,
+                            if (showKehadiran)
+                              Text(
+                                kehadiranLabel(totalKehadiran),
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                           ],
                         ),
                       ),
@@ -256,49 +316,58 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: 12),
               Obx(() {
                 final unread = _notificationController.unreadCount.value;
-                return GestureDetector(
-                  onTap: () => Get.to(() => const NotificationListPage()),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                        child: const Icon(
-                          Icons.notifications,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                      if (unread > 0)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              unread > 9 ? '9+' : '$unread',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                return Tooltip(
+                  message: unread > 0
+                      ? 'Notifikasi, $unread belum dibaca'
+                      : 'Notifikasi',
+                  child: GestureDetector(
+                    onTap: () => Get.toNamed(AppRoutes.notificationList),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.2),
+                          ),
+                          child: const Icon(
+                            Icons.notifications,
+                            color: Colors.white,
+                            size: 30,
                           ),
                         ),
-                    ],
+                        if (unread > 0)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: AppColors.danger,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                unread > 9 ? '9+' : '$unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -325,6 +394,37 @@ class _HomePageState extends State<HomePage> {
       }
 
       final kelasHariIni = _homeController.kelasHariIniList;
+
+      if (_scheduleFailed.value) {
+        return SizedBox(
+          height: 180,
+          child: Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Jadwal belum dapat dimuat',
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton.icon(
+                      onPressed: _homeController.refreshData,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Coba lagi'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
 
       if (kelasHariIni.isEmpty) {
         return SizedBox(
@@ -373,7 +473,7 @@ class _HomePageState extends State<HomePage> {
                         'Lihat jadwal mingguan →',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFFE63946),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -394,14 +494,19 @@ class _HomePageState extends State<HomePage> {
               itemCount: kelasHariIni.length,
               itemBuilder: (context, index) {
                 double scale = 1.0;
-                if (_pageController.position.haveDimensions) {
+                if (_pageController.hasClients &&
+                    _pageController.position.haveDimensions) {
                   double pageOffset = _pageController.page! - index;
                   scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
                 }
 
+                final kelas = kelasHariIni[index];
                 return Transform.scale(
                   scale: scale,
-                  child: _buildKelasHariIniCard(kelasHariIni[index]),
+                  child: KelasHariIniCard(
+                    kelas: kelas,
+                    onTap: () => _openAbsensiSesi(kelas),
+                  ),
                 );
               },
             ),
@@ -429,191 +534,20 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Widget _buildKelasHariIniCard(dynamic kelasData) {
-    final kelas = kelasData;
-    final matakuliah = kelas.matakuliah;
-    final dosen = kelas.dosen;
-    final hasActiveAbsensi = kelas.hasActiveAbsensi;
-    final activeSesi = kelas.activeSesiAbsensi;
+  /// Opens the attendance page of the active session of [kelas]. The page itself picks the flow:
+  /// a session that requires a face goes through the liveness check, a GPS-only session records the
+  /// attendance with the location alone (no selfie).
+  void _openAbsensiSesi(KelasHariIniModel kelas) {
+    final sesi = kelas.activeSesiAbsensi;
+    if (sesi == null) return;
 
-    final String title = matakuliah != null
-        ? '${matakuliah.namaMatakuliah}'
-        : 'Kelas';
-    final String jadwal = kelas.jadwal ?? 'Jadwal tidak tersedia';
-    final String location = kelas.ruangan ?? 'Ruangan belum ditentukan';
-
-    // Get require_face from active session
-    final bool requireFace = activeSesi?.requireFace ?? false;
-
-    return GestureDetector(
-      onTap: hasActiveAbsensi
-          ? () {
-              // Navigate based on require_face setting
-              final idSesi = activeSesi?.idSesiAbsensi ?? 0;
-              if (requireFace) {
-                // Need face verification
-                Get.to(
-                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
-                  arguments: {'idSesiAbsensi': idSesi},
-                );
-              } else {
-                // GPS only - still use BiometrikAbsenPage for now
-                Get.to(
-                  () => BiometrikAbsenPage(idSesiAbsensi: idSesi),
-                  arguments: {'idSesiAbsensi': idSesi},
-                );
-              }
-            }
-          : null,
-      child: Card(
-        elevation: 8,
-        shadowColor: Colors.black.withOpacity(0.3),
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Positioned(
-              bottom: -80,
-              right: -80,
-              child: Container(
-                height: 200,
-                width: 200,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.8),
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-            // Active absensi badge
-            if (hasActiveAbsensi)
-              Positioned(
-                top: 10,
-                left: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        requireFace ? Icons.face : Icons.location_on,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        requireFace ? 'Absen + Selfie' : 'Absen GPS',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'Tap untuk absen →',
-                          style: TextStyle(
-                            color: Color(0xFFE63946),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Positioned(
-              top: 15,
-              right: 15,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.schedule,
-                  color: Color(0xFFE63946),
-                  size: 28,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (hasActiveAbsensi) const SizedBox(height: 50),
-                  Text(
-                    'Dosen: ${dosen.nama}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Colors.black54,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        jadwal,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 14,
-                        color: Colors.black54,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        location,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    Get.to(
+      () => BiometrikAbsenPage.forKelas(kelas),
+      arguments: {'idSesiAbsensi': sesi.idSesiAbsensi},
     );
   }
 
-  Widget _buildGridSection() {
+  Widget _buildGridSection({bool scrollable = true}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[100],
@@ -625,14 +559,11 @@ class _HomePageState extends State<HomePage> {
       child: RefreshIndicator(
         onRefresh: _homeController.refreshData,
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: scrollable
+              ? const AlwaysScrollableScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              20.0,
-              20.0,
-              20.0,
-              100.0,
-            ), // Padding atas 20, bawah 100
+            padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 24.0),
             child: Obx(() {
               // Filter menu items based on role (hide Biometric for DOSEN)
               final userRole = _homeController.currentUser.value?.role;
@@ -650,13 +581,13 @@ class _HomePageState extends State<HomePage> {
                 filteredMenuItems.add({
                   'icon': Icons.school,
                   'label': 'Akademik',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.adminAkademik,
                 });
                 filteredMenuItems.add({
                   'icon': Icons.manage_accounts,
                   'label': 'Pengguna',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.adminUserManagement,
                 });
               }
@@ -666,7 +597,7 @@ class _HomePageState extends State<HomePage> {
                 filteredMenuItems.add({
                   'icon': Icons.warning_amber_rounded,
                   'label': 'Anomali',
-                  'color': const Color(0xFFE63946),
+                  'color': AppColors.primary,
                   'route': AppRoutes.anomaliDashboard,
                 });
               }
@@ -712,7 +643,9 @@ class _HomePageState extends State<HomePage> {
           if (userRole == 'ADMIN') {
             Get.toNamed(AppRoutes.adminBiometrik);
           } else {
-            Get.to(() => const BiometrikAbsenPage());
+            // A student has no session here: show the biometric status instead of a dead-end
+            // attendance page (attendance starts from a class card or the absensi list)
+            Get.to(() => const BiometrikStatusPage());
           }
         } else if (label == 'Absensi') {
           // Role-based navigation for Absensi
@@ -765,7 +698,7 @@ class _HomePageState extends State<HomePage> {
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Colors.black54,
               ),
@@ -795,9 +728,9 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home, "Home", 0),
+            _buildNavItem(Icons.home, "Beranda", 0),
             _buildNavItem(Icons.location_on_outlined, "Peta", 1),
-            _buildNavItem(Icons.post_add_rounded, "Kiriman", 2),
+            _buildNavItem(Icons.post_add_rounded, "Postingan", 2),
             _buildNavItem(Icons.settings_outlined, "Pengaturan", 3),
           ],
         ),
@@ -809,64 +742,72 @@ class _HomePageState extends State<HomePage> {
     final bool isSelected = _selectedIndex == index;
 
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-            _mountedTabIndexes.add(index);
-          });
-        },
-        borderRadius: BorderRadius.circular(20),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeInOutBack,
-          // 👉 merahnya selalu setinggi navbar
-          height: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFE63946) : Colors.transparent,
+      child: Semantics(
+        label: label,
+        button: true,
+        selected: isSelected,
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _selectedIndex = index;
+                _mountedTabIndexes.add(index);
+              });
+            },
             borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey[600],
-                size: 28,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutBack,
+              // 👉 merahnya selalu setinggi navbar
+              height: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 4),
-              // 👉 tingginya yg dianimasikan, bukan background-nya
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                height: isSelected ? 18 : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: isSelected ? 1.0 : 0.0,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    color: isSelected ? Colors.white : Colors.grey[600],
+                    size: 28,
+                  ),
+                  const SizedBox(height: 4),
+                  // 👉 tingginya yg dianimasikan, bukan background-nya
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    height: isSelected ? 18 : 0,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: isSelected ? 1.0 : 0.0,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -900,7 +841,7 @@ class _HomePageState extends State<HomePage> {
                 ListTile(
                   leading: const Icon(
                     Icons.verified_user,
-                    color: Color(0xFFE63946),
+                    color: AppColors.primary,
                   ),
                   title: const Text('Persetujuan Kendaraan'),
                   subtitle: const Text('Setujui atau tolak pengajuan'),
@@ -913,7 +854,7 @@ class _HomePageState extends State<HomePage> {
               ],
 
               ListTile(
-                leading: const Icon(Icons.add_circle, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.add_circle, color: AppColors.primary),
                 title: const Text('Daftar Kendaraan Baru'),
                 subtitle: const Text('Tambahkan kendaraan ke sistem'),
                 onTap: () {
@@ -923,8 +864,8 @@ class _HomePageState extends State<HomePage> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.list_alt, color: Color(0xFFE63946)),
-                title: const Text('List Kendaraan Terdaftar'),
+                leading: const Icon(Icons.list_alt, color: AppColors.primary),
+                title: const Text('Daftar Kendaraan Terdaftar'),
                 subtitle: const Text('Daftar kendaraan Anda yang aktif'),
                 onTap: () {
                   Navigator.pop(context);
@@ -933,7 +874,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.history, color: Color(0xFFE63946)),
+                leading: const Icon(Icons.history, color: AppColors.primary),
                 title: const Text('Histori Pengajuan'),
                 subtitle: const Text('Lihat status pengajuan kendaraan'),
                 onTap: () {
@@ -962,7 +903,7 @@ class _ErrorListener extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(controller.errorMessage.value),
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.danger,
               ),
             );
           }

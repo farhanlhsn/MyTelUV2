@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/models/kelas.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/api_client.dart';
+import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/error_helper.dart';
+import '../common/red_header_background.dart';
 
 class AdminAbsensiMonitoringPage extends StatefulWidget {
   const AdminAbsensiMonitoringPage({super.key});
@@ -45,7 +47,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
       await Future.wait(futures);
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -70,8 +72,9 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -80,7 +83,8 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -137,14 +141,14 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                 ),
                 child: _isLoading
                     ? const Center(
-                        child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                        child: CircularProgressIndicator(color: AppColors.primary),
                       )
                     : _error != null
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(_error!, style: const TextStyle(color: Colors.red)),
+                                Text(_error!, style: const TextStyle(color: AppColors.danger)),
                                 const SizedBox(height: 16),
                                 ElevatedButton(
                                   onPressed: _loadData,
@@ -174,6 +178,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -231,10 +236,10 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                 width: 45,
                 height: 45,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.class_, color: Color(0xFFE63946)),
+                child: const Icon(Icons.class_, color: AppColors.primary),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -4,7 +4,8 @@ import 'package:get/get.dart';
 
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
-import '../../utils/error_helper.dart';
+import '../../utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,16 +19,21 @@ class _LoginPageState extends State<LoginPage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  late final TapGestureRecognizer _registerTap = TapGestureRecognizer()
+    ..onTap = () => Get.toNamed(AppRoutes.register);
   bool _isPasswordObscured = true;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _registerTap.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
+    if (_authController.isLoading.value) return;
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
     final bool success = await _authController.login(
@@ -35,7 +41,7 @@ class _LoginPageState extends State<LoginPage> {
       _passwordController.text,
     );
 
-    if (!success) return;
+    if (!mounted || !success) return;
 
     Get.offAllNamed(AppRoutes.home);
   }
@@ -43,8 +49,9 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -89,7 +96,7 @@ class _LoginPageState extends State<LoginPage> {
                           const Text(
                             'Selamat Datang Kembali',
                             style: TextStyle(
-                              color: Color(0xFFE63946),
+                              color: AppColors.primary,
                               fontWeight: FontWeight.bold,
                               fontSize: 24,
                             ),
@@ -120,11 +127,15 @@ class _LoginPageState extends State<LoginPage> {
                           TextFormField(
                             key: const Key('login_username_field'),
                             controller: _usernameController,
+                            autofillHints: const [AutofillHints.username],
+                            autocorrect: false,
+                            textInputAction: TextInputAction.next,
                             decoration: InputDecoration(
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               labelText: 'Username',
+                              errorMaxLines: 3,
                               labelStyle: const TextStyle(
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w600,
@@ -132,7 +143,7 @@ class _LoginPageState extends State<LoginPage> {
                               prefixIcon: const Icon(Icons.person_outline),
                             ),
                             validator: (String? value) {
-                              if (value == null || value.isEmpty) {
+                              if (value == null || value.trim().isEmpty) {
                                 return 'Username wajib diisi';
                               }
                               return null;
@@ -144,18 +155,27 @@ class _LoginPageState extends State<LoginPage> {
                           TextFormField(
                             key: const Key('login_password_field'),
                             controller: _passwordController,
+                            autofillHints: const [AutofillHints.password],
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _handleLogin(),
                             obscureText: _isPasswordObscured,
                             decoration: InputDecoration(
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               labelText: 'Password',
+                              errorMaxLines: 3,
                               labelStyle: const TextStyle(
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w600,
                               ),
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
+                                tooltip: _isPasswordObscured
+                                    ? 'Tampilkan password'
+                                    : 'Sembunyikan password',
                                 icon: Icon(
                                   _isPasswordObscured
                                       ? Icons.visibility_off
@@ -188,10 +208,9 @@ class _LoginPageState extends State<LoginPage> {
                                 Get.toNamed(AppRoutes.forgotPassword);
                               },
                               style: TextButton.styleFrom(
-                                foregroundColor: const Color(0xFFE63946),
+                                foregroundColor: AppColors.primary,
                                 padding: EdgeInsets.zero,
-                                minimumSize: const Size(50, 30),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                minimumSize: const Size(50, 48),
                               ),
                               child: const Text(
                                 'Lupa Password?',
@@ -212,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                                 key: const Key('login_submit_button'),
                                 onPressed: isLoading ? null : _handleLogin,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE63946),
+                                  backgroundColor: AppColors.primary,
                                   disabledBackgroundColor: const Color(
                                     0xFFFAA0A0,
                                   ),
@@ -247,8 +266,9 @@ class _LoginPageState extends State<LoginPage> {
 
                           // Register Link
                           Center(
-                            child: RichText(
-                              text: TextSpan(
+                            // Text.rich, unlike RichText, follows the user's text scale
+                            child: Text.rich(
+                              TextSpan(
                                 style: const TextStyle(
                                   color: Colors.black,
                                   fontWeight: FontWeight.w600,
@@ -258,13 +278,10 @@ class _LoginPageState extends State<LoginPage> {
                                   TextSpan(
                                     text: 'Daftar',
                                     style: const TextStyle(
-                                      color: Color(0xFFE63946),
+                                      color: AppColors.primary,
                                       fontWeight: FontWeight.bold,
                                     ),
-                                    recognizer: TapGestureRecognizer()
-                                      ..onTap = () {
-                                        Get.toNamed(AppRoutes.register);
-                                      },
+                                    recognizer: _registerTap,
                                   ),
                                 ],
                               ),
@@ -279,6 +296,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

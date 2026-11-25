@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:camera/camera.dart';
@@ -6,6 +7,9 @@ import 'package:smart_liveliness_detection/smart_liveliness_detection.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/biometrik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/utils/liveness_texts.dart';
+import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminBiometrikPage extends StatefulWidget {
   const AdminBiometrikPage({super.key});
@@ -46,7 +50,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
@@ -64,7 +68,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
   Future<void> _addBiometrik(Map<String, dynamic> user) async {
     final idUser = user['id_user'] as int;
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
 
     // Get available cameras
@@ -79,6 +83,8 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
       cameras: cameras,
       config: LivenessConfig(
         enableScreenGlareDetection: true,
+        challengeInstructions: livenessInstructionsId,
+        messages: livenessMessagesId,
       ),
       captureFinalImage: true,
       onFinalImageCaptured: (String sessionId, XFile imageFile, Map<String, dynamic> metadata) async {
@@ -112,11 +118,11 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
           if (result['status'] == 'success') {
             ErrorHelper.showSuccess(
-              hasBiometric ? 'Biometrik $nama berhasil diupdate' : 'Biometrik $nama berhasil ditambahkan',
+              hasBiometric ? 'Biometrik $nama berhasil diperbarui' : 'Biometrik $nama berhasil ditambahkan',
             );
             _loadUsers();
           } else {
-            throw Exception(result['message'] ?? 'Unknown error');
+            throw Exception(result['message'] ?? 'Terjadi kesalahan yang tidak diketahui.');
           }
         } catch (e) {
           Get.back(); // Close loading dialog
@@ -128,7 +134,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
 
   Future<void> _deleteBiometrik(Map<String, dynamic> user) async {
     final idUser = user['id_user'] as int;
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -142,7 +148,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('HAPUS', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -163,8 +169,9 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE63946),
-      body: SafeArea(
+      backgroundColor: AppColors.primary,
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -173,7 +180,8 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -215,7 +223,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE63946)),
+                            borderSide: const BorderSide(color: AppColors.primary),
                           ),
                           filled: true,
                           fillColor: Colors.grey.shade50,
@@ -228,14 +236,14 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     Expanded(
                       child: _isLoading
                           ? const Center(
-                              child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                              child: CircularProgressIndicator(color: AppColors.primary),
                             )
                           : _error != null
                               ? Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                                      Text(_error!, style: const TextStyle(color: AppColors.danger)),
                                       const SizedBox(height: 16),
                                       ElevatedButton(
                                         onPressed: _loadUsers,
@@ -270,11 +278,12 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
   Widget _buildUserCard(Map<String, dynamic> user) {
-    final nama = user['nama'] as String? ?? 'Unknown';
+    final nama = user['nama'] as String? ?? 'Tanpa nama';
     final username = user['username'] as String? ?? '-';
     final role = user['role'] as String? ?? 'MAHASISWA';
     final hasBiometric = user['has_biometric'] as bool? ?? false;
@@ -309,17 +318,17 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     ? Colors.green.withOpacity(0.1)
                     : role == 'DOSEN'
                         ? Colors.blue.withOpacity(0.1)
-                        : const Color(0xFFE63946).withOpacity(0.1),
+                        : AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: hasBiometric ? Border.all(color: Colors.green, width: 2) : null,
               ),
               child: biometricPhoto != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        biometricPhoto,
+                      child: CachedNetworkImage(
+                        imageUrl: biometricPhoto,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
+                        errorWidget: (_, __, ___) => const Icon(
                           Icons.face,
                           color: Colors.green,
                         ),
@@ -327,7 +336,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                     )
                   : Icon(
                       role == 'DOSEN' ? Icons.school : Icons.person,
-                      color: role == 'DOSEN' ? Colors.blue : const Color(0xFFE63946),
+                      color: role == 'DOSEN' ? Colors.blue : AppColors.primary,
                     ),
             ),
           ),
@@ -361,7 +370,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                           '✓ Bio',
                           style: TextStyle(
                             color: Colors.green,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -384,14 +393,14 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           IconButton(
             icon: Icon(
               hasBiometric ? Icons.refresh : Icons.face_retouching_natural,
-              color: const Color(0xFFE63946),
+              color: AppColors.primary,
             ),
-            tooltip: hasBiometric ? 'Update Biometrik' : 'Tambah Biometrik',
+            tooltip: hasBiometric ? 'Perbarui Biometrik' : 'Tambah Biometrik',
             onPressed: () => _addBiometrik(user),
           ),
           if (hasBiometric)
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
               tooltip: 'Hapus Biometrik',
               onPressed: () => _deleteBiometrik(user),
             ),
@@ -410,12 +419,17 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(
-                photoUrl,
+              child: CachedNetworkImage(
+                imageUrl: photoUrl,
                 width: 300,
                 height: 300,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox(
+                placeholder: (_, __) => const SizedBox(
+                  width: 300,
+                  height: 300,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (_, __, ___) => const SizedBox(
                   width: 300,
                   height: 300,
                   child: Center(child: Icon(Icons.error, size: 64)),

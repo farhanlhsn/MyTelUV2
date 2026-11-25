@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../models/parkir_model.dart';
 import 'api_client.dart';
+import '../utils/error_helper.dart';
 
 class ParkirService {
   final Dio _dio = ApiClient.dio;
@@ -23,7 +24,7 @@ class ParkirService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get histori parkir: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -45,7 +46,7 @@ class ParkirService {
       }
       return [];
     } on DioException catch (e) {
-      throw Exception('Failed to get all parkiran: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 
@@ -65,7 +66,7 @@ class ParkirService {
       }
       return null;
     } on DioException catch (e) {
-      throw Exception('Failed to get analitik parkiran: ${e.message}');
+      throw Exception(ErrorHelper.parseError(e));
     }
   }
 }

@@ -129,7 +129,7 @@ echo "======================================"
 echo "🧪 Menjalankan Backend E2E Tests..."
 echo "======================================"
 cd backend
-npx jest test-e2e/api_e2e.test.js --runInBand --detectOpenHandles --forceExit --verbose
+npm run test:e2e -- --verbose
 TEST_EXIT_CODE=$?
 cd ..
 

@@ -9,8 +9,6 @@ import '../pages/auth/forgot_password_page.dart';
 import '../pages/auth/reset_password_page.dart';
 import '../bindings/auth_binding.dart';
 import '../pages/kendaraan/registerplat.dart';
-import '../pages/kendaraan/pengajuan_list_page.dart';
-import '../pages/auth/otp_verification_page.dart';
 import '../pages/kendaraan/resubmit_kendaraan_page.dart';
 import '../pages/kendaraan/parkir/analitik_parkir.dart';
 import '../pages/kendaraan/historyPengajuan/userhistoripengajuan.dart';
@@ -19,6 +17,8 @@ import '../pages/absensi/absensi_page.dart';
 import '../pages/kendaraan/parkir/histori_parkir_page.dart';
 import '../pages/settings/account_page.dart';
 import '../pages/settings/notification_page.dart';
+import '../pages/home/notification_list_page.dart';
+import '../pages/home/post_comments_route_page.dart';
 import '../pages/kendaraan/admin/admin_pengajuan_list_page.dart';
 import '../pages/admin/admin_akademik_page.dart';
 import '../pages/admin/admin_biometrik_page.dart';
@@ -27,7 +27,6 @@ import '../pages/admin/admin_absensi_monitoring_page.dart';
 import '../pages/splash_page.dart';
 import '../pages/jadwal/jadwal_mingguan_page.dart';
 import '../pages/jadwal/form_jadwal_pengganti_page.dart';
-import '../pages/admin/admin_anomali_result_page.dart';
 import '../pages/admin/anomali_dashboard_page.dart';
 import '../pages/admin/admin_anomaly_config_page.dart';
 import 'auth_middleware.dart';
@@ -44,14 +43,14 @@ class AppRoutes {
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
   static const String resubmitKendaraan = '/resubmit-kendaraan';
-  static const String pengajuanList = '/pengajuan-list';
-  static const String otpVerification = '/otp-verification';
   static const String userHistoriPengajuan = '/user-histori-pengajuan';
   static const String absensi = '/absensi';
   static const String analitikParkir = '/analitik-parkir';
   static const String historiParkir = '/histori-parkir';
   static const String account = '/account';
   static const String notification = '/notification';
+  static const String notificationList = '/notification-list';
+  static const String postComments = '/post-comments';
   static const String listKendaraanTerdaftar = '/list-kendaraan-terdaftar';
   static const String adminPengajuanList = '/admin-pengajuan-list';
   static const String adminAkademik = '/admin-akademik';
@@ -60,21 +59,27 @@ class AppRoutes {
   static const String adminAbsensiMonitoring = '/admin-absensi-monitoring';
   static const String jadwalMingguan = '/jadwal-mingguan';
   static const String formJadwalPengganti = '/form-jadwal-pengganti';
-  static const String anomaliResult = '/anomali-result';
   static const String anomaliDashboard = '/anomali-dashboard';
   static const String adminAnomalyConfig = '/admin-anomaly-config';
 
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
-    GetPage<dynamic>(name: splash, page: () => const SplashPage()),
+    // No transition: the splash must stay as it is under the page that fades in over it (the
+    // platform default would zoom and fade it out at the same time)
+    GetPage<dynamic>(name: splash, page: () => const SplashPage(), transition: Transition.noTransition),
     GetPage<dynamic>(
       name: login,
       page: () => const LoginPage(),
       binding: AuthBinding(),
+      // The splash exit hands over with a short cross-fade (also used after logging out)
+      transition: Transition.fadeIn,
+      transitionDuration: const Duration(milliseconds: 250),
     ),
     GetPage<dynamic>(
       name: home,
       page: () => const HomePage(),
       binding: AuthBinding(),
+      transition: Transition.fadeIn,
+      transitionDuration: const Duration(milliseconds: 250),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(
@@ -113,15 +118,6 @@ class AppRoutes {
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(
-      name: pengajuanList,
-      page: () => const PengajuanListPage(),
-      middlewares: [AuthMiddleware()],
-    ),
-    GetPage<dynamic>(
-      name: otpVerification,
-      page: () => OtpVerificationPage(phoneNumber: Get.arguments ?? ""),
-    ),
-    GetPage<dynamic>(
       name: userHistoriPengajuan,
       page: () => const UserHistoriPengajuan(),
       middlewares: [AuthMiddleware()],
@@ -149,6 +145,16 @@ class AppRoutes {
     GetPage<dynamic>(
       name: notification,
       page: () => const NotificationPage(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage<dynamic>(
+      name: notificationList,
+      page: () => const NotificationListPage(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage<dynamic>(
+      name: postComments,
+      page: () => const PostCommentsRoutePage(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(
@@ -212,14 +218,6 @@ class AppRoutes {
     GetPage<dynamic>(
       name: formJadwalPengganti,
       page: () => const FormJadwalPenggantiPage(),
-      middlewares: [
-        AuthMiddleware(),
-        RoleMiddleware(const ['ADMIN', 'DOSEN']),
-      ],
-    ),
-    GetPage<dynamic>(
-      name: anomaliResult,
-      page: () => const AnomaliResultPage(),
       middlewares: [
         AuthMiddleware(),
         RoleMiddleware(const ['ADMIN', 'DOSEN']),

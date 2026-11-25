@@ -1,11 +1,18 @@
-import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/notification_inbox.dart';
 
+/// The notification inbox of the logged-in user (see [NotificationInbox]: one inbox per user).
 class NotificationController extends GetxController {
   final RxList<Map<String, dynamic>> notifications = <Map<String, dynamic>>[].obs;
   final RxInt unreadCount = 0.obs;
   final RxBool isLoading = false.obs;
+
+  /// Who is logged in. Read on every load, so a new login on the same phone gets their own inbox.
+  final Future<int?> Function() _userIdProvider;
+
+  NotificationController({Future<int?> Function()? userIdProvider})
+      : _userIdProvider = userIdProvider ?? NotificationInbox.currentUserId;
 
   @override
   void onInit() {
@@ -17,28 +24,21 @@ class NotificationController extends GetxController {
     isLoading.value = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? notificationsString = prefs.getString('local_notifications');
-      
-      if (notificationsString != null) {
-        final List<dynamic> decoded = jsonDecode(notificationsString);
-        notifications.value = List<Map<String, dynamic>>.from(decoded).reversed.toList();
-      } else {
-        notifications.clear();
+      await NotificationInbox.removeLegacy(prefs);
+
+      final int? idUser = await _userIdProvider();
+      if (idUser == null) {
+        reset();
+        return;
       }
 
-      // Check unread count based on last read timestamp
-      final String? lastReadStr = prefs.getString('last_read_timestamp');
-      if (lastReadStr == null) {
-        unreadCount.value = notifications.length;
-      } else {
-        final lastRead = DateTime.parse(lastReadStr);
-        unreadCount.value = notifications.where((n) {
-          final timestampStr = n['timestamp'];
-          if (timestampStr == null) return false;
-          final timestamp = DateTime.parse(timestampStr);
-          return timestamp.isAfter(lastRead);
-        }).length;
-      }
+      // Stored oldest first, shown newest first
+      final List<Map<String, dynamic>> stored = NotificationInbox.read(prefs, idUser);
+      notifications.value = stored.reversed.toList();
+      unreadCount.value = NotificationInbox.unreadCount(
+        stored,
+        NotificationInbox.lastRead(prefs, idUser),
+      );
     } catch (e) {
       // ignore
     } finally {
@@ -48,8 +48,11 @@ class NotificationController extends GetxController {
 
   Future<void> markAllAsRead() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_read_timestamp', DateTime.now().toIso8601String());
+      final int? idUser = await _userIdProvider();
+      if (idUser != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await NotificationInbox.markRead(prefs, idUser, DateTime.now());
+      }
       unreadCount.value = 0;
     } catch (e) {
       // ignore
@@ -58,10 +61,12 @@ class NotificationController extends GetxController {
 
   Future<void> clearAll() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('local_notifications');
-      notifications.clear();
-      unreadCount.value = 0;
+      final int? idUser = await _userIdProvider();
+      if (idUser != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await NotificationInbox.clearFor(prefs, idUser);
+      }
+      reset();
     } catch (e) {
       // ignore
     }
@@ -69,30 +74,30 @@ class NotificationController extends GetxController {
 
   Future<void> deleteNotification(Map<String, dynamic> notif) async {
     try {
+      final int? idUser = await _userIdProvider();
+      if (idUser == null) return;
       final prefs = await SharedPreferences.getInstance();
-      
-      notifications.removeWhere((n) => 
-        (n['id'] != null && n['id'] == notif['id']) || 
+
+      notifications.removeWhere((n) =>
+        (n['id'] != null && n['id'] == notif['id']) ||
         (n['timestamp'] == notif['timestamp'])
       );
 
       final chronological = notifications.reversed.toList();
-      await prefs.setString('local_notifications', jsonEncode(chronological));
-      
-      final String? lastReadStr = prefs.getString('last_read_timestamp');
-      if (lastReadStr != null) {
-        final lastRead = DateTime.parse(lastReadStr);
-        unreadCount.value = notifications.where((n) {
-          final timestampStr = n['timestamp'];
-          if (timestampStr == null) return false;
-          final timestamp = DateTime.parse(timestampStr);
-          return timestamp.isAfter(lastRead);
-        }).length;
-      } else {
-        unreadCount.value = notifications.length;
-      }
+      await NotificationInbox.write(prefs, idUser, chronological);
+
+      unreadCount.value = NotificationInbox.unreadCount(
+        chronological,
+        NotificationInbox.lastRead(prefs, idUser),
+      );
     } catch (e) {
       // ignore
     }
+  }
+
+  /// Empties what is shown (logout); the stored inbox is left to [NotificationInbox.clear].
+  void reset() {
+    notifications.clear();
+    unreadCount.value = 0;
   }
 }

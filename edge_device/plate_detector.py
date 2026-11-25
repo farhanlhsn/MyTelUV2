@@ -21,11 +21,22 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
+from server_result import parse_server_result, should_start_cooldown, transport_error_result
+
 try:
     import onnxruntime as ort
 except ImportError:
     print("ONNX Runtime not available, trying OpenCV DNN...")
     ort = None
+
+# After this many failed cap.read() calls in a row (0.5s apart), re-open the camera
+MAX_CONSECUTIVE_READ_FAILURES = 20
+
+# A repeat detection of the same plate (bbox IoU > 0.5) is not sent to the server again within
+# this window: after an OPEN, and after a DENY (so a denied vehicle at the gate is not re-sent
+# on every processed frame)
+OPEN_COOLDOWN_SECONDS = 5.0
+DENY_COOLDOWN_SECONDS = 10.0
 
 
 class GateController:
@@ -190,7 +201,8 @@ class PlateDetector:
         self.last_detection = {
             'bbox': None,
             'time': 0,
-            'plate_text': None
+            'plate_text': None,
+            'gate_action': None
         }
     
     def calculate_iou(self, boxA, boxB):
@@ -482,18 +494,19 @@ class PlateDetector:
             )
             
             result = response.json()
-            
-            # Log result
-            if result.get('success'):
-                self.logger.info(f"✅ Server: {result.get('message')}")
+
+            # Log result (the backend nests gate_action/plate_text under "data")
+            parsed = parse_server_result(result)
+            if parsed['success']:
+                self.logger.info(f"✅ Server: {parsed['message']}")
             else:
-                self.logger.warning(f"❌ Server: {result.get('message', result.get('error'))}")
-            
+                self.logger.warning(f"❌ Server: {parsed['message']}")
+
             return result
                 
         except Exception as e:
             self.logger.error(f"Error sending to server: {e}")
-            return {'gate_action': 'DENY', 'error': str(e)}
+            return transport_error_result(e)
     
     def process_frame(self, frame, save_dir=None):
         """Process a single frame and control gate"""
@@ -538,8 +551,12 @@ class PlateDetector:
                 time_diff = current_time - self.last_detection['time']
                 
                 # If overlap is high and time is short, skip (Duplicate)
-                # IoU > 0.5 and Time < 5 seconds
-                if iou > 0.5 and time_diff < 5.0:
+                # IoU > 0.5 and Time < 5 seconds after an OPEN, < 10 seconds after a DENY
+                if self.last_detection.get('gate_action') == 'DENY':
+                    cooldown = DENY_COOLDOWN_SECONDS
+                else:
+                    cooldown = OPEN_COOLDOWN_SECONDS
+                if iou > 0.5 and time_diff < cooldown:
                     self.logger.info(f"Skipping duplicate detection (IoU: {iou:.2f}, Time: {time_diff:.1f}s)")
                     # Draw visual indicator for duplicate
                     if save_dir and self.config.get('debug', {}).get('save_images', False):
@@ -557,58 +574,68 @@ class PlateDetector:
             server_result = self.send_to_server(plate_img, face_img, face_detected)
             server_latency = (time.time() - server_start) * 1000
 
-            # Update last detection if successful
-            if server_result and server_result.get('gate_action') != 'DENY':
-                 self.last_detection = {
-                     'bbox': bbox,
-                     'time': current_time,
-                     'plate_text': server_result.get('plate_text', '')
-                 }
-            
-            if server_result:
-                plate_text = server_result.get('plate_text', '')
-                ocr_confidence = server_result.get('ocr_confidence', server_result.get('confidence', 0.0))
-                gate_action = server_result.get('gate_action', 'DENY')
-                message = server_result.get('message', '')
-                
-                self.logger.info(
-                    f"Detected plate: {plate_text} "
-                    f"(det_conf: {conf:.2f}, ocr_conf: {ocr_confidence:.2f})"
-                )
-                print(f"⏱️ Latency: Det={detect_time*1000:.1f}ms | OCR+Server={server_latency:.1f}ms | Total={(time.time()-start_time)*1000:.1f}ms")
-                
-                # Execute gate action
-                self.gate_controller.execute_gate_action(gate_action, message)
-                
-                # Save if requested
-                if save_dir:
-                    save_path = Path(save_dir)
-                    save_path.mkdir(parents=True, exist_ok=True)
-                    
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    filename = f"{timestamp}_{plate_text.replace(' ', '_')}.jpg"
-                    cv2.imwrite(str(save_path / filename), plate_img)
-                
-                results.append({
+            # Normalise the server answer. The backend nests gate_action under "data";
+            # anything other than an explicit OPEN (DENY, error dict, bad body) keeps the gate closed.
+            parsed = parse_server_result(server_result)
+            plate_text = parsed['plate_text']
+            ocr_confidence = parsed['ocr_confidence']
+            gate_action = parsed['gate_action']
+            message = parsed['message']
+
+            # Remember this detection (OPEN and DENY alike) so a repeat is not re-sent within its cool-down.
+            # A transport error is not a server decision: do not cool down, retry on the next frame
+            # (the gate stays closed meanwhile).
+            if should_start_cooldown(server_result):
+                self.last_detection = {
                     'bbox': bbox,
+                    'time': current_time,
                     'plate_text': plate_text,
-                    'detection_confidence': conf,
-                    'ocr_confidence': ocr_confidence,
-                    'gate_action': gate_action,
-                    'detection_time': detect_time
-                })
-        
+                    'gate_action': gate_action
+                }
+
+            self.logger.info(
+                f"Detected plate: {plate_text} "
+                f"(det_conf: {conf:.2f}, ocr_conf: {ocr_confidence:.2f})"
+            )
+            print(f"⏱️ Latency: Det={detect_time*1000:.1f}ms | OCR+Server={server_latency:.1f}ms | Total={(time.time()-start_time)*1000:.1f}ms")
+
+            # Execute gate action
+            self.gate_controller.execute_gate_action(gate_action, message)
+
+            # Save if requested
+            if save_dir:
+                save_path = Path(save_dir)
+                save_path.mkdir(parents=True, exist_ok=True)
+
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{timestamp}_{plate_text.replace(' ', '_')}.jpg"
+                cv2.imwrite(str(save_path / filename), plate_img)
+
+            results.append({
+                'bbox': bbox,
+                'plate_text': plate_text,
+                'detection_confidence': conf,
+                'ocr_confidence': ocr_confidence,
+                'gate_action': gate_action,
+                'detection_time': detect_time
+            })
+
         return results
 
     
-    def run_camera(self, save_dir='detections'):
-        """Run continuous detection from camera with interactive mode switching"""
-        self.logger.info("Starting camera capture...")
-        
+    def _open_camera(self):
+        """Open the capture device with the configured resolution"""
         cap = cv2.VideoCapture(self.camera_index)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
-        
+        return cap
+
+    def run_camera(self, save_dir='detections'):
+        """Run continuous detection from camera with interactive mode switching"""
+        self.logger.info("Starting camera capture...")
+
+        cap = self._open_camera()
+
         if not cap.isOpened():
             self.logger.error("Failed to open camera")
             return
@@ -630,14 +657,30 @@ class PlateDetector:
         self.logger.info("Camera opened successfully. Press 'q' to quit.")
         
         frame_count = 0
-        
+        read_failures = 0
+
         try:
             while True:
                 ret, frame = cap.read()
                 if not ret:
-                    self.logger.warning("Failed to read frame")
+                    # Do not spin: back off, and re-open the capture if the camera stays unreadable
+                    read_failures += 1
+                    if read_failures == 1:
+                        self.logger.warning("Failed to read frame")
+                    time.sleep(0.5)
+
+                    if read_failures >= MAX_CONSECUTIVE_READ_FAILURES:
+                        self.logger.error(
+                            f"Camera unreadable for {read_failures} consecutive attempts, reopening capture..."
+                        )
+                        cap.release()
+                        cap = self._open_camera()
+                        if not cap.isOpened():
+                            self.logger.error("Failed to reopen camera, will retry")
+                        read_failures = 0
                     continue
-                
+
+                read_failures = 0
                 frame_count += 1
                 
                 # Check for keyboard input (always check, not just when show_preview)

@@ -3,6 +3,9 @@ import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
+import '../../utils/date_helper.dart';
+import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class CommentsPage extends StatefulWidget {
   final PostModel post;
@@ -23,7 +26,7 @@ class _CommentsPageState extends State<CommentsPage> {
   bool _isSending = false;
   int? _currentUserId;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -81,8 +84,8 @@ class _CommentsPageState extends State<CommentsPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
+          content: Text(ErrorHelper.parseError(e)),
+          backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -99,25 +102,8 @@ class _CommentsPageState extends State<CommentsPage> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
       );
-    }
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 7) {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}h lalu';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}j lalu';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m lalu';
-    } else {
-      return 'Baru saja';
     }
   }
 
@@ -126,20 +112,12 @@ class _CommentsPageState extends State<CommentsPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
+          tooltip: 'Kembali',
+          icon: const Icon(appBackIcon, size: 20),
           onPressed: () => Get.back(result: _comments.length),
         ),
-        title: const Text(
-          'Komentar',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+        title: const Text('Komentar'),
       ),
       body: Column(
         children: [
@@ -343,7 +321,7 @@ class _CommentsPageState extends State<CommentsPage> {
                       ),
                     ),
                     Text(
-                      ' • ${_formatTimeAgo(comment.createdAt)}',
+                      ' • ${formatWaktuRelatif(comment.createdAt)}',
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 11,
@@ -380,7 +358,7 @@ class _CommentsPageState extends State<CommentsPage> {
                           Navigator.pop(context);
                           _deleteComment(comment.idComment);
                         },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
                         child: const Text('Hapus'),
                       ),
                     ],

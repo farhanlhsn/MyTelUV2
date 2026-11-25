@@ -4,6 +4,7 @@ const { uploadFile, deleteFile, fileExists } = require('../utils/r2FileHandler')
 const { parsePagination, buildPaginationMeta } = require('../utils/paginationHelper');
 const { moderateContent } = require('../utils/contentModerator');
 const { sendSocialNotification } = require('../utils/firebase');
+const { GENERIC_SERVER_ERROR } = require('../utils/serverError');
 
 // ==================== POST CRUD ====================
 
@@ -30,10 +31,7 @@ exports.getAllPosts = asyncHandler(async (req, res) => {
                     where: { id_user: userId },
                     select: { id_user: true }
                 },
-                comments: {
-                    where: { deletedAt: null },
-                    select: { id_comment: true }
-                },
+                // only the number of comments is shown in the feed (commentCount)
                 _count: {
                     select: {
                         likes: true,
@@ -111,7 +109,7 @@ exports.getPostById = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -136,7 +134,7 @@ exports.createPost = asyncHandler(async (req, res) => {
     if (!content || content.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Content is required"
+            message: "Isi postingan wajib diisi"
         });
     }
 
@@ -164,9 +162,10 @@ exports.createPost = asyncHandler(async (req, res) => {
                 );
                 mediaUrls.push(result.fileUrl);
             } catch (error) {
+                console.error('Failed to upload media:', error.message);
                 return res.status(500).json({
                     status: "error",
-                    message: `Failed to upload media: ${error.message}`
+                    message: GENERIC_SERVER_ERROR
                 });
             }
         }
@@ -195,7 +194,7 @@ exports.createPost = asyncHandler(async (req, res) => {
 
     res.status(201).json({
         status: "success",
-        message: "Post created successfully",
+        message: "Postingan berhasil dibuat",
         data: {
             ...post,
             isLiked: false,
@@ -221,14 +220,14 @@ exports.updatePost = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
     if (post.id_user !== userId) {
         return res.status(403).json({
             status: "error",
-            message: "You can only edit your own posts"
+            message: "Anda hanya dapat mengubah postingan Anda sendiri"
         });
     }
 
@@ -292,9 +291,10 @@ exports.updatePost = asyncHandler(async (req, res) => {
                 );
                 finalMedia.push(result.fileUrl);
             } catch (error) {
+                console.error('Failed to upload media:', error.message);
                 return res.status(500).json({
                     status: "error",
-                    message: `Failed to upload media: ${error.message}`
+                    message: GENERIC_SERVER_ERROR
                 });
             }
         }
@@ -323,7 +323,7 @@ exports.updatePost = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Post updated successfully",
+        message: "Postingan berhasil diperbarui",
         data: updatedPost
     });
 });
@@ -344,7 +344,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -352,7 +352,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
     if (post.id_user !== userId && userRole !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "You can only delete your own posts"
+            message: "Anda hanya dapat menghapus postingan Anda sendiri"
         });
     }
 
@@ -372,7 +372,7 @@ exports.deletePost = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Post deleted successfully"
+        message: "Postingan berhasil dihapus"
     });
 });
 
@@ -393,7 +393,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -408,29 +408,40 @@ exports.toggleLike = asyncHandler(async (req, res) => {
     });
 
     let isLiked;
+    let likeCreated = false;
     if (existingLike) {
-        // Unlike
-        await prisma.postLike.delete({
-            where: { id_like: existingLike.id_like }
-        });
+        // Unlike. A parallel unlike may have deleted it already (P2025): the post is not liked either way.
+        try {
+            await prisma.postLike.delete({
+                where: { id_like: existingLike.id_like }
+            });
+        } catch (error) {
+            if (error.code !== 'P2025') throw error;
+        }
         isLiked = false;
     } else {
-        // Like
-        await prisma.postLike.create({
-            data: {
-                id_post: parseInt(id),
-                id_user: userId
-            }
-        });
+        // Like. A parallel request (double tap) may have inserted the same like after our check: the
+        // unique index (uq_post_user_like) answers P2002 and the post simply is liked already.
+        try {
+            await prisma.postLike.create({
+                data: {
+                    id_post: parseInt(id),
+                    id_user: userId
+                }
+            });
+            likeCreated = true;
+        } catch (error) {
+            if (error.code !== 'P2002') throw error;
+        }
         isLiked = true;
 
-        // Trigger notification
-        if (post.id_user !== userId) {
+        // Trigger notification (only by the request that created the like)
+        if (likeCreated && post.id_user !== userId) {
             // Get current user's name
             prisma.user.findUnique({ where: { id_user: userId }, select: { nama: true } })
                 .then(user => {
                     if (user) {
-                        sendSocialNotification(post.id_user, 'LIKE', user.nama, post.content)
+                        sendSocialNotification(post.id_user, 'LIKE', user.nama, post.content, post.id_post)
                             .catch(err => console.error('Error triggering like notification:', err.message));
                     }
                 })
@@ -445,7 +456,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: isLiked ? "Post liked" : "Post unliked",
+        message: isLiked ? "Postingan disukai" : "Suka pada postingan dibatalkan",
         data: {
             isLiked,
             likeCount
@@ -458,8 +469,7 @@ exports.toggleLike = asyncHandler(async (req, res) => {
 // Get comments for a post
 exports.getComments = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { page = 1, limit = 20 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 20 });
 
     const post = await prisma.post.findFirst({
         where: {
@@ -471,7 +481,7 @@ exports.getComments = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -482,7 +492,7 @@ exports.getComments = asyncHandler(async (req, res) => {
                 deletedAt: null
             },
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -507,9 +517,9 @@ exports.getComments = asyncHandler(async (req, res) => {
         data: comments,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });
@@ -523,7 +533,7 @@ exports.addComment = asyncHandler(async (req, res) => {
     if (!content || content.trim() === '') {
         return res.status(400).json({
             status: "error",
-            message: "Comment content is required"
+            message: "Isi komentar wajib diisi"
         });
     }
 
@@ -546,7 +556,7 @@ exports.addComment = asyncHandler(async (req, res) => {
     if (!post) {
         return res.status(404).json({
             status: "error",
-            message: "Post not found"
+            message: "Postingan tidak ditemukan"
         });
     }
 
@@ -569,13 +579,13 @@ exports.addComment = asyncHandler(async (req, res) => {
 
     // Trigger notification
     if (post.id_user !== userId) {
-        sendSocialNotification(post.id_user, 'COMMENT', comment.user.nama, post.content)
+        sendSocialNotification(post.id_user, 'COMMENT', comment.user.nama, post.content, post.id_post)
             .catch(err => console.error('Error triggering comment notification:', err.message));
     }
 
     res.status(201).json({
         status: "success",
-        message: "Comment added successfully",
+        message: "Komentar berhasil ditambahkan",
         data: comment
     });
 });
@@ -597,7 +607,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
     if (!comment) {
         return res.status(404).json({
             status: "error",
-            message: "Comment not found"
+            message: "Komentar tidak ditemukan"
         });
     }
 
@@ -605,7 +615,7 @@ exports.deleteComment = asyncHandler(async (req, res) => {
     if (comment.id_user !== userId && userRole !== 'ADMIN') {
         return res.status(403).json({
             status: "error",
-            message: "You can only delete your own comments"
+            message: "Anda hanya dapat menghapus komentar Anda sendiri"
         });
     }
 
@@ -616,15 +626,14 @@ exports.deleteComment = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         status: "success",
-        message: "Comment deleted successfully"
+        message: "Komentar berhasil dihapus"
     });
 });
 
 // Get my posts
 exports.getMyPosts = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { page, limit, skip } = parsePagination(req.query);
 
     const [posts, total] = await prisma.$transaction([
         prisma.post.findMany({
@@ -633,7 +642,7 @@ exports.getMyPosts = asyncHandler(async (req, res) => {
                 deletedAt: null
             },
             skip,
-            take: parseInt(limit),
+            take: limit,
             include: {
                 user: {
                     select: {
@@ -672,9 +681,9 @@ exports.getMyPosts = asyncHandler(async (req, res) => {
         data: postsWithCounts,
         pagination: {
             total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / parseInt(limit))
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
         }
     });
 });

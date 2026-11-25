@@ -90,7 +90,7 @@ const uploadFile = async (fileBuffer, fileName, mimeType, folder, options = {}) 
 const deleteFile = async (fileKey) => {
     // Mock delete for tests
     if (process.env.TEST_MODE === 'true') {
-        return { success: true, message: 'File deleted successfully (mock)', fileKey };
+        return { success: true, message: 'File berhasil dihapus (simulasi)', fileKey };
     }
 
     try {
@@ -104,7 +104,7 @@ const deleteFile = async (fileKey) => {
 
         return {
             success: true,
-            message: 'File deleted successfully',
+            message: 'File berhasil dihapus',
             fileKey
         };
     } catch (error) {

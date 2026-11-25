@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/models/pengajuan_plat_model.dart';
 import 'package:mobile/services/kendaraan_service.dart';
-import 'package:mobile/utils/ui_helpers.dart';
 import 'package:mobile/utils/logger.dart';
+import 'package:mobile/utils/app_theme.dart';
+import 'package:mobile/utils/kendaraan_helper.dart';
+import '../../common/red_header_background.dart';
 
 class ListKendaraanTerdaftarPage extends StatefulWidget {
   const ListKendaraanTerdaftarPage({super.key});
@@ -46,7 +48,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     } catch (e) {
       debugLog('Error loading registered vehicles: $e');
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = kendaraanErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -114,7 +116,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE63946),
+              backgroundColor: AppColors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -147,8 +149,8 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal mengajukan penghapusan: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Gagal mengajukan penghapusan: ${kendaraanErrorMessage(e)}'),
+          backgroundColor: AppColors.danger,
         ),
       );
       setState(() => _isLoading = false);
@@ -157,11 +159,12 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFE63946);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       backgroundColor: primaryColor,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -170,7 +173,8 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    tooltip: 'Kembali',
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -179,7 +183,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                   ),
                   const Expanded(
                     child: Text(
-                      "List Kendaraan Terdaftar",
+                      "Daftar Kendaraan Terdaftar",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -212,10 +216,10 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE63946).withOpacity(0.08),
+                            color: AppColors.primary.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFFE63946).withOpacity(0.2),
+                              color: AppColors.primary.withOpacity(0.2),
                             ),
                           ),
                           child: Row(
@@ -223,7 +227,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                             children: [
                               const Row(
                                 children: [
-                                  Icon(Icons.directions_car, color: Color(0xFFE63946)),
+                                  Icon(Icons.directions_car, color: AppColors.primary),
                                   SizedBox(width: 12),
                                   Text(
                                     'Kuota Kendaraan Aktif',
@@ -240,7 +244,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
-                                  color: Color(0xFFE63946),
+                                  color: AppColors.primary,
                                 ),
                               ),
                             ],
@@ -255,6 +259,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -262,7 +267,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          color: Color(0xFFE63946),
+          color: AppColors.primary,
         ),
       );
     }
@@ -274,12 +279,12 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 60, color: Colors.red),
+              const Icon(Icons.error_outline, size: 60, color: AppColors.danger),
               const SizedBox(height: 16),
               Text(
-                'Error: $_errorMessage',
+                '$_errorMessage',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: AppColors.danger),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -350,7 +355,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
   }
 
   Widget _buildVehicleCard(PengajuanPlatModel vehicle) {
-    const Color borderColor = Color(0xFFF76F68);
+    const Color borderColor = AppColors.primary;
     final isPendingDelete = vehicle.statusPengajuan == 'MENUNGGU' && 
         vehicle.feedback != null && 
         vehicle.feedback!.startsWith('DELETE_REQUEST:');
@@ -436,7 +441,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                 if (!isPendingDelete) ...[
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.danger),
                     onPressed: () => _handleDeleteRequest(vehicle),
                     tooltip: 'Hapus Kendaraan',
                   ),

@@ -2,6 +2,31 @@ const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const prisma = require('../utils/prisma');
 
+// Verifies a JWT and loads its (not soft-deleted) user. Throws when the token is invalid or expired and
+// resolves null when the user no longer exists. Shared by the HTTP protect middleware and the
+// Socket.IO handshake so both accept exactly the same tokens.
+const authenticateToken = async (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+  // Find user by ID from decoded token (exclude soft-deleted users)
+  return prisma.user.findUnique({
+    where: {
+      id_user: decoded.id,
+      deletedAt: null // Exclude soft-deleted users
+    },
+    select: {
+      id_user: true,
+      username: true,
+      nama: true,
+      role: true,
+      nim_nip: true,
+      push_notifications_enabled: true // GET /auth/me shows it as the app's push switch
+    }
+  });
+};
+
+exports.authenticateToken = authenticateToken;
+
 // Protect routes
 exports.protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -15,38 +40,23 @@ exports.protect = asyncHandler(async (req, res, next) => {
   if (!token) {
     return res.status(401).json({
       status: "error",
-      message: 'Not authorized to access this route'
+      message: 'Akses ditolak. Silakan login terlebih dahulu.'
     });
   }
 
   try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Find user by ID from decoded token (exclude soft-deleted users)
-    req.user = await prisma.user.findUnique({
-      where: {
-        id_user: decoded.id,
-        deletedAt: null // Exclude soft-deleted users
-      },
-      select: {
-        id_user: true,
-        username: true,
-        nama: true,
-        role: true,
-        nim_nip: true
-      }
-    });
+    // Verify token and load the user
+    req.user = await authenticateToken(token);
 
     if (!req.user) {
-      return res.status(401).json({ status: "error", message: 'User not found or has been deactivated' });
+      return res.status(401).json({ status: "error", message: 'Pengguna tidak ditemukan atau akunnya telah dinonaktifkan' });
     }
 
     next();
   } catch (err) {
     return res.status(401).json({
       status: "error",
-      message: 'Invalid or expired token'
+      message: 'Token tidak valid atau sudah kedaluwarsa'
     });
   }
 });
@@ -57,7 +67,7 @@ exports.authorize = (...roles) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         status: "error",
-        message: `User role ${req.user.role} is not authorized to access this route`
+        message: `Peran ${req.user.role} tidak memiliki akses ke fitur ini`
       });
     }
     next();

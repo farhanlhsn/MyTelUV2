@@ -18,15 +18,29 @@ on:
         options:
           - production
 
+# One deployment at a time; a newer deploy waits instead of racing the running one
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    
+    # Only a CI run triggered by a push to main deploys: a pull_request CI run whose head branch is
+    # named "main" (for example from a fork) must never reach the VPS.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+
+    env:
+      # The exact commit the CI run tested (workflow_run), or the dispatched commit.
+      # Never `origin/main`: main may have moved on since CI ran.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -37,29 +51,43 @@ jobs:
           port: 22
           script: |
             set -e
-            
+
             echo "📦 Navigating to project directory..."
             cd /opt/myteluv2
-            
-            echo "📥 Pulling latest changes..."
-            git fetch origin main
-            git reset --hard origin/main
-            
-            echo "🔧 Updating .env file..."
-            # Ensure .env exists (create from example if not)
+
+            echo "📥 Fetching and checking out the tested commit ${{ env.DEPLOY_SHA }}..."
+            git fetch origin
+            git reset --hard "${{ env.DEPLOY_SHA }}"
+
+            # The real .env lives on the server. Never fall back to .env.example: that would
+            # start the stack with placeholder secrets.
             if [ ! -f .env ]; then
-              cp .env.example .env
-              echo "⚠️ .env created from .env.example - please update with actual values!"
+              echo "❌ /opt/myteluv2/.env is missing. Create it from .env.example with real values, then re-run the deploy."
+              exit 1
             fi
-            
-            echo "🏗️ Building and deploying containers..."
+
+            echo "🏗️ Building images..."
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --build
-            
+            docker compose -f docker-compose.prod.yml build
+
+            # Migrate with the NEW image BEFORE the new containers start. If the migration fails
+            # the job fails here and the running (old) containers are left untouched.
+            echo "🗄️ Applying database migrations..."
+            docker compose -f docker-compose.prod.yml run --rm -T --no-deps backend npx prisma migrate deploy --schema prisma/schema.prisma
+
+            echo "🚀 Starting containers..."
+            docker compose -f docker-compose.prod.yml up -d
+
+            # deploy/Caddyfile is a single-file bind mount. git rewrites it by replacing the file, so a
+            # running Caddy container keeps the OLD file (old inode) and `up -d` sees no config change.
+            # Recreating the container re-binds the current file; `caddy reload` would reload the stale one.
+            echo "🔁 Recreating Caddy so Caddyfile changes apply..."
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy
+
             echo "🧹 Cleaning up old images..."
             docker image prune -f
-            
-            echo "✅ Deployment complete!"
+
+            echo "✅ Containers started!"
             docker compose -f docker-compose.prod.yml ps
 
       - name: Health Check
@@ -71,13 +99,20 @@ jobs:
           port: 22
           script: |
             echo "🏥 Running health checks..."
-            sleep 30  # Wait for services to start
-            
-            # Check if containers are running
-            if docker compose -f /opt/myteluv2/docker-compose.prod.yml ps | grep -q "healthy\|Up"; then
-              echo "✅ All containers are running!"
-            else
-              echo "❌ Some containers failed to start"
-              docker compose -f /opt/myteluv2/docker-compose.prod.yml logs --tail=50
-              exit 1
-            fi
+
+            # /health goes caddy -> backend -> database and answers 503 while the database is
+            # down, so a 2xx proves more than "containers are Up". Wait up to 30 x 5s = 150s.
+            for i in $(seq 1 30); do
+              if curl -fsS --max-time 5 http://127.0.0.1:8880/health; then
+                echo ""
+                echo "✅ Backend is healthy (attempt $i)"
+                exit 0
+              fi
+              echo "⏳ Not healthy yet (attempt $i/30), retrying in 5s..."
+              sleep 5
+            done
+
+            echo "❌ Health check failed after 150s"
+            docker compose -f /opt/myteluv2/docker-compose.prod.yml ps
+            docker compose -f /opt/myteluv2/docker-compose.prod.yml logs --tail=100
+            exit 1

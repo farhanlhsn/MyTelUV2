@@ -3,8 +3,10 @@ import 'package:get/get.dart';
 import '../../services/akademik_service.dart';
 import '../../controllers/home_controller.dart';
 import '../../app/routes.dart';
+import '../../utils/date_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/jadwal_cache.dart';
+import '../../utils/app_theme.dart';
 
 class JadwalMingguanPage extends StatefulWidget {
   const JadwalMingguanPage({super.key});
@@ -29,7 +31,8 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
   @override
   void initState() {
     super.initState();
-    final today = DateTime.now().weekday - 1;
+    // The tab of today in WIB (Monday is the first tab), not in the phone's own time zone
+    final today = toWib(DateTime.now()).weekday - 1;
     _tabController = TabController(length: 7, vsync: this, initialIndex: today.clamp(0, 6));
     _loadJadwal();
   }
@@ -57,14 +60,14 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHelper.parseError(e);
         _isLoading = false;
       });
     }
   }
 
   String _formatTimestamp(DateTime dt) {
-    return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return '${formatTanggalSingkat(dt)}, ${formatJam(dt)}';
   }
 
   @override
@@ -72,7 +75,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        backgroundColor: const Color(0xFFE63946),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         title: const Text('Jadwal Mingguan'),
         bottom: TabBar(
@@ -112,9 +115,9 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
                             const SizedBox(height: 16),
-                            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                            Text(_errorMessage!, style: const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: _loadJadwal,
@@ -177,7 +180,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
     } catch (_) {}
 
     Color cardColor = Colors.white;
-    Color statusColor = const Color(0xFFE63946);
+    Color statusColor = AppColors.primary;
     String statusText = '';
 
     if (override != null) {
@@ -263,7 +266,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                             color: statusColor,
                           ),
                         ),
-                        Text('-', style: TextStyle(color: statusColor, fontSize: 10)),
+                        Text('-', style: TextStyle(color: statusColor, fontSize: 11)),
                         Text(
                           _formatTime(kelas['jam_berakhir']),
                           style: TextStyle(
@@ -304,7 +307,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                             child: Text(
                               matakuliah['kode_matakuliah'] ?? '',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 11,
                                 color: Colors.grey[700],
                                 fontWeight: FontWeight.w500,
                               ),
@@ -392,7 +395,7 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.calendar_month, color: Color(0xFFE63946)),
+              leading: const Icon(Icons.calendar_month, color: AppColors.primary),
               title: const Text('Buat Jadwal Pengganti / Libur'),
               subtitle: const Text('Ubah jadwal untuk minggu ini'),
               onTap: () async {
@@ -407,15 +410,6 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                 if (result == true) {
                   _loadJadwal(); // Refresh list if created
                 }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.history, color: Colors.blue),
-              title: const Text('Lihat Riwayat Perubahan'),
-              onTap: () {
-                Get.back();
-                // TODO: Navigate to history list if needed
-                ErrorHelper.showInfo('Fitur riwayat belum tersedia');
               },
             ),
           ],

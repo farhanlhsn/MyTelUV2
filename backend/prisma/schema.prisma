@@ -28,6 +28,14 @@ enum StatusAnomali {
   REVIEWED
   RESOLVED
 }
+// HADIR/TELAT = present, IZIN/SAKIT = excused, ALPHA = absent
+enum StatusKehadiran {
+  HADIR
+  TELAT
+  IZIN
+  SAKIT
+  ALPHA
+}
 enum StatusPengajuan {
   MENUNGGU
   DISETUJUI
@@ -307,10 +315,13 @@ model Absensi {
   type_absensi TypeAbsensi
   is_mock_location Boolean @default(false)
   photo_url    String?
+  status       StatusKehadiran @default(HADIR)
+  keterangan   String?
+  diubah_oleh  Int?      // id_user of the DOSEN/ADMIN who last set the status by hand (no FK)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
-  koordinat    Unsupported("point")
+  koordinat    Unsupported("point")? // null for a record entered by a DOSEN/ADMIN (no check-in location)
 
   user             User                 @relation(fields: [id_user], references: [id_user], onDelete: Cascade)
   kelas            Kelas                @relation(fields: [id_kelas], references: [id_kelas], onDelete: Cascade)
@@ -321,6 +332,7 @@ model Absensi {
   @@index([type_absensi], map: "idx_absensi_type")
   @@index([deletedAt], map: "idx_absensi_deleted")
   @@index([createdAt], map: "idx_absensi_created")
+  @@unique([id_user, id_sesi_absensi], map: "uq_absensi_user_sesi")
   @@map("absensi")
 }
 

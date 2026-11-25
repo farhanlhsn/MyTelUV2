@@ -5,9 +5,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/post_service.dart';
 import '../../models/post_model.dart';
+import '../../utils/date_helper.dart';
 import 'create_post_page.dart';
 import 'comments_page.dart';
 import '../common/image_viewer_page.dart';
+import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class PostPage extends StatefulWidget {
   final VoidCallback? onCloseTapped;
@@ -34,7 +37,7 @@ class _PostPageState extends State<PostPage> {
   int? _currentUserId;
   String? _currentUserName;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
 
   @override
   void initState() {
@@ -93,7 +96,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = ErrorHelper.parseError(e);
           _isLoading = false;
         });
       }
@@ -167,7 +170,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
         );
       }
     }
@@ -187,7 +190,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
         );
       }
     }
@@ -210,7 +213,7 @@ class _PostPageState extends State<PostPage> {
               Navigator.pop(context);
               _deletePost(postId);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Hapus'),
           ),
         ],
@@ -240,23 +243,6 @@ class _PostPageState extends State<PostPage> {
         ),
       ),
     );
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 7) {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}h lalu';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}j lalu';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m lalu';
-    } else {
-      return 'Baru saja';
-    }
   }
 
   @override
@@ -291,7 +277,7 @@ class _PostPageState extends State<PostPage> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppColors.text,
                         ),
                       ),
                     ],
@@ -546,7 +532,7 @@ class _PostPageState extends State<PostPage> {
                             style: TextStyle(color: primaryColor.withOpacity(0.8), fontSize: 12),
                           ),
                           Text(
-                            ' • ${_formatTimeAgo(post.createdAt)}',
+                            ' • ${formatWaktuRelatif(post.createdAt)}',
                             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                           ),
                         ],
@@ -566,9 +552,9 @@ class _PostPageState extends State<PostPage> {
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                            Icon(Icons.delete_outline, color: AppColors.danger, size: 20),
                             SizedBox(width: 8),
-                            Text('Hapus', style: TextStyle(color: Colors.red)),
+                            Text('Hapus', style: TextStyle(color: AppColors.danger)),
                           ],
                         ),
                       ),
@@ -694,7 +680,7 @@ class _PostPageState extends State<PostPage> {
                 _buildActionButton(
                   icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
                   label: '${post.likeCount}',
-                  color: post.isLiked ? Colors.red : Colors.grey.shade600,
+                  color: post.isLiked ? AppColors.danger : Colors.grey.shade600,
                   onTap: () => _toggleLike(post.idPost),
                 ),
                 // Comment Button

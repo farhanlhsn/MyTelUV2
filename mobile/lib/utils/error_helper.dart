@@ -1,9 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:dio/dio.dart';
+import './app_theme.dart';
+import './server_messages.dart';
+
+/// The access token ran out and the server could not be asked for a new one (timeout, no connection,
+/// 5xx, 429): nothing is known about the session, which may well be fine. Carried as the `error` of
+/// the DioException a request fails with, so the user reads "try again" instead of the server's 401
+/// text ("Token tidak valid"), which sounds like a session that ended.
+class SessionRefreshUnavailable implements Exception {
+  const SessionRefreshUnavailable();
+
+  static const String message =
+      'Tidak dapat memperbarui sesi. Periksa koneksi lalu coba lagi.';
+
+  @override
+  String toString() => message;
+}
 
 /// Utility class untuk menangani error secara konsisten di seluruh aplikasi
 class ErrorHelper {
+  /// Key of the app's ScaffoldMessenger (given to the GetMaterialApp in app.dart). The toasts are
+  /// shown through it, not through `Get.snackbar`: GetX 4.7.2 looks its overlay up in a way current
+  /// Flutter rejects ("No Overlay widget found"), and the failed snackbar then stays "open" in
+  /// GetX's queue, so every later `Get.back()` only tries to close it and never leaves the page.
+  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   /// Menampilkan error dengan dialog yang jelas dan visible
   static void showError(dynamic error, {String title = 'Terjadi Kesalahan'}) {
     String message = parseError(error);
@@ -52,7 +75,7 @@ class ErrorHelper {
             child: ElevatedButton(
               onPressed: () => Get.back(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -134,7 +157,7 @@ class ErrorHelper {
                     onRetry();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -161,24 +184,38 @@ class ErrorHelper {
 
     // Handle Exception biasa
     if (error is Exception) {
-      String msg = error.toString();
-      // Remove "Exception:" prefix if present
-      if (msg.startsWith('Exception:')) {
-        msg = msg.substring(10).trim();
-      }
-      return msg;
+      return _orUnknown(translateServerMessage(stripExceptionPrefix(error.toString())));
     }
 
-    // Handle string langsung
+    // Handle string langsung (mis. hasil e.toString() dari pemanggil)
     if (error is String) {
-      return error;
+      return _orUnknown(translateServerMessage(stripExceptionPrefix(error)));
     }
 
-    return 'Terjadi kesalahan yang tidak diketahui.';
+    return _unknownError;
+  }
+
+  static const String _unknownError = 'Terjadi kesalahan yang tidak diketahui.';
+
+  static String _orUnknown(String message) =>
+      message.isEmpty ? _unknownError : message;
+
+  /// Menghapus awalan "Exception:" (juga yang bertumpuk, "Exception: Exception: ...")
+  /// agar pengguna tidak melihat nama kelas Dart.
+  static String stripExceptionPrefix(String message) {
+    var text = message.trim();
+    while (text.startsWith('Exception:')) {
+      text = text.substring('Exception:'.length).trim();
+    }
+    return text;
   }
 
   /// Parse DioException untuk pesan yang lebih user-friendly
   static String _parseDioError(DioException error) {
+    if (error.error is SessionRefreshUnavailable) {
+      return SessionRefreshUnavailable.message;
+    }
+
     // Handle berdasarkan tipe error
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
@@ -199,7 +236,6 @@ class ErrorHelper {
         return 'Terjadi masalah keamanan koneksi.';
 
       case DioExceptionType.unknown:
-      default:
         if (error.message?.contains('SocketException') == true ||
             error.message?.contains('Connection refused') == true ||
             error.message?.contains('Network is unreachable') == true) {
@@ -221,10 +257,10 @@ class ErrorHelper {
     // Coba ambil message dari response body
     if (data is Map<String, dynamic>) {
       if (data['message'] != null) {
-        return data['message'].toString();
+        return translateServerMessage(data['message'].toString());
       }
       if (data['error'] != null) {
-        return data['error'].toString();
+        return translateServerMessage(data['error'].toString());
       }
     }
 
@@ -253,39 +289,87 @@ class ErrorHelper {
     }
   }
 
-  /// Menampilkan success dengan snackbar yang lebih visible
+  /// Shows a floating toast: [title] in bold with [message] below it. A toast already on screen is
+  /// replaced; a tap runs [onTap] and closes it. Without an app shell to show it in (the app is not
+  /// built yet) the toast is skipped, never thrown.
+  static void showToast(
+    String title,
+    String message, {
+    Color? backgroundColor,
+    Color textColor = Colors.white,
+    Widget? icon,
+    Duration duration = const Duration(seconds: 3),
+    VoidCallback? onTap,
+  }) {
+    final ScaffoldMessengerState? messenger = scaffoldMessengerKey.currentState;
+    if (messenger == null) {
+      debugPrint('Toast (no messenger): $title - $message');
+      return;
+    }
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor ?? Colors.grey.shade800,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: duration,
+          content: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              messenger.hideCurrentSnackBar();
+              onTap?.call();
+            },
+            child: Row(
+              children: [
+                if (icon != null) ...[icon, const SizedBox(width: 12)],
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      if (message.isNotEmpty)
+                        Text(
+                          message,
+                          style: TextStyle(color: textColor, fontSize: 14),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+  }
+
+  /// Menampilkan success dengan toast hijau
   static void showSuccess(String message, {String title = 'Berhasil'}) {
-    Get.snackbar(
+    showToast(
       title,
       message,
       backgroundColor: Colors.green.shade600,
-      colorText: Colors.white,
-      icon: const Padding(
-        padding: EdgeInsets.only(left: 8),
-        child: Icon(Icons.check_circle, color: Colors.white, size: 28),
-      ),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: const Duration(seconds: 3),
-      snackPosition: SnackPosition.TOP,
+      icon: const Icon(Icons.check_circle, color: Colors.white, size: 28),
     );
   }
 
-  /// Menampilkan info dengan snackbar biru
+  /// Menampilkan info dengan toast biru
   static void showInfo(String message, {String title = 'Info'}) {
-    Get.snackbar(
+    showToast(
       title,
       message,
       backgroundColor: Colors.blue.shade600,
-      colorText: Colors.white,
-      icon: const Padding(
-        padding: EdgeInsets.only(left: 8),
-        child: Icon(Icons.info_outline, color: Colors.white, size: 28),
-      ),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: const Duration(seconds: 3),
-      snackPosition: SnackPosition.TOP,
+      icon: const Icon(Icons.info_outline, color: Colors.white, size: 28),
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../controllers/account_controller.dart';
+import '../../utils/app_theme.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -9,21 +10,21 @@ class AccountPage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Injeksi controller
     final controller = Get.put(AccountController());
-    final primaryColor = const Color(0xFFE63946); // Merah sesuai tema settings Anda
+    final primaryColor = AppColors.primary; // Merah sesuai tema settings Anda
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Akun Saya", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
+        title: const Text("Akun Saya"),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          tooltip: 'Kembali',
+          icon: const Icon(appBackIcon, size: 20),
           onPressed: () => Get.back(),
         ),
       ),
       body: Obx(() {
         return SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -37,23 +38,11 @@ class AccountPage extends StatelessWidget {
                         border: Border.all(color: primaryColor.withOpacity(0.2), width: 3),
                         shape: BoxShape.circle,
                       ),
-                      child: const CircleAvatar(
+                      // No profile photo exists: a neutral avatar, not a stock picture fetched from a third party
+                      child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.grey,
-                        backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=12'), // Placeholder img
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                        backgroundColor: Colors.grey.shade300,
+                        child: const Icon(Icons.person, size: 56, color: Colors.white),
                       ),
                     ),
                   ],
@@ -76,6 +65,8 @@ class AccountPage extends StatelessWidget {
                 controller: controller.emailController,
                 icon: Icons.email_outlined,
                 inputType: TextInputType.emailAddress,
+                readOnly: true,
+                helperText: 'Perubahan email belum tersedia.',
               ),
               const SizedBox(height: 15),
               _buildTextField(
@@ -83,6 +74,8 @@ class AccountPage extends StatelessWidget {
                 controller: controller.phoneController,
                 icon: Icons.phone_android_outlined,
                 inputType: TextInputType.phone,
+                readOnly: true,
+                helperText: 'Perubahan nomor telepon belum tersedia.',
               ),
               
               const SizedBox(height: 20),
@@ -96,7 +89,7 @@ class AccountPage extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: controller.isLoading.value
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: primaryColor, strokeWidth: 2))
                       : const Text("Simpan Profil", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -138,7 +131,7 @@ class AccountPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: Text("Update Password", style: TextStyle(color: primaryColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text("Ubah Password", style: TextStyle(color: primaryColor, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 30),
@@ -155,17 +148,25 @@ class AccountPage extends StatelessWidget {
     required TextEditingController controller,
     required IconData icon,
     TextInputType inputType = TextInputType.text,
+    bool readOnly = false,
+    String? helperText,
   }) {
     return TextField(
       controller: controller,
       keyboardType: inputType,
+      readOnly: readOnly,
+      textInputAction: TextInputAction.next,
+      textCapitalization: TextCapitalization.words,
+      autofillHints: readOnly ? null : const [AutofillHints.name],
       decoration: InputDecoration(
         labelText: label,
+        helperText: helperText,
+        helperMaxLines: 3,
         prefixIcon: Icon(icon, color: Colors.grey),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     );
@@ -180,10 +181,14 @@ class AccountPage extends StatelessWidget {
     return Obx(() => TextField(
       controller: controller,
       obscureText: isHidden.value,
+      autocorrect: false,
+      enableSuggestions: false,
+      textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
         suffixIcon: IconButton(
+          tooltip: isHidden.value ? 'Tampilkan password' : 'Sembunyikan password',
           icon: Icon(
             isHidden.value ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey,
@@ -193,7 +198,7 @@ class AccountPage extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE63946), width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
     ));

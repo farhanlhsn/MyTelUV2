@@ -3,6 +3,8 @@ import 'package:mobile/models/kelas.dart';
 import 'package:mobile/models/matakuliah.dart';
 import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
+import 'package:mobile/pages/common/typed_confirm_dialog.dart';
+import 'package:mobile/utils/app_theme.dart';
 
 class AdminKelasTab extends StatefulWidget {
   const AdminKelasTab({super.key});
@@ -115,7 +117,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(isEdit ? 'Edit Kelas' : 'Tambah Kelas', style: const TextStyle(fontWeight: FontWeight.bold)),
+          title: Text(isEdit ? 'Ubah Kelas' : 'Tambah Kelas', style: const TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Form(
               key: formKey,
@@ -367,7 +369,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE63946),
+                backgroundColor: AppColors.primary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: isSubmitting
@@ -472,7 +474,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('HAPUS', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -491,42 +493,15 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
   }
 
   Future<void> _deleteAllKelas() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.warning_amber_rounded, color: Colors.red.shade400),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(child: Text('Hapus SEMUA Kelas')),
-          ],
-        ),
-        content: const Text(
-          'Apakah Anda yakin ingin menghapus SEMUA kelas?\n\nTindakan ini tidak dapat dibatalkan.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('BATAL', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('HAPUS SEMUA', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+    // Irreversible and wipes every class: the admin has to type HAPUS, a plain tap is not enough.
+    final confirmed = await showTypedConfirmDialog(
+      context,
+      title: 'Hapus SEMUA Kelas',
+      message:
+          'Semua kelas akan dihapus (${_kelasList.length} kelas).\n\nTindakan ini tidak dapat dibatalkan.',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       await _akademikService.deleteAllKelas();
@@ -541,10 +516,50 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // "Hapus Semua Kelas" lives in an overflow menu, away from the everyday "Tambah Kelas".
+        if (!_isLoading && _error == null && _kelasList.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_kelasList.length} kelas',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Menu lainnya',
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (value) {
+                    if (value == 'hapus_semua') _deleteAllKelas();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(
+                      value: 'hapus_semua',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_forever, color: AppColors.danger),
+                          SizedBox(width: 12),
+                          Text(
+                            'Hapus Semua Kelas',
+                            style: TextStyle(color: AppColors.danger),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: _isLoading
               ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFE63946)),
+                  child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error != null
                   ? Center(
@@ -589,7 +604,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                                 style: TextStyle(color: Colors.white),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE63946),
+                                backgroundColor: AppColors.primary,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -652,31 +667,12 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE63946),
+                    backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
-              if (_kelasList.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _deleteAllKelas,
-                    icon: const Icon(Icons.delete_forever, color: Colors.red),
-                    label: const Text(
-                      'Hapus Semua Kelas',
-                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -713,11 +709,11 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE63946).withOpacity(0.1),
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Center(
-                  child: Icon(Icons.class_, color: Color(0xFFE63946)),
+                  child: Icon(Icons.class_, color: AppColors.primary),
                 ),
               ),
               const SizedBox(width: 16),
@@ -755,7 +751,7 @@ class _AdminKelasTabState extends State<AdminKelasTab> {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    icon: const Icon(Icons.delete, color: AppColors.danger, size: 20),
                     onPressed: () => _deleteKelas(kelas),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),

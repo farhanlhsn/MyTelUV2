@@ -36,7 +36,7 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
     const res = await axios.get(`${API_BASE}/health`);
     expect(res.status).toBe(200);
     expect(res.data.status).toBe("ok");
-    expect(res.data.services.database.status).toBe("ok");
+    expect(res.data.db).toBe("ok");
   });
 
   test("2. Authentication Flow - Login as Mahasiswa & Dosen", async () => {
@@ -135,7 +135,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           Authorization: `Bearer ${tokenMhs}`,
-          "X-Test-Mode": "true", // Trigger test mode bypass in python face service
         },
       });
     } catch (err) {
@@ -166,7 +165,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           Authorization: `Bearer ${tokenMhs}`,
-          "X-Test-Mode": "true",
         },
       });
     } catch (err) {
@@ -202,7 +200,6 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
       headers: {
         ...form.getHeaders(),
         Authorization: `Bearer ${tokenMhs}`,
-        "X-Test-Mode": "true",
       },
     });
 
@@ -228,16 +225,14 @@ describe("MyTelU V2 End-to-End API Test Suite", () => {
         headers: {
           ...form.getHeaders(),
           "X-Edge-Secret": process.env.EDGE_DEVICE_SECRET || "e2e-testing-edge-device-secret-32-chars",
-          "X-Test-Mode": "true", // Forwarded by backend to plate recognizer
         },
       },
     );
 
     expect([200, 201]).toContain(res.status);
-    const gateAction = res.data.gate_action || res.data.data?.gate_action;
-    expect(["ALLOW", "OPEN"]).toContain(gateAction);
-    const plateText = res.data.plate_text || res.data.data?.plate_text;
-    expect(plateText).toBe("B1234XYZ");
+    // The response contract nests the gate decision under "data": { status, message, data: { gate_action } }
+    expect(res.data.data.gate_action).toBe("OPEN");
+    expect(res.data.data.plate_text).toBe("B1234XYZ");
   });
 
   test("10. Anomaly Detection Integration - Trigger scheduled anomaly detection", async () => {

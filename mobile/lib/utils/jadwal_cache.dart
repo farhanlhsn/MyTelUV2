@@ -53,6 +53,16 @@ class JadwalCache {
     }
   }
 
+  /// Hapus semua jadwal yang tersimpan. Dipanggil saat logout atau sesi berakhir: jadwal milik satu
+  /// pengguna tidak boleh muncul (sebagai data offline) bagi pengguna lain di perangkat yang sama.
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(JadwalCacheKeys.jadwalMingguan);
+    await prefs.remove(JadwalCacheKeys.jadwalMingguanTs);
+    await prefs.remove(JadwalCacheKeys.kelasHariIni);
+    await prefs.remove(JadwalCacheKeys.kelasHariIniTs);
+  }
+
   /// Ambil timestamp cache (untuk ditampilkan di UI)
   static Future<DateTime?> getJadwalMingguanTimestamp() async {
     final prefs = await SharedPreferences.getInstance();

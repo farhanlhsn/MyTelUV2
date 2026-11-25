@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mobile/main.dart' as app;
+import 'package:mobile/utils/app_theme.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -125,7 +126,7 @@ void main() {
         );
 
         // Kembali ke home
-        final backButton = find.byIcon(Icons.arrow_back_ios);
+        final backButton = find.byIcon(appBackIcon);
         if (backButton.evaluate().isNotEmpty) {
           await tester.tap(backButton.first);
           await tester.pumpAndSettle(const Duration(seconds: 1));

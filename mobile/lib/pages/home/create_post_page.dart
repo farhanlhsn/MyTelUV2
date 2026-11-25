@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
 import '../../services/post_service.dart';
 import '../common/location_picker_page.dart';
+import '../../utils/app_theme.dart';
+import '../../utils/error_helper.dart';
 
 class CreatePostPage extends StatefulWidget {
   const CreatePostPage({super.key});
@@ -24,7 +26,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
   String? _locationName;
   String? _userName;
 
-  static const Color primaryColor = Color(0xFFE63946);
+  static const Color primaryColor = AppColors.primary;
   static const int _maxMediaCount = 4;
   static const int _maxVideoBytes = 25 * 1024 * 1024;
 
@@ -113,7 +115,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.danger,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -163,7 +165,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
         Get.back(result: true);
       }
     } catch (e) {
-      _showError('Gagal membuat postingan: $e');
+      _showError('Gagal membuat postingan: ${ErrorHelper.parseError(e)}');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -193,8 +195,11 @@ class _CreatePostPageState extends State<CreatePostPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // A composer: white bar so the red "Posting" action stands out
       appBar: AppBar(
         backgroundColor: Colors.white,
+        foregroundColor: AppColors.text,
+        systemOverlayStyle: statusBarOnLight,
         elevation: 0,
         leading: IconButton(
           icon: Container(
@@ -467,7 +472,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   const SizedBox(width: 16),
                   _buildAttachmentButton(
                     icon: Icons.videocam,
-                    color: Colors.red,
+                    color: AppColors.danger,
                     onTap: _pickVideo,
                   ),
                   const SizedBox(width: 16),

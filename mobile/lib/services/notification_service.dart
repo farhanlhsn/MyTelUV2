@@ -1,11 +1,13 @@
-import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile/controllers/notification_controller.dart';
+import '../utils/error_helper.dart';
 import '../utils/logger.dart';
+import '../utils/notification_inbox.dart';
+import '../utils/notification_router.dart';
 import 'api_client.dart';
 
 String _maskToken(String token) => '${token.substring(0, 8)}...${token.substring(token.length - 8)}';
@@ -55,7 +57,7 @@ class NotificationService {
         });
 
         // Setup message handlers
-        _setupMessageHandlers();
+        await _setupMessageHandlers();
       }
     } catch (e) {
       debugLog('NotificationService init error: $e');
@@ -66,7 +68,7 @@ class NotificationService {
   static String? get token => _fcmToken;
 
   /// Setup foreground and background message handlers
-  static void _setupMessageHandlers() {
+  static Future<void> _setupMessageHandlers() async {
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugLog('Foreground message: ${message.notification?.title}');
@@ -75,56 +77,68 @@ class NotificationService {
       // Save notification locally
       saveNotification(message);
 
-      // Show snackbar
+      // Show the banner (a tap opens the page of the notification)
       if (message.notification != null) {
-        Get.snackbar(
+        ErrorHelper.showToast(
           message.notification!.title ?? 'Notifikasi',
           message.notification!.body ?? '',
-          icon: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: Image.asset(
-                'assets/images/telyu.png',
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-              ),
+          icon: ClipRRect(
+            borderRadius: BorderRadius.circular(8.0),
+            child: Image.asset(
+              'assets/images/telyu.png',
+              width: 40,
+              height: 40,
+              fit: BoxFit.cover,
             ),
           ),
-          snackPosition: SnackPosition.TOP,
           duration: const Duration(seconds: 4),
-          onTap: (_) {
-            // Handle tap
-          },
+          onTap: () => openNotification(message.data),
         );
       }
-      
+
       _handleParkingNotification(message);
     });
 
     // Handle background messages
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Handle notification tap when app is in background
+    // Handle notification tap when app is in background: the app is running, so open the page now
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugLog('Notification tapped (from background), type: ${message.data['type']}');
       saveNotification(message); // Ensure saved if opened
+      openNotification(message.data);
     });
+
+    await _captureLaunchNotification();
   }
 
-  /// Save notification to SharedPreferences
+  /// Cold start: the notification the user tapped to launch the app. The app is not ready yet (no
+  /// GetMaterialApp, session not checked), so it is only remembered; the splash page opens it once
+  /// the user is on the home page (see [NotificationNavigator.openPending]).
+  static Future<void> _captureLaunchNotification() async {
+    try {
+      final RemoteMessage? initial = await _messaging.getInitialMessage();
+      if (initial == null) return;
+      debugLog('App launched from a notification, type: ${initial.data['type']}');
+      saveNotification(initial); // Deduplicated by message id if the background handler saved it
+      NotificationNavigator.setPending(initial.data);
+    } catch (e) {
+      debugLog('getInitialMessage error: $e');
+    }
+  }
+
+  /// Save notification to the inbox of the logged-in user (SharedPreferences, `notifications_<id>`)
   static Future<void> saveNotification(RemoteMessage message) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? existingData = prefs.getString('local_notifications');
-      List<dynamic> notifications = [];
-      
-      if (existingData != null) {
-        notifications = jsonDecode(existingData);
+      final int? idUser = await NotificationInbox.currentUserId();
+      if (idUser == null) {
+        // Nobody is logged in: there is no inbox this message could belong to
+        debugLog('Notification not saved locally: no logged-in user');
+        return;
       }
 
-      final newNotification = {
+      final prefs = await SharedPreferences.getInstance();
+      final newNotification = <String, dynamic>{
         'id': message.messageId,
         'title': message.notification?.title ?? 'Notifikasi Baru',
         'body': message.notification?.body ?? '',
@@ -133,21 +147,22 @@ class NotificationService {
         'type': message.data['type'] ?? 'general',
       };
 
-      notifications.add(newNotification);
-      
-      // Limit to last 50 notifications
-      if (notifications.length > 50) {
-        notifications = notifications.sublist(notifications.length - 50);
-      }
-
-      await prefs.setString('local_notifications', jsonEncode(notifications));
+      await NotificationInbox.append(prefs, idUser, newNotification);
       debugLog('Notification saved locally');
-      
+
       if (Get.isRegistered<NotificationController>()) {
         Get.find<NotificationController>().loadNotifications();
       }
     } catch (e) {
       debugPrint('❌ Failed to save notification locally: $e');
+    }
+  }
+
+  /// Logout: removes the local inbox of [idUser] and empties the one on screen.
+  static Future<void> clearInbox(int? idUser) async {
+    await NotificationInbox.clear(idUser);
+    if (Get.isRegistered<NotificationController>()) {
+      Get.find<NotificationController>().reset();
     }
   }
 

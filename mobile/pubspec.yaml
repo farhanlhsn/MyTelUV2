@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   firebase_core: ^3.9.0
   firebase_messaging: ^15.2.3
   fl_chart: ^0.67.0
@@ -77,9 +79,11 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/telyu.png"
+  # Padded sources from tool/brand_assets.py (the raw logo got cropped by the icon mask)
+  image_path: "assets/icon/launcher_legacy.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/telyu.png"
+  adaptive_icon_foreground: "assets/icon/launcher_foreground.png"
+  adaptive_icon_foreground_inset: 0
 
 
 # For information on the generic Dart part of this file, see the

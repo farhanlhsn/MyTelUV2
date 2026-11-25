@@ -7,11 +7,11 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 const router = express.Router();
 
 router.post('/register',
+    protect, // auth BEFORE multer: never buffer uploads in memory for unauthenticated callers
     uploadFields([
         { name: 'fotoKendaraan', maxCount: 3 }, // wajib 3 foto kendaraan
         { name: 'fotoSTNK', maxCount: 1 }        // Wajib 1 foto STNK
     ]),
-    protect,
     validateZod(registerKendaraanSchema), // id_user tidak perlu, ambil dari token
     validateFileSize,
     requireFile,

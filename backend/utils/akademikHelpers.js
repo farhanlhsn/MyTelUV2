@@ -53,14 +53,14 @@ const requireKelasOwnership = (req, res, next) => {
     if (!kelas) {
         return res.status(500).json({
             status: "error",
-            message: "Kelas not loaded for authorization check"
+            message: "Data kelas belum dimuat untuk pemeriksaan akses"
         });
     }
 
     if (!isDosenAuthorizedForKelas(req.user, kelas)) {
         return res.status(403).json({
             status: "error",
-            message: "You can only access your own classes"
+            message: "Anda hanya dapat mengakses kelas Anda sendiri"
         });
     }
 
@@ -91,10 +91,145 @@ const haversineDistance = (lat1, lon1, lat2, lon2) => {
     return R * c;
 };
 
+/**
+ * Whether a session counts towards a student's attendance statistics.
+ *
+ * A session counts when it is closed — closed by hand (`status === false`) or past its end time — and it
+ * started on/after the student's enrollment. Running sessions and sessions from before the student joined
+ * the class are left out of both "hadir" and "tidak hadir".
+ *
+ * @param {{mulai: Date|string, selesai: Date|string, status: boolean}} sesi - SesiAbsensi row:
+ *        `mulai`/`selesai` are the session start/end instants, `status` is true while the session is open.
+ *        Callers filter out soft-deleted sessions (`deletedAt`) themselves.
+ * @param {Date|string|null|undefined} enrolledAt - PesertaKelas.createdAt of the student; null/undefined
+ *        means "unknown" and only the closed check applies.
+ * @param {Date} [now=new Date()]
+ * @returns {boolean}
+ */
+const isCountableSession = (sesi, enrolledAt, now = new Date()) => {
+    if (!sesi) return false;
+
+    const ended = new Date(sesi.selesai).getTime() < new Date(now).getTime();
+    const closed = sesi.status === false || ended;
+    if (!closed) return false;
+
+    return startedAfterEnrollment(sesi, enrolledAt);
+};
+
+/**
+ * The enrollment-date rule of isCountableSession on its own: the session started on/after the
+ * enrollment. null/undefined enrolledAt means "unknown" and passes.
+ */
+const startedAfterEnrollment = (sesi, enrolledAt) => {
+    if (enrolledAt === null || enrolledAt === undefined) return true;
+    return new Date(sesi.mulai).getTime() >= new Date(enrolledAt).getTime();
+};
+
+/**
+ * The students a session belongs to: active enrollments made on/before the session start (same rule
+ * as isCountableSession), plus anyone who has an attendance record for it — a recorded check-in or
+ * a status set by the dosen is never hidden.
+ *
+ * @param {{mulai: Date|string}} sesi
+ * @param {Array<{id_mahasiswa: number, createdAt?: Date|string}>} pesertaList - active PesertaKelas rows
+ * @param {Map<number, object>} absensiByUser - this session's Absensi rows by id_user
+ */
+const sessionParticipants = (sesi, pesertaList, absensiByUser) => pesertaList.filter((p) =>
+    startedAfterEnrollment(sesi, p.createdAt) || absensiByUser.has(p.id_mahasiswa));
+
+// ==================== ATTENDANCE STATUS (StatusKehadiran) ====================
+
+const STATUS_KEHADIRAN = Object.freeze(['HADIR', 'TELAT', 'IZIN', 'SAKIT', 'ALPHA']);
+const PRESENT_STATUSES = new Set(['HADIR', 'TELAT']);
+const EXCUSED_STATUSES = new Set(['IZIN', 'SAKIT']);
+
+/** HADIR and TELAT count as present. */
+const isPresentStatus = (status) => PRESENT_STATUSES.has(status);
+
+/** IZIN and SAKIT are excused: not absent, and left out of the attendance percentage. */
+const isExcusedStatus = (status) => EXCUSED_STATUSES.has(status);
+
+/**
+ * Status of an Absensi row, or null when there is no row (no check-in and no status set by hand).
+ * A row without a status field (written before statuses existed) is a check-in, i.e. HADIR.
+ */
+const absensiStatus = (absensi) => (absensi ? absensi.status || 'HADIR' : null);
+
+/**
+ * Counts for a list of statuses (null = no Absensi row, which counts as absent like ALPHA).
+ *
+ * hadir = HADIR + TELAT, tidak_hadir = ALPHA + no row, IZIN/SAKIT are excused. dihitung is the
+ * percentage denominator, total - excused; the percentage is hadir / dihitung * 100, and 0 when
+ * dihitung is 0 (no sessions, or all excused).
+ *
+ * @param {Array<string|null>} statuses
+ * @returns {{total: number, hadir: number, telat: number, izin: number, sakit: number,
+ *            tidak_hadir: number, dihitung: number, persentase: number}}
+ */
+const summarizeKehadiran = (statuses) => {
+    const summary = { total: 0, hadir: 0, telat: 0, izin: 0, sakit: 0, tidak_hadir: 0, dihitung: 0, persentase: 0 };
+    for (const status of statuses) {
+        summary.total++;
+        if (isPresentStatus(status)) {
+            summary.hadir++;
+            if (status === 'TELAT') summary.telat++;
+        } else if (status === 'IZIN') {
+            summary.izin++;
+        } else if (status === 'SAKIT') {
+            summary.sakit++;
+        } else {
+            summary.tidak_hadir++;
+        }
+    }
+    summary.dihitung = summary.total - summary.izin - summary.sakit;
+    summary.persentase = summary.dihitung > 0 ? (summary.hadir / summary.dihitung) * 100 : 0;
+    return summary;
+};
+
+const DEFAULT_LATE_THRESHOLD_MINUTES = 15;
+
+/** LATE_THRESHOLD_MINUTES from the environment (minutes, >= 0), default 15. Read on every call. */
+const lateThresholdMinutes = (env = process.env) => {
+    const raw = env.LATE_THRESHOLD_MINUTES;
+    if (raw === undefined || raw === null || String(raw).trim() === '') return DEFAULT_LATE_THRESHOLD_MINUTES;
+    const minutes = Number(raw);
+    return Number.isFinite(minutes) && minutes >= 0 ? minutes : DEFAULT_LATE_THRESHOLD_MINUTES;
+};
+
+/**
+ * Status of a check-in: TELAT when it happens more than `thresholdMinutes` after the session start,
+ * otherwise HADIR.
+ */
+const checkInStatus = (sesiMulai, attendedAt = new Date(), thresholdMinutes = lateThresholdMinutes()) => {
+    const lateByMs = new Date(attendedAt).getTime() - new Date(sesiMulai).getTime();
+    return lateByMs > thresholdMinutes * 60 * 1000 ? 'TELAT' : 'HADIR';
+};
+
+/**
+ * True when a Prisma error is a unique-constraint violation: P2002 from model queries, or
+ * P2010 carrying Postgres code 23505 from raw queries ($executeRaw / $queryRaw).
+ */
+const isUniqueViolation = (error) => {
+    if (!error) return false;
+    if (error.code === 'P2002') return true;
+    return error.code === 'P2010' && error.meta?.code === '23505';
+};
+
 module.exports = {
     parsePagination,
     buildPaginationResponse,
     isDosenAuthorizedForKelas,
     requireKelasOwnership,
-    haversineDistance
+    haversineDistance,
+    isCountableSession,
+    startedAfterEnrollment,
+    sessionParticipants,
+    isUniqueViolation,
+    STATUS_KEHADIRAN,
+    isPresentStatus,
+    isExcusedStatus,
+    absensiStatus,
+    summarizeKehadiran,
+    lateThresholdMinutes,
+    checkInStatus
 };

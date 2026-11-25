@@ -16,6 +16,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from face_processor import FaceProcessor
+import hmac
 import os
 import cv2
 import numpy as np
@@ -35,7 +36,12 @@ else:
 # Allowed image extensions
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
-FACE_API_KEY = os.getenv('FACE_API_KEY', '')
+
+def is_test_mode():
+    """Test mode (stubbed responses, no InsightFace) is decided by the server environment
+    only. A client header must never be able to switch it on."""
+    return os.getenv('TEST_MODE') == 'true'
+
 
 OPENAPI_SPEC = {
     'openapi': '3.0.3',
@@ -265,11 +271,24 @@ def swagger_docs(title):
 
 @app.before_request
 def check_api_key():
+    """Fail-closed API key check on every route except /health.
+
+    - FACE_API_KEY unset and not TEST_MODE -> 503 (the service is not configured)
+    - FACE_API_KEY unset and TEST_MODE     -> allowed (CI / local stubs)
+    - FACE_API_KEY set                     -> X-API-Key must match (constant-time compare)
+    """
     if request.path == '/health':
-        return  # Skip auth for health check
-    api_key = request.headers.get('X-API-Key', '')
-    if FACE_API_KEY and api_key != FACE_API_KEY:
+        return None  # Skip auth for health check
+    expected = os.getenv('FACE_API_KEY', '')
+    if not expected:
+        if is_test_mode():
+            return None
+        return jsonify({'success': False, 'error': 'service not configured'}), 503
+    provided = request.headers.get('X-API-Key', '')
+    # Compare as bytes: compare_digest raises TypeError on non-ASCII str.
+    if not hmac.compare_digest(provided.encode('utf-8'), expected.encode('utf-8')):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    return None
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -321,7 +340,7 @@ def detect_face():
         }), 400
     
     try:
-        if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+        if is_test_mode():
             return jsonify({
                 'success': True,
                 'embedding': [0.02] * 512,
@@ -382,7 +401,7 @@ def detect_multiple():
         }), 400
     
     try:
-        if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+        if is_test_mode():
             return jsonify({
                 'success': True,
                 'faces': [{
@@ -432,7 +451,7 @@ def compare_embeddings():
             'error': 'Missing embedding1 or embedding2 in request'
         }), 400
     
-    if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+    if is_test_mode():
         return jsonify({
             'similarity': 0.85,
             'is_same_person': True,
@@ -463,7 +482,7 @@ def find_match():
             'error': 'Missing target_embedding or embeddings_list in request'
         }), 400
     
-    if os.getenv('TEST_MODE') == 'true' or request.headers.get('X-Test-Mode') == 'true':
+    if is_test_mode():
         return jsonify({
             'best_match_index': 0,
             'similarity': 0.92,

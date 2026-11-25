@@ -1,9 +1,9 @@
 const express = require('express');
-const { login, logout, register, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken, refreshToken, deactivateUser, reactivateUser, updatePreferences, uploadProfilePicture, requestPasswordReset, resetPasswordWithToken } = require('../controllers/authController');
+const { login, logout, register, adminCreateUser, getMe, updateProfile, changePassword, getAllUsers, adminResetPassword, registerFcmToken, refreshToken, deactivateUser, reactivateUser, updatePreferences, uploadProfilePicture, requestPasswordReset, resetPasswordWithToken } = require('../controllers/authController');
 const { validateRequired, validatePassword, validateUsername, validateZod } = require('../middlewares/validationMiddleware');
-const { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, adminResetPasswordSchema, fcmTokenSchema, refreshTokenSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middlewares/zodSchemas');
+const { registerSchema, adminCreateUserSchema, loginSchema, updateProfileSchema, changePasswordSchema, adminResetPasswordSchema, fcmTokenSchema, refreshTokenSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middlewares/zodSchemas');
 const { protect, authorize } = require('../middlewares/authMiddleware');
-const { authLimiter } = require('../middlewares/rateLimiterMiddleware');
+const { authLimiter, sensitiveLimiter, refreshLimiter } = require('../middlewares/rateLimiterMiddleware');
 const router = express.Router();
 
 router.post('/register',
@@ -18,17 +18,29 @@ router.post('/login',
     login
 );
 
+// Admin-only account creation: the only way to create DOSEN / ADMIN accounts
+// (public /register always creates a MAHASISWA).
+router.post('/admin/users',
+    protect,
+    authorize('ADMIN'),
+    validateZod(adminCreateUserSchema),
+    adminCreateUser
+);
+
 router.post('/refresh',
+    refreshLimiter,
     validateZod(refreshTokenSchema),
     refreshToken
 );
 
 // Password Reset Flow
 router.post('/forgot-password', 
+    sensitiveLimiter,
     validateZod(forgotPasswordSchema), 
     requestPasswordReset
 );
 router.post('/reset-password', 
+    sensitiveLimiter,
     validateZod(resetPasswordSchema), 
     resetPasswordWithToken
 );
@@ -110,7 +122,7 @@ const profilePictureFileFilter = (req, file, cb) => {
     const hasAllowedExtension = allowedProfilePictureExtensions.has(extension);
 
     if (!hasAllowedMime || !hasAllowedExtension) {
-        return cb(new Error('Invalid profile picture file type. Allowed: jpeg, png, webp'), false);
+        return cb(new Error('Jenis file foto profil tidak valid. Gunakan JPEG, PNG, atau WebP'), false);
     }
 
     return cb(null, true);

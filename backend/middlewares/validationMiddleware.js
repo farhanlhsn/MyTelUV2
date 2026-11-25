@@ -1,14 +1,13 @@
 const validator = require('validator');
 
-const { ZodError } = require('zod');
-
 // Sanitize and validate input data
 exports.sanitizeInput = (req, res, next) => {
     for (let key in req.body) {
         if (typeof req.body[key] === 'string') {
             req.body[key] = req.body[key].trim();
-            // Skip sanitization for password and content fields
-            const skipEscape = ['password', 'oldPassword', 'newPassword', 'new_password', 'content'];
+            // Skip sanitization for password and content fields, and for plates: they are normalised
+            // (non-alphanumerics dropped) later, and escaping first would turn "B 1234/XYZ" into "B1234X2FXYZ"
+            const skipEscape = ['password', 'oldPassword', 'newPassword', 'new_password', 'content', 'plat_nomor', 'plate_text'];
             if (!skipEscape.includes(key)) {
                 req.body[key] = validator.escape(req.body[key]);
             }
@@ -17,19 +16,28 @@ exports.sanitizeInput = (req, res, next) => {
     next();
 };
 
-// Generic Zod Validator Middleware
+// Indonesian fallback for Zod issues whose schema has no custom message
+// (an explicit message on the schema always takes precedence over this map).
+const indonesianErrorMap = (issue, ctx) => {
+    const field = issue.path.length > 0 ? issue.path.join('.') : 'Data';
+    return { message: ctx.data === undefined ? `${field} wajib diisi` : `${field} tidak valid` };
+};
+
+// Generic Zod Validator Middleware.
+// The parsed output replaces req.body, so schemas are authoritative: unknown keys are
+// stripped and transforms (e.g. plate normalisation) are applied.
 exports.validateZod = (schema) => {
     return async (req, res, next) => {
         try {
-            req.body = await schema.parseAsync(req.body);
+            req.body = await schema.parseAsync(req.body, { errorMap: indonesianErrorMap });
             next();
         } catch (error) {
-            if (error instanceof ZodError) {
-                const errorMessages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            // Zod v3 exposes `errors` (alias of `issues`); v4 only exposes `issues`.
+            const issues = error?.issues ?? error?.errors;
+            if (Array.isArray(issues)) {
                 return res.status(400).json({
                     status: "error",
-                    message: "Validation failed",
-                    details: errorMessages
+                    message: issues.map(issue => issue.message).join(', ')
                 });
             }
             next(error);
@@ -51,7 +59,7 @@ exports.validateRequired = (fields) => {
         if (missingFields.length > 0) {
             return res.status(400).json({
                 status: "error",
-                message: `Missing required fields: ${missingFields.join(', ')}`
+                message: `Kolom wajib belum diisi: ${missingFields.join(', ')}`
             });
         }
 
@@ -66,7 +74,7 @@ exports.validateEmail = (req, res, next) => {
     if (email && !validator.isEmail(email)) {
         return res.status(400).json({
             status: "error",
-            message: 'Please provide a valid email address'
+            message: 'Format email tidak valid'
         });
     }
     next();
@@ -80,7 +88,7 @@ exports.validatePassword = (req, res, next) => {
         if (!validator.isLength(password, { min: 6 })) {
             return res.status(400).json({
                 status: "error",
-                message: 'Password must be at least 6 characters long'
+                message: 'Password minimal 6 karakter'
             });
         }
 
@@ -88,7 +96,7 @@ exports.validatePassword = (req, res, next) => {
         if (!validator.matches(password, /^(?=.*[A-Za-z])(?=.*\d)/)) {
             return res.status(400).json({
                 status: "error",
-                message: 'Password must contain at least one letter and one number'
+                message: 'Password harus mengandung minimal satu huruf dan satu angka'
             });
         }
     }
@@ -104,7 +112,7 @@ exports.validateUsername = (req, res, next) => {
         if (!validator.isLength(username, { min: 3, max: 30 })) {
             return res.status(400).json({
                 status: "error",
-                message: 'Username must be between 3 and 30 characters'
+                message: 'Username harus 3 sampai 30 karakter'
             });
         }
 
@@ -112,22 +120,9 @@ exports.validateUsername = (req, res, next) => {
         if (!validator.matches(username, /^[a-zA-Z][a-zA-Z0-9_]*$/)) {
             return res.status(400).json({
                 status: "error",
-                message: 'Username must start with a letter and contain only letters, numbers, and underscores'
+                message: 'Username harus diawali huruf dan hanya boleh berisi huruf, angka, dan garis bawah (_)'
             });
         }
     }
     next();
-};
-
-// Validate schema using Zod
-exports.validateZod = (schema) => (req, res, next) => {
-    try {
-        schema.parse(req.body);
-        next();
-    } catch (error) {
-        return res.status(400).json({
-            status: "error",
-            message: error.errors ? error.errors.map(e => e.message).join(', ') : error.message
-        });
-    }
 };

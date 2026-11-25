@@ -7,6 +7,12 @@ on:
       - 'mobile/**'
       - '.github/workflows/build-apk.yml'
 
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
+
   workflow_dispatch:
     inputs:
       build_type:
@@ -37,6 +43,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # Pinned: newer stable releases require Gradle >= 9.3.1 and a newer AGP than
+          # mobile/android uses (Gradle 8.12, AGP 8.9.1). Bump together with those.
+          flutter-version: '3.38.10'
           cache: true
 
       - name: Get dependencies
@@ -46,7 +55,10 @@ jobs:
       - name: Analyze code
         working-directory: mobile
         run: flutter analyze --no-fatal-infos
-        continue-on-error: true
+
+      - name: Run Flutter tests
+        working-directory: mobile
+        run: flutter test
 
       - name: Build APK (Release - Production)
         working-directory: mobile
