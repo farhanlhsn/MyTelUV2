@@ -170,7 +170,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
         );
       }
     }
@@ -190,7 +190,7 @@ class _PostPageState extends State<PostPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
         );
       }
     }
@@ -213,7 +213,7 @@ class _PostPageState extends State<PostPage> {
               Navigator.pop(context);
               _deletePost(postId);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Hapus'),
           ),
         ],
@@ -277,7 +277,7 @@ class _PostPageState extends State<PostPage> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppColors.text,
                         ),
                       ),
                     ],
@@ -552,9 +552,9 @@ class _PostPageState extends State<PostPage> {
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                            Icon(Icons.delete_outline, color: AppColors.danger, size: 20),
                             SizedBox(width: 8),
-                            Text('Hapus', style: TextStyle(color: Colors.red)),
+                            Text('Hapus', style: TextStyle(color: AppColors.danger)),
                           ],
                         ),
                       ),
@@ -680,7 +680,7 @@ class _PostPageState extends State<PostPage> {
                 _buildActionButton(
                   icon: post.isLiked ? Icons.favorite : Icons.favorite_border,
                   label: '${post.likeCount}',
-                  color: post.isLiked ? Colors.red : Colors.grey.shade600,
+                  color: post.isLiked ? AppColors.danger : Colors.grey.shade600,
                   onTap: () => _toggleLike(post.idPost),
                 ),
                 // Comment Button

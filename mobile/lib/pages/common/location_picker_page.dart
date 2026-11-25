@@ -282,7 +282,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           IconButton(
                             tooltip: 'Kembali',
                             onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.arrow_back),
+                            icon: const Icon(appBackIcon),
                           ),
                           Expanded(
                             child: TextField(

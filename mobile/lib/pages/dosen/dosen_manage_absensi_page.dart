@@ -361,7 +361,7 @@ class _DosenManageAbsensiPageState extends State<DosenManageAbsensiPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                     onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),

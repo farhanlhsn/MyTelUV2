@@ -115,9 +115,9 @@ class _JadwalMingguanPageState extends State<JadwalMingguanPage> with SingleTick
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                            const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
                             const SizedBox(height: 16),
-                            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                            Text(_errorMessage!, style: const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: _loadJadwal,

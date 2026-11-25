@@ -19,7 +19,7 @@ class DetailPengajuanPlat extends StatelessWidget {
     final List<PengajuanTimelineStep> timeline = pengajuan.getTimeline();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFC5F57), // Warna header
+      backgroundColor: AppColors.primary, // Warna header
       body: SafeArea(
         child: Column(
           children: [
@@ -30,7 +30,7 @@ class DetailPengajuanPlat extends StatelessWidget {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();

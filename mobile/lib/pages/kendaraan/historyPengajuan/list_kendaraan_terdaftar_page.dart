@@ -4,6 +4,7 @@ import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/utils/logger.dart';
 import 'package:mobile/utils/app_theme.dart';
 import 'package:mobile/utils/kendaraan_helper.dart';
+import '../../common/red_header_background.dart';
 
 class ListKendaraanTerdaftarPage extends StatefulWidget {
   const ListKendaraanTerdaftarPage({super.key});
@@ -149,7 +150,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gagal mengajukan penghapusan: ${kendaraanErrorMessage(e)}'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.danger,
         ),
       );
       setState(() => _isLoading = false);
@@ -162,7 +163,8 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
 
     return Scaffold(
       backgroundColor: primaryColor,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -172,7 +174,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -257,6 +259,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -276,12 +279,12 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 60, color: Colors.red),
+              const Icon(Icons.error_outline, size: 60, color: AppColors.danger),
               const SizedBox(height: 16),
               Text(
                 '$_errorMessage',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: AppColors.danger),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -352,7 +355,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
   }
 
   Widget _buildVehicleCard(PengajuanPlatModel vehicle) {
-    const Color borderColor = Color(0xFFF76F68);
+    const Color borderColor = AppColors.primary;
     final isPendingDelete = vehicle.statusPengajuan == 'MENUNGGU' && 
         vehicle.feedback != null && 
         vehicle.feedback!.startsWith('DELETE_REQUEST:');
@@ -438,7 +441,7 @@ class _ListKendaraanTerdaftarPageState extends State<ListKendaraanTerdaftarPage>
                 if (!isPendingDelete) ...[
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.danger),
                     onPressed: () => _handleDeleteRequest(vehicle),
                     tooltip: 'Hapus Kendaraan',
                   ),

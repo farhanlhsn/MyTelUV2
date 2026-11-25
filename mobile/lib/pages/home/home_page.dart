@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:mobile/pages/home/maps_page.dart';
@@ -141,7 +142,7 @@ class _HomePageState extends State<HomePage> {
 
   final List<Map<String, dynamic>> gridMenuItems = [
     {
-      'icon': Icons.badge_outlined,
+      'icon': Icons.two_wheeler,
       'label': 'Kendaraan',
       'color': AppColors.primary,
       'route': AppRoutes.userHistoriPengajuan,
@@ -153,7 +154,7 @@ class _HomePageState extends State<HomePage> {
       'route': AppRoutes.absensi,
     },
     {
-      'icon': Icons.qr_code_scanner,
+      'icon': Icons.face,
       'label': 'Biometrik',
       'color': AppColors.primary,
       'route': null,
@@ -168,8 +169,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
+    // The Home tab sits under a red header, the other tabs are white pages: the status bar icons
+    // follow, otherwise they stay white on white.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _selectedIndex == 0 ? statusBarOnRed : statusBarOnLight,
+      child: Scaffold(
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // Konten Halaman Utama
@@ -188,6 +193,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       bottomNavigationBar: SafeArea(top: false, child: _buildBottomNav()),
+      ),
     );
   }
 
@@ -342,7 +348,7 @@ class _HomePageState extends State<HomePage> {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: const BoxDecoration(
-                                color: Colors.red,
+                                color: AppColors.danger,
                                 shape: BoxShape.circle,
                               ),
                               constraints: const BoxConstraints(
@@ -722,9 +728,9 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(Icons.home, "Home", 0),
+            _buildNavItem(Icons.home, "Beranda", 0),
             _buildNavItem(Icons.location_on_outlined, "Peta", 1),
-            _buildNavItem(Icons.post_add_rounded, "Kiriman", 2),
+            _buildNavItem(Icons.post_add_rounded, "Postingan", 2),
             _buildNavItem(Icons.settings_outlined, "Pengaturan", 3),
           ],
         ),
@@ -897,7 +903,7 @@ class _ErrorListener extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(controller.errorMessage.value),
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.danger,
               ),
             );
           }

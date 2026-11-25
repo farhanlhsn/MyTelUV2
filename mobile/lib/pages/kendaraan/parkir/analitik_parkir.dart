@@ -154,7 +154,7 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                     onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
@@ -403,7 +403,7 @@ class _AnalitikParkirPageState extends State<AnalitikParkirPage> {
         ? Colors.green
         : slotTersedia > 0
             ? Colors.orange
-            : Colors.red;
+            : AppColors.danger;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 400),

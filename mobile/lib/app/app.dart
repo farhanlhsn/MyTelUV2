@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 
@@ -30,6 +31,12 @@ class MyApp extends StatelessWidget {
       locale: appLocale,
       supportedLocales: const <Locale>[appLocale],
       localizationsDelegates: appLocalizationsDelegates,
+      // Most pages sit under a red header: light status bar icons unless a page says otherwise
+      // (the white tabs of HomePage, an AppBar through its systemOverlayStyle).
+      builder: (BuildContext context, Widget? child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: statusBarOnRed,
+        child: child ?? const SizedBox.shrink(),
+      ),
       getPages: AppRoutes.pages,
       initialRoute: AppRoutes.splash,
     );

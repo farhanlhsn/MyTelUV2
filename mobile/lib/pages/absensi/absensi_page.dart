@@ -139,7 +139,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                     onPressed: () => Get.back(),
                   ),
                   const SizedBox(width: 8),
@@ -659,7 +659,7 @@ class AbsensiDetailPage extends StatelessWidget {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                    icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 8),

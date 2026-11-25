@@ -8,6 +8,7 @@ import '../../controllers/auth_controller.dart';
 import '../../utils/validators.dart';
 import 'auth_feedback.dart';
 import '../../utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -144,7 +145,8 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _primaryRed,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -154,7 +156,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       Get.back();
                     },
@@ -404,7 +406,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               child: Text(
                                 'Anda harus menyetujui Syarat dan Ketentuan',
                                 style: TextStyle(
-                                  color: Color(0xFFB3261E),
+                                  color: AppColors.danger,
                                   fontSize: 12,
                                 ),
                               ),
@@ -485,6 +487,7 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

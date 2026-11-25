@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../utils/validators.dart';
+import '../../utils/app_theme.dart';
 
 /// Confirmation for an action that cannot be undone: the confirm button stays disabled until the
 /// user types [keyword] exactly. Resolves to true only when confirmed.
@@ -104,7 +105,7 @@ class _TypedConfirmDialogState extends State<TypedConfirmDialog> {
         ElevatedButton(
           onPressed: canConfirm ? () => Navigator.pop(context, true) : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.danger,
             disabledBackgroundColor: Colors.red.shade100,
           ),
           child: Text(

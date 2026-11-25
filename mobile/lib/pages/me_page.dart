@@ -32,7 +32,7 @@ class _MePageState extends State<MePage> {
         foregroundColor: Colors.white,
         leading: IconButton(
           onPressed: () => Get.back(),
-          icon: const Icon(Icons.arrow_back_ios),
+          icon: const Icon(appBackIcon),
           tooltip: 'Kembali ke Beranda',
         ),
       ),

@@ -5,6 +5,7 @@ import 'package:mobile/services/akademik_service.dart';
 import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/app_theme.dart';
 import 'package:mobile/utils/error_helper.dart';
+import '../common/red_header_background.dart';
 
 class AdminAbsensiMonitoringPage extends StatefulWidget {
   const AdminAbsensiMonitoringPage({super.key});
@@ -72,7 +73,8 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -82,7 +84,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -146,7 +148,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(_error!, style: const TextStyle(color: Colors.red)),
+                                Text(_error!, style: const TextStyle(color: AppColors.danger)),
                                 const SizedBox(height: 16),
                                 ElevatedButton(
                                   onPressed: _loadData,
@@ -176,6 +178,7 @@ class _AdminAbsensiMonitoringPageState extends State<AdminAbsensiMonitoringPage>
             ),
           ],
         ),
+      ),
       ),
     );
   }

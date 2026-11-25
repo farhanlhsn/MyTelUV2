@@ -15,12 +15,10 @@ class AccountPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Akun Saya", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
+        title: const Text("Akun Saya"),
         leading: IconButton(
           tooltip: 'Kembali',
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          icon: const Icon(appBackIcon, size: 20),
           onPressed: () => Get.back(),
         ),
       ),

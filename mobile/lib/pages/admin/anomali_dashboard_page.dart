@@ -218,7 +218,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
             children: [
               IconButton(
                 tooltip: 'Kembali',
-                icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+                icon: const Icon(appBackIcon, color: Colors.white, size: 20),
                 onPressed: () => Get.back(),
               ),
               const SizedBox(width: 8),
@@ -654,7 +654,7 @@ class _AnomaliDashboardPageState extends State<AnomaliDashboardPage> {
 
   void _showAnomalyDetail(AnomaliModel anomali) {
     final bool isSevere = anomali.typeAnomali == 'TIDAK_HADIR_BERULANG';
-    final Color accentColor = isSevere ? Colors.red : Colors.orange;
+    final Color accentColor = isSevere ? AppColors.danger : Colors.orange;
     
     showModalBottomSheet(
       context: context,

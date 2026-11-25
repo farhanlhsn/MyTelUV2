@@ -9,6 +9,7 @@ import 'package:mobile/services/biometrik_service.dart';
 import 'package:mobile/utils/error_helper.dart';
 import 'package:mobile/utils/liveness_texts.dart';
 import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminBiometrikPage extends StatefulWidget {
   const AdminBiometrikPage({super.key});
@@ -147,7 +148,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('HAPUS', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -169,7 +170,8 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -179,7 +181,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -241,7 +243,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                                      Text(_error!, style: const TextStyle(color: AppColors.danger)),
                                       const SizedBox(height: 16),
                                       ElevatedButton(
                                         onPressed: _loadUsers,
@@ -275,6 +277,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -397,7 +400,7 @@ class _AdminBiometrikPageState extends State<AdminBiometrikPage> {
           ),
           if (hasBiometric)
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
               tooltip: 'Hapus Biometrik',
               onPressed: () => _deleteBiometrik(user),
             ),

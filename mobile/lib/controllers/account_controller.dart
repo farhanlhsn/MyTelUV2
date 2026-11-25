@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'auth_result.dart';
 import '../utils/error_helper.dart';
 import '../utils/validators.dart';
+import '../utils/app_theme.dart';
 
 
 
@@ -74,7 +75,7 @@ class AccountController extends GetxController {
         "Gagal",
         "Nama tidak boleh kosong",
         backgroundColor: Colors.red.shade100,
-        textColor: Colors.red,
+        textColor: AppColors.danger,
       );
       return;
     }
@@ -104,7 +105,7 @@ class AccountController extends GetxController {
         "Gagal",
         ErrorHelper.parseError(e),
         backgroundColor: Colors.red.shade100,
-        textColor: Colors.red,
+        textColor: AppColors.danger,
       );
     } finally {
       isLoading.value = false;
@@ -127,7 +128,7 @@ class AccountController extends GetxController {
         "Gagal",
         result.message,
         backgroundColor: Colors.red.shade100,
-        textColor: Colors.red,
+        textColor: AppColors.danger,
       );
     }
   }

@@ -5,6 +5,7 @@ import 'package:mobile/services/kendaraan_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mobile/utils/error_helper.dart';
 import 'package:mobile/utils/app_theme.dart';
+import '../../common/red_header_background.dart';
 
 class AdminPengajuanDetailPage extends StatefulWidget {
   final PengajuanPlatModel pengajuan;
@@ -39,7 +40,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           ? 'Apakah Anda yakin ingin menyetujui penghapusan kendaraan ${widget.pengajuan.platNomor}?'
           : 'Apakah Anda yakin ingin menyetujui pengajuan kendaraan ${widget.pengajuan.platNomor}?',
       confirmText: isDeleteRequest ? 'SETUJUI HAPUS' : 'SETUJUI',
-      confirmColor: isDeleteRequest ? Colors.red : Colors.green,
+      confirmColor: isDeleteRequest ? AppColors.danger : Colors.green,
     );
 
     if (confirmed != true) return;
@@ -215,7 +216,8 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -225,7 +227,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -298,6 +300,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -319,7 +322,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFF76F68),
+          color: AppColors.primary,
           width: 1.5,
         ),
         boxShadow: [
@@ -507,7 +510,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
                     ),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[200],
-                      child: const Icon(Icons.error, color: Colors.red),
+                      child: const Icon(Icons.error, color: AppColors.danger),
                     ),
                   ),
                 ),
@@ -573,7 +576,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
         errorWidget: (context, url, error) => Container(
           height: 200,
           color: Colors.grey[200],
-          child: const Icon(Icons.error, color: Colors.red),
+          child: const Icon(Icons.error, color: AppColors.danger),
         ),
       ),
     );
@@ -650,7 +653,7 @@ class _AdminPengajuanDetailPageState extends State<AdminPengajuanDetailPage> {
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleApprove,
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDeleteRequest ? Colors.red : Colors.green,
+              backgroundColor: isDeleteRequest ? AppColors.danger : Colors.green,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(

@@ -7,6 +7,7 @@ import 'package:mobile/services/api_client.dart';
 import 'package:mobile/utils/error_helper.dart';
 import 'package:mobile/utils/validators.dart';
 import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminUserManagementPage extends StatefulWidget {
   const AdminUserManagementPage({super.key});
@@ -512,7 +513,8 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -522,7 +524,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   const Expanded(
@@ -780,6 +782,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -346,7 +346,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('HAPUS', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -581,7 +581,7 @@ class _AdminMatakuliahTabState extends State<AdminMatakuliahTab> {
             onPressed: () => _showEditDialog(mk),
           ),
           IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+            icon: const Icon(Icons.delete, color: AppColors.danger, size: 20),
             onPressed: () => _deleteMatakuliah(mk),
           ),
         ],

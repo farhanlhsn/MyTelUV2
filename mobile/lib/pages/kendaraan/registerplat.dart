@@ -80,7 +80,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError ? Colors.red : null,
+          backgroundColor: isError ? AppColors.danger : null,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -180,7 +180,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = AppColors.primary;
-    const Color focusedBorderColor = Color(0xFFFF6B6B);
+    const Color focusedBorderColor = AppColors.primary;
 
     return Scaffold(
       body: Stack(
@@ -196,7 +196,7 @@ class _RegisterPlatPageState extends State<RegisterPlatPage> {
                 IconButton(
                   tooltip: 'Kembali',
                   icon: const Icon(
-                    Icons.arrow_back_ios_new,
+                    appBackIcon,
                     color: Colors.white,
                     size: 20.0,
                   ),
@@ -422,7 +422,7 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFFC5F57);
+    const Color primaryColor = AppColors.primary;
 
     return Scaffold(
       body: Stack(
@@ -437,7 +437,7 @@ class _RegisterPlatBerhasilPageState extends State<RegisterPlatBerhasilPage> {
               children: [
                 IconButton(
                   tooltip: 'Kembali ke beranda',
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  icon: const Icon(appBackIcon, color: Colors.white),
                   onPressed: () {
                     _timer?.cancel();
                     Get.offAllNamed(AppRoutes.home);

@@ -85,7 +85,7 @@ class _CommentsPageState extends State<CommentsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(ErrorHelper.parseError(e)),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -102,7 +102,7 @@ class _CommentsPageState extends State<CommentsPage> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: Colors.red),
+        SnackBar(content: Text(ErrorHelper.parseError(e)), backgroundColor: AppColors.danger),
       );
     }
   }
@@ -112,21 +112,12 @@ class _CommentsPageState extends State<CommentsPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: IconButton(
           tooltip: 'Kembali',
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black87),
+          icon: const Icon(appBackIcon, size: 20),
           onPressed: () => Get.back(result: _comments.length),
         ),
-        title: const Text(
-          'Komentar',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+        title: const Text('Komentar'),
       ),
       body: Column(
         children: [
@@ -367,7 +358,7 @@ class _CommentsPageState extends State<CommentsPage> {
                           Navigator.pop(context);
                           _deleteComment(comment.idComment);
                         },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
                         child: const Text('Hapus'),
                       ),
                     ],

@@ -3,6 +3,7 @@ import 'package:mobile/pages/admin/tabs/admin_matakuliah_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_kelas_tab.dart';
 import 'package:mobile/pages/admin/tabs/admin_peserta_tab.dart';
 import 'package:mobile/utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class AdminAkademikPage extends StatefulWidget {
   const AdminAkademikPage({super.key});
@@ -31,7 +32,8 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -41,7 +43,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -118,6 +120,7 @@ class _AdminAkademikPageState extends State<AdminAkademikPage>
             ),
           ],
         ),
+      ),
       ),
     );
   }

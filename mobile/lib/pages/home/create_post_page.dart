@@ -115,7 +115,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.danger,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -195,8 +195,11 @@ class _CreatePostPageState extends State<CreatePostPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // A composer: white bar so the red "Posting" action stands out
       appBar: AppBar(
         backgroundColor: Colors.white,
+        foregroundColor: AppColors.text,
+        systemOverlayStyle: statusBarOnLight,
         elevation: 0,
         leading: IconButton(
           icon: Container(
@@ -469,7 +472,7 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   const SizedBox(width: 16),
                   _buildAttachmentButton(
                     icon: Icons.videocam,
-                    color: Colors.red,
+                    color: AppColors.danger,
                     onTap: _pickVideo,
                   ),
                   const SizedBox(width: 16),

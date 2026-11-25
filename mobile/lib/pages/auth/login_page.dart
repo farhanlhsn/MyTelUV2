@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/app_theme.dart';
+import '../common/red_header_background.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -49,7 +50,8 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -294,6 +296,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

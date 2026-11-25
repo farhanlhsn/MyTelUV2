@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
+import '../../utils/app_theme.dart';
 import '../../utils/error_helper.dart';
+import '../common/confirm_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -19,67 +21,15 @@ class _SettingsPageState extends State<SettingsPage> {
     if (_isLoggingOut) return;
     setState(() => _isLoggingOut = true);
     try {
-      final bool? confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Icon(Icons.logout, color: Colors.red[700], size: 28),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Konfirmasi Keluar',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            content: const Text(
-              'Apakah Anda yakin ingin keluar dari aplikasi?',
-              style: TextStyle(fontSize: 16),
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(false);
-                },
-                style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
-                child: const Text(
-                  'Batal',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(true);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                ),
-                child: const Text(
-                  'Ya, Keluar',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
+      final bool confirmed = await showAppConfirmDialog(
+        context,
+        title: 'Konfirmasi Keluar',
+        message: 'Apakah Anda yakin ingin keluar dari aplikasi?',
+        confirmLabel: 'Ya, Keluar',
+        icon: Icons.logout,
       );
 
-      if (mounted && confirmed == true) {
+      if (mounted && confirmed) {
         await _handleLogout();
       }
     } finally {
@@ -111,7 +61,11 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: EdgeInsets.only(bottom: 16.0, top: 8.0),
               child: Text(
                 "Pengaturan",
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.text,
+                ),
               ),
             ),
             ListTile(

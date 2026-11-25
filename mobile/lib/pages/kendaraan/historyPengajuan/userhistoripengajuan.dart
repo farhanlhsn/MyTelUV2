@@ -8,6 +8,7 @@ import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/utils/kendaraan_helper.dart';
 import 'package:mobile/pages/common/error_retry_view.dart';
 import 'package:mobile/utils/app_theme.dart';
+import '../../common/red_header_background.dart';
 
 class UserHistoriPengajuan extends StatefulWidget {
   const UserHistoriPengajuan({super.key});
@@ -94,7 +95,8 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary, // Warna header
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // 1. Header Anda
@@ -104,7 +106,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -143,6 +145,7 @@ class _UserHistoriPengajuanState extends State<UserHistoriPengajuan> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -505,8 +508,8 @@ class VehicleStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color primaryColor = Color(0xFFF85E55);
-    const Color borderColor = Color(0xFFF76F68);
+    const Color primaryColor = AppColors.primary;
+    const Color borderColor = AppColors.primary;
     const Color subtitleColor = Colors.grey;
 
     return GestureDetector(

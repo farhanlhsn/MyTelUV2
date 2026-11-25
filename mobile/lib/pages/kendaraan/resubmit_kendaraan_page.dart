@@ -89,7 +89,7 @@ class _ResubmitKendaraanPageState extends State<ResubmitKendaraanPage> {
       ..showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: isError ? Colors.red : null,
+          backgroundColor: isError ? AppColors.danger : null,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -177,7 +177,7 @@ class _ResubmitKendaraanPageState extends State<ResubmitKendaraanPage> {
                 IconButton(
                   tooltip: 'Kembali',
                   icon: const Icon(
-                    Icons.arrow_back_ios_new,
+                    appBackIcon,
                     color: Colors.white,
                     size: 20.0,
                   ),

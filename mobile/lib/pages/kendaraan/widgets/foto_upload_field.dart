@@ -110,7 +110,7 @@ class FotoUploadField extends StatelessWidget {
     final String? path = imagePath;
     final bool hasError = errorText != null;
     final Color borderColor = hasError
-        ? const Color(0xFFB3261E)
+        ? AppColors.danger
         : (path != null ? _primaryColor : Colors.grey);
 
     return Column(
@@ -203,7 +203,7 @@ class FotoUploadField extends StatelessWidget {
             padding: const EdgeInsets.only(left: 12, top: 6),
             child: Text(
               errorText!,
-              style: const TextStyle(color: Color(0xFFB3261E), fontSize: 12),
+              style: const TextStyle(color: AppColors.danger, fontSize: 12),
             ),
           ),
       ],

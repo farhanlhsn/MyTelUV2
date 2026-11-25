@@ -211,7 +211,7 @@ class _GeofencePickerPageState extends State<GeofencePickerPage> {
                 leading: IconButton(
                   tooltip: 'Kembali',
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(appBackIcon),
                 ),
                 title: const Text(
                   'Pilih Lokasi Geofence',

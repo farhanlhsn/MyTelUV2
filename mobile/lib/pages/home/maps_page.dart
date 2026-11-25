@@ -51,7 +51,7 @@ class _MapPageState extends State<MapPage> {
         ? Colors.green
         : parkiran.slotTersedia > 0
             ? Colors.orange
-            : Colors.red;
+            : AppColors.danger;
 
     showModalBottomSheet(
       context: context,
@@ -258,7 +258,7 @@ class _MapPageState extends State<MapPage> {
           ? Colors.green
           : parkiran.slotTersedia > 0
               ? Colors.orange
-              : Colors.red;
+              : AppColors.danger;
 
       return Marker(
         point: latlng.LatLng(parkiran.latitude!, parkiran.longitude!),
@@ -464,7 +464,7 @@ class _MapPageState extends State<MapPage> {
                       const SizedBox(height: 8),
                       _buildLegendItem(Colors.green, 'Tersedia'),
                       _buildLegendItem(Colors.orange, 'Hampir Penuh'),
-                      _buildLegendItem(Colors.red, 'Penuh'),
+                      _buildLegendItem(AppColors.danger, 'Penuh'),
                     ],
                   ),
                 ),

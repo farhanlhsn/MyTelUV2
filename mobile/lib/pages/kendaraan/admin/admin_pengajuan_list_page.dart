@@ -6,6 +6,7 @@ import 'package:mobile/services/kendaraan_service.dart';
 import 'package:mobile/pages/kendaraan/admin/admin_pengajuan_detail_page.dart';
 import 'package:mobile/utils/app_theme.dart';
 import 'package:mobile/utils/kendaraan_helper.dart';
+import '../../common/red_header_background.dart';
 
 
 
@@ -127,7 +128,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
       case 'DISETUJUI':
         return const Color(0xFF00C853);
       case 'DITOLAK':
-        return const Color(0xFFF85E55);
+        return AppColors.primary;
       case 'MENUNGGU':
       default:
         return const Color(0xFFFF9800);
@@ -150,7 +151,8 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primary,
-      body: SafeArea(
+      body: RedHeaderBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // Header
@@ -160,7 +162,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                 children: [
                   IconButton(
                     tooltip: 'Kembali',
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(appBackIcon, color: Colors.white),
                     onPressed: () {
                       if (Navigator.of(context).canPop()) {
                         Navigator.of(context).pop();
@@ -240,6 +242,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -253,13 +256,13 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
             const Icon(
               Icons.error_outline,
               size: 60,
-              color: Colors.red,
+              color: AppColors.danger,
             ),
             const SizedBox(height: 16),
             Text(
               '$_errorMessage',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
+              style: const TextStyle(color: AppColors.danger),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
@@ -353,7 +356,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
     final isDeleteRequest = pengajuan.feedback != null && pengajuan.feedback!.startsWith('DELETE_REQUEST:');
     final deleteReason = isDeleteRequest ? pengajuan.feedback!.replaceFirst('DELETE_REQUEST:', '').trim() : '';
 
-    final badgeColor = isDeleteRequest ? const Color(0xFFD32F2F) : _getStatusColor(pengajuan.statusPengajuan);
+    final badgeColor = isDeleteRequest ? AppColors.primaryDark : _getStatusColor(pengajuan.statusPengajuan);
     final badgeText = isDeleteRequest ? 'Permintaan Hapus' : _getStatusText(pengajuan.statusPengajuan);
 
     return InkWell(
@@ -377,7 +380,7 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDeleteRequest ? const Color(0xFFD32F2F) : const Color(0xFFF76F68),
+            color: isDeleteRequest ? AppColors.primaryDark : AppColors.primary,
             width: 1.5,
           ),
           boxShadow: [
@@ -398,12 +401,12 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: (isDeleteRequest ? const Color(0xFFD32F2F) : AppColors.primary).withOpacity(0.1),
+                  color: (isDeleteRequest ? AppColors.primaryDark : AppColors.primary).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   isDeleteRequest ? Icons.delete_forever : Icons.directions_car,
-                  color: isDeleteRequest ? const Color(0xFFD32F2F) : AppColors.primary,
+                  color: isDeleteRequest ? AppColors.primaryDark : AppColors.primary,
                   size: 28,
                 ),
               ),
@@ -454,14 +457,14 @@ class _AdminPengajuanListPageState extends State<AdminPengajuanListPage> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFD32F2F)),
+                          const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.primaryDark),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               'Alasan: $deleteReason',
                               style: const TextStyle(
                                 fontSize: 13,
-                                color: Color(0xFFD32F2F),
+                                color: AppColors.primaryDark,
                                 fontWeight: FontWeight.bold,
                               ),
                               maxLines: 2,

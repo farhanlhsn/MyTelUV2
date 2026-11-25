@@ -8,6 +8,7 @@ import 'package:mobile/pages/kendaraan/registerplat.dart';
 import 'package:mobile/pages/kendaraan/resubmit_kendaraan_page.dart';
 import 'package:mobile/pages/kendaraan/widgets/foto_upload_field.dart';
 import 'package:mobile/services/kendaraan_service.dart';
+import 'package:mobile/utils/app_theme.dart';
 import 'package:mockito/mockito.dart';
 
 import 'kendaraan_service_test.mocks.dart';
@@ -201,7 +202,7 @@ void main() {
       expect(find.text('Ajukan Ulang'), findsOneWidget);
       expect(find.byTooltip('Kembali ke beranda'), findsOneWidget);
       expect(
-        find.widgetWithIcon(IconButton, Icons.arrow_back),
+        find.widgetWithIcon(IconButton, appBackIcon),
         findsOneWidget,
       );
 

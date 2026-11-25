@@ -35,6 +35,21 @@ void main() {
     );
   });
 
+  test('no near-miss copies of the brand red either', () {
+    // Each of these was a slightly different red on one page or another
+    expect(
+      lines(RegExp(r'0x(FFF85E55|FFF76F68|FFFC5F57|FFFF6B6B|FFD32F2F|FFB3261E)', caseSensitive: false)),
+      isEmpty,
+    );
+  });
+
+  test('one back arrow: appBackIcon, never a Material arrow_back of its own', () {
+    expect(
+      lines(RegExp(r'Icons\.arrow_back'), except: <String>['utils/app_theme.dart']),
+      isEmpty,
+    );
+  });
+
   test('network images are cached (CachedNetworkImage), never Image.network / NetworkImage', () {
     // "CachedNetworkImage(" contains "NetworkImage(" too, hence the look-behind
     expect(lines(RegExp(r'Image\.network\(|(?<!Cached)NetworkImage\(')), isEmpty);
@@ -58,9 +73,10 @@ void main() {
       dotAll: true,
     );
     for (final File file in sources) {
+      if (normalised(file).endsWith('utils/app_theme.dart')) continue;
       final String content = file.readAsStringSync();
       if (gestureBack.hasMatch(content)) offenders.add('${normalised(file)}: GestureDetector back');
-      final int arrows = RegExp(r'Icons\.arrow_back').allMatches(content).length;
+      final int arrows = RegExp(r'Icons\.arrow_back|\bappBackIcon\b').allMatches(content).length;
       final int tooltips = RegExp(r"tooltip: 'Kembali").allMatches(content).length;
       if (arrows > tooltips) {
         offenders.add('${normalised(file)}: $arrows back icons, $tooltips tooltips');

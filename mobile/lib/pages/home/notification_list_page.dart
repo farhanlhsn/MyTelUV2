@@ -43,7 +43,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
         elevation: 0,
         leading: IconButton(
           tooltip: 'Kembali',
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          icon: const Icon(appBackIcon, color: Colors.white),
           onPressed: () => Get.back(),
         ),
         title: const Text(
