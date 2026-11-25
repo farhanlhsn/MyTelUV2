@@ -28,7 +28,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
     try {
       return formatWaktuRelatif(DateTime.parse(isoString));
     } catch (_) {
-      return '';
+      return 'Waktu tidak tersedia';
     }
   }
 
@@ -126,7 +126,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
                       'Hapus Semua Notifikasi',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    content: const Text('Apakah Anda yakin ingin menghapus semua histori notifikasi Anda? Action ini tidak dapat diurungkan.'),
+                    content: const Text('Apakah Anda yakin ingin menghapus semua histori notifikasi Anda? Tindakan ini tidak dapat diurungkan.'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -195,27 +195,32 @@ class _NotificationListPageState extends State<NotificationListPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.filter_list_alt, size: 18, color: Colors.orange),
-              const SizedBox(width: 8),
-              Text(
-                'Filter: $label',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange,
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.filter_list_alt, size: 18, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Filter: $label',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          GestureDetector(
-            onTap: () {
+          IconButton(
+            tooltip: 'Hapus filter',
+            onPressed: () {
               setState(() {
                 _selectedCategory = 'Semua';
               });
             },
-            child: Container(
+            icon: Container(
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
@@ -319,7 +324,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
   Widget _buildNotificationCard(Map<String, dynamic> notif) {
     final String title = notif['title'] ?? 'Notifikasi';
     final String body = notif['body'] ?? '';
-    final String date = notif['timestamp'] ?? DateTime.now().toIso8601String();
+    final String date = notif['timestamp'] ?? '';
     final String type = notif['type'] ?? 'general';
 
     Color themeColor;
@@ -402,6 +407,7 @@ class _NotificationListPageState extends State<NotificationListPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
+                            flex: 2,
                             child: Text(
                               title,
                               style: const TextStyle(
@@ -412,12 +418,15 @@ class _NotificationListPageState extends State<NotificationListPage> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            _formatDate(date),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade400,
-                              fontWeight: FontWeight.w600,
+                          Flexible(
+                            child: Text(
+                              _formatDate(date),
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],

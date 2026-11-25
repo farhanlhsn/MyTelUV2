@@ -1,79 +1,95 @@
-import 'package:flutter/material.dart'; // <-- PENTING
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../app/routes.dart';
 import '../../controllers/auth_controller.dart';
 import '../../utils/error_helper.dart';
 
-class SettingsPage extends StatelessWidget {
-  SettingsPage({super.key});
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
   final AuthController _authController = Get.find<AuthController>();
+  bool _isLoggingOut = false;
 
   Future<void> _showLogoutConfirmation(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.logout, color: Colors.red[700], size: 28),
-              const SizedBox(width: 12),
-              const Text(
-                'Konfirmasi Keluar',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+    try {
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.logout, color: Colors.red[700], size: 28),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Konfirmasi Keluar',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Apakah Anda yakin ingin keluar dari aplikasi?',
+              style: TextStyle(fontSize: 16),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(false);
+                },
+                style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
+                child: const Text(
+                  'Batal',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(true);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[700],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
+                child: const Text(
+                  'Ya, Keluar',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
-          ),
-          content: const Text(
-            'Apakah Anda yakin ingin keluar dari aplikasi?',
-            style: TextStyle(fontSize: 16),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
-              child: const Text(
-                'Batal',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[700],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-              ),
-              child: const Text(
-                'Ya, Keluar',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+          );
+        },
+      );
 
-    if (confirmed == true) {
-      await _handleLogout();
+      if (mounted && confirmed == true) {
+        await _handleLogout();
+      }
+    } finally {
+      if (mounted) setState(() => _isLoggingOut = false);
     }
   }
 
   Future<void> _handleLogout() async {
     final bool success = await _authController.logout();
+    if (!mounted) return;
     if (!success) {
       ErrorHelper.showError('Terjadi kesalahan saat keluar', title: 'Gagal Keluar');
       return;
@@ -88,9 +104,7 @@ class SettingsPage extends StatelessWidget {
     return SafeArea(
       child: Container(
         color: Colors.white,
-        // Gunakan ListView untuk halaman pengaturan
         child: ListView(
-          // Padding bawah 100 tidak perlu lagi, ganti jadi 16
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           children: [
             const Padding(
@@ -131,6 +145,7 @@ class SettingsPage extends StatelessWidget {
             ListTile(
               leading: Icon(Icons.logout, color: Colors.red[700]),
               title: Text("Keluar", style: TextStyle(color: Colors.red[700])),
+              enabled: !_isLoggingOut,
               onTap: () => _showLogoutConfirmation(context),
             ),
           ],

@@ -26,6 +26,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Future<void> _handleForgotPassword() async {
+    if (_authController.isLoading.value) return;
     FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() != true) return;
 
@@ -55,7 +56,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lupa Password'),
+        title: const Text(
+          'Lupa Password',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -84,6 +88,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 const SizedBox(height: 30),
                 TextFormField(
                   controller: _usernameController,
+                  autofillHints: const [AutofillHints.username],
                   autocorrect: false,
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _handleForgotPassword(),
@@ -95,6 +100,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     helperText:
                         'Belum mengisi email saat mendaftar? Hubungi admin untuk mereset password.',
                     helperMaxLines: 3,
+                    errorMaxLines: 3,
                     prefixIcon: const Icon(Icons.person_outline),
                   ),
                   validator: (value) {

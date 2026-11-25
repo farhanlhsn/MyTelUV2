@@ -53,6 +53,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _handleRegister() async {
+    if (_authController.isLoading.value) return;
     FocusScope.of(context).unfocus();
 
     final bool formValid = _formKey.currentState?.validate() ?? false;
@@ -75,7 +76,11 @@ class _RegisterPageState extends State<RegisterPage> {
       Get.offAllNamed(AppRoutes.registerSuccess);
       return;
     }
-    showAuthFailure(result, title: 'Registrasi Gagal', onRetry: _handleRegister);
+    showAuthFailure(
+      result,
+      title: 'Registrasi Gagal',
+      onRetry: _handleRegister,
+    );
   }
 
   void _showTermsDialog() {
@@ -121,10 +126,10 @@ class _RegisterPageState extends State<RegisterPage> {
   }) {
     return InputDecoration(
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-      labelText: label,
+      label: Text(label, maxLines: 2),
       hintText: hint,
       helperText: helper,
-      helperMaxLines: 2,
+      helperMaxLines: 4,
       errorMaxLines: 3,
       labelStyle: const TextStyle(
         color: Colors.grey,
@@ -222,6 +227,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Nama Field
                           TextFormField(
                             controller: _namaController,
+                            autofillHints: const [AutofillHints.name],
                             textCapitalization: TextCapitalization.words,
                             textInputAction: TextInputAction.next,
                             decoration: _decoration(
@@ -235,6 +241,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Username Field
                           TextFormField(
                             controller: _usernameController,
+                            autofillHints: const [AutofillHints.newUsername],
                             textInputAction: TextInputAction.next,
                             autocorrect: false,
                             decoration: _decoration(
@@ -250,6 +257,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Email Field (opsional)
                           TextFormField(
                             controller: _emailController,
+                            autofillHints: const [AutofillHints.email],
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             autocorrect: false,
@@ -284,6 +292,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Password Field
                           TextFormField(
                             controller: _passwordController,
+                            autofillHints: const [AutofillHints.newPassword],
+                            autocorrect: false,
+                            enableSuggestions: false,
                             obscureText: _isPasswordObscured,
                             textInputAction: TextInputAction.next,
                             decoration: _decoration(
@@ -314,8 +325,12 @@ class _RegisterPageState extends State<RegisterPage> {
                           // Konfirmasi Password Field
                           TextFormField(
                             controller: _confirmPasswordController,
+                            autofillHints: const [AutofillHints.newPassword],
+                            autocorrect: false,
+                            enableSuggestions: false,
                             obscureText: _isConfirmObscured,
                             textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _handleRegister(),
                             decoration: _decoration(
                               label: 'Konfirmasi Password',
                               icon: Icons.lock_reset_outlined,

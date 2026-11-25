@@ -35,6 +35,9 @@ class _HomePageState extends State<HomePage> {
   late final MapController _mapController;
   final Set<int> _mountedTabIndexes = <int>{0};
   final Map<int, Widget> _tabPages = <int, Widget>{};
+  final RxBool _scheduleFailed = false.obs;
+  late final Worker _scheduleLoadingWorker;
+  late final Worker _scheduleErrorWorker;
 
   // --- FUNGSI BARU UNTUK MENU PARKIR ---
   void _showParkingOptions() {
@@ -92,6 +95,17 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _pageController = PageController(viewportFraction: 0.9);
     _mapController = MapController();
+    _captureScheduleError(_homeController.errorMessage.value);
+    // Parallel requests share errorMessage; capture a schedule failure immediately.
+    _scheduleErrorWorker = ever<String>(
+      _homeController.errorMessage,
+      _captureScheduleError,
+    );
+    _scheduleLoadingWorker = ever<bool>(_homeController.isLoadingKelasHariIni, (
+      loading,
+    ) {
+      if (loading) _scheduleFailed.value = false;
+    });
     // Tab 0 (Home) is always built eagerly — it's the landing tab
     _tabPages[0] = _buildHomeContent();
   }
@@ -112,8 +126,17 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _scheduleLoadingWorker.dispose();
+    _scheduleErrorWorker.dispose();
     _pageController.dispose();
+    _mapController.dispose();
     super.dispose();
+  }
+
+  void _captureScheduleError(String message) {
+    if (message.startsWith('Gagal memuat kelas hari ini:')) {
+      _scheduleFailed.value = true;
+    }
   }
 
   final List<Map<String, dynamic>> gridMenuItems = [
@@ -160,13 +183,11 @@ class _HomePageState extends State<HomePage> {
             }),
           ),
 
-          // Navigasi di bagian bawah
-          Align(alignment: Alignment.bottomCenter, child: _buildBottomNav()),
-
           // Error snackbar listener (tiny Obx)
           _ErrorListener(controller: _homeController),
         ],
       ),
+      bottomNavigationBar: SafeArea(top: false, child: _buildBottomNav()),
     );
   }
 
@@ -174,12 +195,32 @@ class _HomePageState extends State<HomePage> {
   Widget _buildHomeContent() {
     return Container(
       color: AppColors.primary,
-      child: Column(
-        children: [
-          _buildTopBar(),
-          _buildCardCarousel(),
-          Expanded(child: _buildGridSection()),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Keep the original layout; short viewports can scroll past the carousel.
+          if (constraints.maxHeight < 500) {
+            return RefreshIndicator(
+              onRefresh: _homeController.refreshData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    _buildTopBar(),
+                    _buildCardCarousel(),
+                    _buildGridSection(scrollable: false),
+                  ],
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: [
+              _buildTopBar(),
+              _buildCardCarousel(),
+              Expanded(child: _buildGridSection()),
+            ],
+          );
+        },
       ),
     );
   }
@@ -197,7 +238,8 @@ class _HomePageState extends State<HomePage> {
           final bool showKehadiran =
               _homeController.currentUser.value?.role == 'MAHASISWA';
           // Null until the history is loaded: the line then shows a dash, not a made-up number
-          final double? totalKehadiran = _homeController.totalKehadiranPercentage;
+          final double? totalKehadiran =
+              _homeController.totalKehadiranPercentage;
 
           return Row(
             children: [
@@ -210,10 +252,13 @@ class _HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(20),
                   splashColor: Colors.white.withOpacity(0.3),
                   highlightColor: Colors.white.withOpacity(0.1),
-                  child: const CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, color: AppColors.primary),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.white,
+                      child: Icon(Icons.person, color: AppColors.primary),
+                    ),
                   ),
                 ),
               ),
@@ -265,49 +310,58 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: 12),
               Obx(() {
                 final unread = _notificationController.unreadCount.value;
-                return GestureDetector(
-                  onTap: () => Get.toNamed(AppRoutes.notificationList),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                        child: const Icon(
-                          Icons.notifications,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                      if (unread > 0)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              unread > 9 ? '9+' : '$unread',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                return Tooltip(
+                  message: unread > 0
+                      ? 'Notifikasi, $unread belum dibaca'
+                      : 'Notifikasi',
+                  child: GestureDetector(
+                    onTap: () => Get.toNamed(AppRoutes.notificationList),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.2),
+                          ),
+                          child: const Icon(
+                            Icons.notifications,
+                            color: Colors.white,
+                            size: 30,
                           ),
                         ),
-                    ],
+                        if (unread > 0)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                unread > 9 ? '9+' : '$unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -334,6 +388,37 @@ class _HomePageState extends State<HomePage> {
       }
 
       final kelasHariIni = _homeController.kelasHariIniList;
+
+      if (_scheduleFailed.value) {
+        return SizedBox(
+          height: 180,
+          child: Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Jadwal belum dapat dimuat',
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton.icon(
+                      onPressed: _homeController.refreshData,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Coba lagi'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
 
       if (kelasHariIni.isEmpty) {
         return SizedBox(
@@ -403,7 +488,8 @@ class _HomePageState extends State<HomePage> {
               itemCount: kelasHariIni.length,
               itemBuilder: (context, index) {
                 double scale = 1.0;
-                if (_pageController.position.haveDimensions) {
+                if (_pageController.hasClients &&
+                    _pageController.position.haveDimensions) {
                   double pageOffset = _pageController.page! - index;
                   scale = (1 - (pageOffset.abs() * 0.2)).clamp(0.8, 1.0);
                 }
@@ -455,7 +541,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildGridSection() {
+  Widget _buildGridSection({bool scrollable = true}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[100],
@@ -467,14 +553,11 @@ class _HomePageState extends State<HomePage> {
       child: RefreshIndicator(
         onRefresh: _homeController.refreshData,
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: scrollable
+              ? const AlwaysScrollableScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              20.0,
-              20.0,
-              20.0,
-              100.0,
-            ), // Padding atas 20, bawah 100
+            padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 24.0),
             child: Obx(() {
               // Filter menu items based on role (hide Biometric for DOSEN)
               final userRole = _homeController.currentUser.value?.role;
@@ -609,7 +692,7 @@ class _HomePageState extends State<HomePage> {
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Colors.black54,
               ),
@@ -653,64 +736,72 @@ class _HomePageState extends State<HomePage> {
     final bool isSelected = _selectedIndex == index;
 
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-            _mountedTabIndexes.add(index);
-          });
-        },
-        borderRadius: BorderRadius.circular(20),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeInOutBack,
-          // 👉 merahnya selalu setinggi navbar
-          height: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : Colors.transparent,
+      child: Semantics(
+        label: label,
+        button: true,
+        selected: isSelected,
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _selectedIndex = index;
+                _mountedTabIndexes.add(index);
+              });
+            },
             borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? Colors.white : Colors.grey[600],
-                size: 28,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutBack,
+              // 👉 merahnya selalu setinggi navbar
+              height: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 4),
-              // 👉 tingginya yg dianimasikan, bukan background-nya
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                height: isSelected ? 18 : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: isSelected ? 1.0 : 0.0,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    color: isSelected ? Colors.white : Colors.grey[600],
+                    size: 28,
+                  ),
+                  const SizedBox(height: 4),
+                  // 👉 tingginya yg dianimasikan, bukan background-nya
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    height: isSelected ? 18 : 0,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: isSelected ? 1.0 : 0.0,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

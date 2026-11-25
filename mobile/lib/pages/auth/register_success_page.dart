@@ -12,6 +12,8 @@ class RegisterSuccessPage extends StatefulWidget {
 }
 
 class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
+  Timer? _redirectTimer;
+
   @override
   void initState() {
     super.initState();
@@ -20,11 +22,17 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
 
   void _navigateToLogin() {
     // Auto redirect ke login setelah 3 detik
-    Timer(const Duration(seconds: 3), () {
+    _redirectTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
         Get.offAllNamed(AppRoutes.login);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _redirectTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -104,6 +112,7 @@ class _RegisterSuccessPageState extends State<RegisterSuccessPage> {
               // Manual Navigation Button (optional)
               TextButton(
                 onPressed: () {
+                  _redirectTimer?.cancel();
                   Get.offAllNamed(AppRoutes.login);
                 },
                 style: TextButton.styleFrom(

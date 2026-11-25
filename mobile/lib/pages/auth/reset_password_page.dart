@@ -34,6 +34,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   }
 
   Future<void> _handleResetPassword() async {
+    if (_authController.isLoading.value) return;
     FocusScope.of(context).unfocus();
     if (_formKey.currentState?.validate() != true) return;
 
@@ -65,7 +66,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Buat Password Baru'),
+        title: const Text(
+          'Buat Password Baru',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -101,6 +105,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       borderRadius: BorderRadius.circular(15),
                     ),
                     labelText: 'Token Reset',
+                    errorMaxLines: 3,
                     prefixIcon: const Icon(Icons.key),
                   ),
                   validator: (value) {
@@ -113,6 +118,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 const SizedBox(height: 20),
                 TextFormField(
                   controller: _passwordController,
+                  autofillHints: const [AutofillHints.newPassword],
+                  autocorrect: false,
+                  enableSuggestions: false,
                   obscureText: _isPasswordObscured,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
@@ -121,6 +129,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     ),
                     labelText: 'Password Baru',
                     helperText: 'Minimal 8 karakter, huruf dan angka',
+                    helperMaxLines: 3,
+                    errorMaxLines: 3,
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       tooltip: _isPasswordObscured
@@ -143,13 +153,18 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 const SizedBox(height: 20),
                 TextFormField(
                   controller: _confirmPasswordController,
+                  autofillHints: const [AutofillHints.newPassword],
+                  autocorrect: false,
+                  enableSuggestions: false,
                   obscureText: _isConfirmObscured,
                   textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _handleResetPassword(),
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    labelText: 'Konfirmasi Password Baru',
+                    label: const Text('Konfirmasi Password Baru', maxLines: 2),
+                    errorMaxLines: 3,
                     prefixIcon: const Icon(Icons.lock_reset_outlined),
                     suffixIcon: IconButton(
                       tooltip: _isConfirmObscured

@@ -26,6 +26,7 @@ class AccountPage extends StatelessWidget {
       ),
       body: Obx(() {
         return SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,19 +45,6 @@ class AccountPage extends StatelessWidget {
                         radius: 50,
                         backgroundColor: Colors.grey.shade300,
                         child: const Icon(Icons.person, size: 56, color: Colors.white),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                       ),
                     ),
                   ],
@@ -79,6 +67,8 @@ class AccountPage extends StatelessWidget {
                 controller: controller.emailController,
                 icon: Icons.email_outlined,
                 inputType: TextInputType.emailAddress,
+                readOnly: true,
+                helperText: 'Perubahan email belum tersedia.',
               ),
               const SizedBox(height: 15),
               _buildTextField(
@@ -86,6 +76,8 @@ class AccountPage extends StatelessWidget {
                 controller: controller.phoneController,
                 icon: Icons.phone_android_outlined,
                 inputType: TextInputType.phone,
+                readOnly: true,
+                helperText: 'Perubahan nomor telepon belum tersedia.',
               ),
               
               const SizedBox(height: 20),
@@ -99,7 +91,7 @@ class AccountPage extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: controller.isLoading.value
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: primaryColor, strokeWidth: 2))
                       : const Text("Simpan Profil", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -158,12 +150,20 @@ class AccountPage extends StatelessWidget {
     required TextEditingController controller,
     required IconData icon,
     TextInputType inputType = TextInputType.text,
+    bool readOnly = false,
+    String? helperText,
   }) {
     return TextField(
       controller: controller,
       keyboardType: inputType,
+      readOnly: readOnly,
+      textInputAction: TextInputAction.next,
+      textCapitalization: TextCapitalization.words,
+      autofillHints: readOnly ? null : const [AutofillHints.name],
       decoration: InputDecoration(
         labelText: label,
+        helperText: helperText,
+        helperMaxLines: 3,
         prefixIcon: Icon(icon, color: Colors.grey),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
@@ -183,10 +183,14 @@ class AccountPage extends StatelessWidget {
     return Obx(() => TextField(
       controller: controller,
       obscureText: isHidden.value,
+      autocorrect: false,
+      enableSuggestions: false,
+      textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
         suffixIcon: IconButton(
+          tooltip: isHidden.value ? 'Tampilkan password' : 'Sembunyikan password',
           icon: Icon(
             isHidden.value ? Icons.visibility_off : Icons.visibility,
             color: Colors.grey,

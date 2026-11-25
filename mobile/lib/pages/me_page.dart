@@ -4,8 +4,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/app_theme.dart';
 import '../utils/error_helper.dart';
 
-class MePage extends StatelessWidget {
+class MePage extends StatefulWidget {
   const MePage({super.key});
+
+  @override
+  State<MePage> createState() => _MePageState();
+}
+
+class _MePageState extends State<MePage> {
+  late final Future<Map<String, String?>> _userData = _loadUserData();
 
   Future<Map<String, String?>> _loadUserData() async {
     const FlutterSecureStorage storage = FlutterSecureStorage();
@@ -30,7 +37,7 @@ class MePage extends StatelessWidget {
         ),
       ),
       body: FutureBuilder<Map<String, String?>>(
-        future: _loadUserData(),
+        future: _userData,
         builder:
             (
               BuildContext context,
@@ -41,7 +48,8 @@ class MePage extends StatelessWidget {
               }
 
               if (snapshot.hasError) {
-                return Center(
+                return Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Text('Terjadi kesalahan: ${ErrorHelper.parseError(snapshot.error)}'),
                 );
               }
@@ -51,7 +59,7 @@ class MePage extends StatelessWidget {
               final String nama = data['nama'] ?? '-';
               final String role = data['role'] ?? '-';
 
-              return Padding(
+              return SingleChildScrollView(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

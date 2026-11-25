@@ -58,7 +58,7 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Future<void> _onChanged(bool value) async {
-    if (_isSaving) return;
+    if (!mounted || _isLoading || _isSaving) return;
     final bool previous = _isNotificationEnabled;
 
     setState(() {
@@ -136,7 +136,7 @@ class _NotificationPageState extends State<NotificationPage> {
       );
     }
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

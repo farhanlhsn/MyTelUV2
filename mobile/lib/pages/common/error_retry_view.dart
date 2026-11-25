@@ -18,8 +18,8 @@ class ErrorRetryView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
