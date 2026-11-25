@@ -63,16 +63,23 @@ class AppRoutes {
   static const String adminAnomalyConfig = '/admin-anomaly-config';
 
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
-    GetPage<dynamic>(name: splash, page: () => const SplashPage()),
+    // No transition: the splash must stay as it is under the page that fades in over it (the
+    // platform default would zoom and fade it out at the same time)
+    GetPage<dynamic>(name: splash, page: () => const SplashPage(), transition: Transition.noTransition),
     GetPage<dynamic>(
       name: login,
       page: () => const LoginPage(),
       binding: AuthBinding(),
+      // The splash exit hands over with a short cross-fade (also used after logging out)
+      transition: Transition.fadeIn,
+      transitionDuration: const Duration(milliseconds: 250),
     ),
     GetPage<dynamic>(
       name: home,
       page: () => const HomePage(),
       binding: AuthBinding(),
+      transition: Transition.fadeIn,
+      transitionDuration: const Duration(milliseconds: 250),
       middlewares: [AuthMiddleware()],
     ),
     GetPage<dynamic>(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/app/auth_middleware.dart';
 import 'package:mobile/app/routes.dart';
 import 'package:mobile/pages/splash_page.dart';
 
@@ -124,5 +125,39 @@ void main() {
     await advance(tester, 2000);
 
     expect(calls, isEmpty);
+  });
+
+  group('splashSheetTop lands on the first frame of the destination', () {
+    tearDown(AuthMiddleware.clearCredentials);
+
+    Future<double> top(WidgetTester tester, String route) async {
+      late double value;
+      await tester.pumpWidget(MediaQuery(
+        data: const MediaQueryData(padding: EdgeInsets.only(top: 24)),
+        child: Builder(builder: (BuildContext context) {
+          value = splashSheetTop(context, route);
+          return const SizedBox();
+        }),
+      ));
+      return value;
+    }
+
+    testWidgets('login: below its one-line header', (WidgetTester tester) async {
+      expect(await top(tester, AppRoutes.login), 24 + 54);
+    });
+
+    testWidgets('home for an admin: no schedule block', (WidgetTester tester) async {
+      AuthMiddleware.cachedRole = 'ADMIN';
+      expect(await top(tester, AppRoutes.home), 24 + 59);
+    });
+
+    testWidgets('home for students and lecturers: below the loading schedule', (
+      WidgetTester tester,
+    ) async {
+      AuthMiddleware.cachedRole = 'MAHASISWA';
+      expect(await top(tester, AppRoutes.home), 24 + 282);
+      AuthMiddleware.cachedRole = 'DOSEN';
+      expect(await top(tester, AppRoutes.home), 24 + 282);
+    });
   });
 }

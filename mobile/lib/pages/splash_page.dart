@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../app/auth_middleware.dart';
 import '../app/routes.dart';
 import '../utils/app_theme.dart';
 import '../utils/notification_router.dart';
@@ -12,8 +13,16 @@ typedef SplashNavigate = void Function(String route);
 
 /// Leaves the splash for [route]; on the home page, opens the notification that launched the app
 /// (cold start) on top of it, so back returns to home.
+///
+/// The page is pushed over the splash and the splash is removed once the page's fade-in is over:
+/// replacing it (offNamed/offAllNamed) takes the splash away at once, and the page would fade in
+/// over a blank background instead of over the splash's red top.
 void splashNavigate(String route) {
-  Get.offAllNamed(route);
+  final Route<dynamic>? splash = Get.rawRoute;
+  Get.toNamed(route);
+  Future<void>.delayed(const Duration(milliseconds: 400), () {
+    if (splash != null && splash.isActive) Get.removeRoute(splash);
+  });
   if (route == AppRoutes.home) {
     WidgetsBinding.instance.addPostFrameCallback((_) => NotificationNavigator.openPending());
   }
@@ -21,8 +30,12 @@ void splashNavigate(String route) {
 
 /// Where the white sheet of [route] starts on its first frame (from the top of the screen), so the
 /// splash exit lands on it and the red above reads as the page's header.
+/// Measured on the pages' first frames: Login's one-line header; Beranda's header with the
+/// schedule block still loading (students and lecturers), or without it (admins).
 double splashSheetTop(BuildContext context, String route) {
-  return MediaQuery.paddingOf(context).top + 54;
+  final double top = MediaQuery.paddingOf(context).top;
+  if (route != AppRoutes.home) return top + 54;
+  return top + (AuthMiddleware.cachedRole == 'ADMIN' ? 59 : 282);
 }
 
 /// Sizes shared with the native launch splash (tool/brand_assets.py): same circle, same symbol,
@@ -78,10 +91,15 @@ class _SplashPageState extends State<SplashPage> with TickerProviderStateMixin {
       _intro.value = 1;
       _introDone = true;
     } else {
-      _intro.forward().then((_) {
+      // Starts once the first frame is out: that frame replaces Android's launch splash, which
+      // looks the same, so the movement begins where the native splash ends.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _introDone = true);
-        _maybeLeave();
+        _intro.forward().then((_) {
+          if (!mounted) return;
+          setState(() => _introDone = true);
+          _maybeLeave();
+        });
       });
     }
   }
